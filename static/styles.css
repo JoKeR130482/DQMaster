@@ -121,6 +121,11 @@ p {
     margin-bottom: 0;
 }
 
+.nav-links {
+    display: flex;
+    gap: 20px;
+}
+
 .back-link {
     color: #3498db;
     text-decoration: none;
@@ -203,6 +208,69 @@ p {
     padding: 3px 6px;
     border-radius: 4px;
     font-size: 12px;
+}
+
+/* --- Styles for Templates Page --- */
+
+.templates-list {
+    display: grid;
+    gap: 20px;
+}
+
+.template-card {
+    background-color: #fdfdfd;
+    padding: 20px;
+    border-radius: 8px;
+    border: 1px solid #e0e0e0;
+    text-align: left;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+}
+
+.template-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 10px;
+    margin-bottom: 15px;
+}
+
+.template-name {
+    margin: 0;
+    color: #2c3e50;
+}
+
+.delete-template-btn {
+    background: #e74c3c;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    line-height: 24px;
+    text-align: center;
+    transition: background-color 0.3s ease;
+}
+
+.delete-template-btn:hover {
+    background: #c0392b;
+}
+
+.template-body p {
+    margin: 0 0 10px 0;
+}
+
+.template-rules ul {
+    list-style-type: none;
+    padding-left: 15px;
+    margin: 0;
+}
+
+.template-rules li {
+    margin-bottom: 5px;
 }
 
 /* --- Styles for Main Page Column Configuration --- */
@@ -289,6 +357,44 @@ p {
 
 .action-button:hover {
     background-color: #229954;
+}
+
+.secondary-button {
+    background-color: #95a5a6;
+    color: white;
+    padding: 8px 15px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background-color 0.3s ease;
+}
+
+.secondary-button:hover {
+    background-color: #7f8c8d;
+}
+
+.config-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.suggestion-container {
+    background-color: #eaf2f8;
+    border: 1px solid #aed6f1;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+#template-suggestions-list {
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+    margin: 15px 0;
 }
 
 #validation-results-container {

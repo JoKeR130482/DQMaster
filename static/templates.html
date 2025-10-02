@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DQMaster - Управление шаблонами</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div class="container">
+        <header class="rules-header">
+            <h1>Сохраненные шаблоны</h1>
+            <a href="/" class="back-link">&larr; На главную</a>
+        </header>
+
+        <div id="templates-list-container" class="templates-list">
+            <!-- Templates will be dynamically inserted here by JavaScript -->
+        </div>
+        <div id="loading" class="loading-spinner" style="display: none;"></div>
+        <div id="error-container" class="error-container"></div>
+        <div id="no-templates-message" style="display: none; text-align: center; margin-top: 20px;">
+            <p>Сохраненных шаблонов пока нет. Вы можете создать новый на главной странице после загрузки файла.</p>
+        </div>
+    </div>
+    <script src="/static/templates.js"></script>
+</body>
+</html>
