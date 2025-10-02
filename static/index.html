@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DQMaster - Загрузка Excel</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Загрузите Excel файл</h1>
+        <p>Выберите файл, и приложение отобразит названия колонок из первой строки.</p>
+        <div class="upload-container">
+            <input type="file" id="fileInput" accept=".xlsx, .xls" class="file-input">
+            <label for="fileInput" class="file-label">Выберите файл...</label>
+        </div>
+        <div id="loading" class="loading-spinner" style="display: none;"></div>
+        <div id="result-container" class="result-container">
+            <h2>Колонки файла:</h2>
+            <ul id="columnsList"></ul>
+        </div>
+        <div id="error-container" class="error-container"></div>
+    </div>
+    <script src="/static/script.js"></script>
+</body>
+</html>
