@@ -246,20 +246,26 @@ p {
 }
 
 .edit-template-btn, .delete-template-btn {
-    background: none;
+    background-color: #ecf0f1;
     border: none;
+    border-radius: 5px;
     cursor: pointer;
-    font-size: 20px;
-    padding: 0 5px;
-    transition: transform 0.2s ease;
+    font-weight: bold;
+    padding: 5px 10px;
+    transition: background-color 0.2s ease;
 }
 
-.edit-template-btn:hover, .delete-template-btn:hover {
-    transform: scale(1.2);
+.edit-template-btn:hover {
+    background-color: #bdc3c7;
 }
 
 .delete-template-btn {
-    color: #e74c3c;
+    background-color: #e74c3c;
+    color: white;
+}
+
+.delete-template-btn:hover {
+    background-color: #c0392b;
 }
 
 .template-body p {
@@ -485,6 +491,41 @@ p {
 
 .results-table tbody tr:hover {
     background-color: #ddd;
+}
+
+.summary-table tbody tr {
+    cursor: pointer;
+}
+
+.summary-table tbody tr.active {
+    background-color: #aed6f1;
+    font-weight: bold;
+}
+
+.detail-table {
+    margin-top: 20px;
+}
+
+.detail-table caption {
+    font-size: 1.1em;
+    font-weight: bold;
+    margin-bottom: 10px;
+    color: #2c3e50;
+    text-align: left;
+}
+
+/* --- Styles for Edit Template Page --- */
+
+.template-name-editor {
+    margin-bottom: 20px;
+    text-align: left;
+}
+
+.template-name-editor label {
+    display: block;
+    font-weight: bold;
+    margin-bottom: 5px;
+    color: #2c3e50;
 }
 
 .success-message {

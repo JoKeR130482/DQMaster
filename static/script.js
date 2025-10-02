@@ -39,6 +39,10 @@ document.addEventListener('DOMContentLoaded', () => {
         resultsContainer.style.display = 'none';
         errorContainer.style.display = 'none';
 
+        // Also clear the content of the results containers
+        document.getElementById('summary-results').innerHTML = '';
+        document.getElementById('detailed-results').innerHTML = '';
+
         if (isNewFile) {
             fileLabel.textContent = 'Выберите файл...';
             currentFileId = null;
@@ -110,22 +114,92 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const renderValidationResults = (results) => {
-        resultsOutputDiv.innerHTML = '';
+        const summaryResultsDiv = document.getElementById('summary-results');
+        const detailedResultsDiv = document.getElementById('detailed-results');
+
+        summaryResultsDiv.innerHTML = '';
+        detailedResultsDiv.innerHTML = '';
         resultsContainer.style.display = 'block';
 
-        if (results.errors && results.errors.length > 0) {
-            const table = document.createElement('table');
-            table.className = 'results-table';
-            table.innerHTML = `
-                <thead><tr><th>Строка</th><th>Колонка</th><th>Значение</th><th>Нарушенное правило</th></tr></thead>
-                <tbody>
-                    ${results.errors.map(e => `<tr><td>${e.row}</td><td>${e.column}</td><td>${e.value}</td><td>${e.rule_name}</td></tr>`).join('')}
-                </tbody>
-            `;
-            resultsOutputDiv.appendChild(table);
-        } else {
-            resultsOutputDiv.innerHTML = '<div class="success-message">Проверка успешно завершена. Ошибок не найдено!</div>';
+        if (!results.errors || results.errors.length === 0) {
+            summaryResultsDiv.innerHTML = '<div class="success-message">Проверка успешно завершена. Ошибок не найдено!</div>';
+            return;
         }
+
+        // 1. Aggregate errors by rule name
+        const errorsByRule = results.errors.reduce((acc, error) => {
+            const ruleName = error.rule_name;
+            if (!acc[ruleName]) {
+                acc[ruleName] = [];
+            }
+            acc[ruleName].push(error);
+            return acc;
+        }, {});
+
+        // 2. Render summary table
+        const summaryTable = document.createElement('table');
+        summaryTable.className = 'results-table summary-table';
+        summaryTable.innerHTML = `
+            <thead>
+                <tr>
+                    <th>Название проверки</th>
+                    <th>Количество ошибок</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${Object.entries(errorsByRule).map(([ruleName, errors]) => `
+                    <tr class="summary-row" data-rule-name="${ruleName}">
+                        <td>${ruleName}</td>
+                        <td>${errors.length}</td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        `;
+        summaryResultsDiv.appendChild(summaryTable);
+
+        // 3. Add click listener for details
+        summaryTable.querySelector('tbody').addEventListener('click', (event) => {
+            const row = event.target.closest('.summary-row');
+            if (!row) return;
+
+            // Highlight selected row
+            document.querySelectorAll('.summary-row').forEach(r => r.classList.remove('active'));
+            row.classList.add('active');
+
+            const ruleName = row.dataset.ruleName;
+            const detailedErrors = errorsByRule[ruleName];
+            renderDetailedTable(detailedErrors);
+        });
+    };
+
+    const renderDetailedTable = (errors) => {
+        const detailedResultsDiv = document.getElementById('detailed-results');
+        detailedResultsDiv.innerHTML = ''; // Clear previous details
+
+        if (!errors || errors.length === 0) return;
+
+        const detailTable = document.createElement('table');
+        detailTable.className = 'results-table detail-table';
+        detailTable.innerHTML = `
+            <caption>Детали по ошибкам для: "${errors[0].rule_name}"</caption>
+            <thead>
+                <tr>
+                    <th>Строка</th>
+                    <th>Колонка</th>
+                    <th>Значение</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${errors.map(e => `
+                    <tr>
+                        <td>${e.row}</td>
+                        <td>${e.column}</td>
+                        <td>${e.value}</td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        `;
+        detailedResultsDiv.appendChild(detailTable);
     };
 
     const showTemplateSuggestions = (templates) => {

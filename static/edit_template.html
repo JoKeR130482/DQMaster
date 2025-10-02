@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DQMaster - Редактировать шаблон</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div class="container">
+        <header class="rules-header">
+            <h1>Редактировать шаблон</h1>
+            <a href="/templates" class="back-link">&larr; К списку шаблонов</a>
+        </header>
+
+        <div id="edit-container" style="display: none;">
+            <div class="template-name-editor">
+                <label for="template-name-input">Имя шаблона:</label>
+                <input type="text" id="template-name-input" class="search-input">
+            </div>
+
+            <div id="columns-config-container" class="result-container">
+                <h2>Настройте правила для колонок:</h2>
+                <div id="columns-list">
+                    <!-- Column configurations will be injected here by JS -->
+                </div>
+            </div>
+
+            <button id="save-changes-btn" class="action-button">Сохранить изменения</button>
+        </div>
+
+        <div id="loading" class="loading-spinner"></div>
+        <div id="error-container" class="error-container"></div>
+    </div>
+    <script src="/static/edit_template.js"></script>
+</body>
+</html>
