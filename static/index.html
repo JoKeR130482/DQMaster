@@ -8,17 +8,32 @@
 </head>
 <body>
     <div class="container">
-        <h1>Загрузите Excel файл</h1>
+        <header class="rules-header">
+            <h1>Загрузите Excel файл</h1>
+            <a href="/rules" class="back-link">Все правила &rarr;</a>
+        </header>
         <p>Выберите файл, и приложение отобразит названия колонок из первой строки.</p>
         <div class="upload-container">
             <input type="file" id="fileInput" accept=".xlsx, .xls" class="file-input">
             <label for="fileInput" class="file-label">Выберите файл...</label>
         </div>
         <div id="loading" class="loading-spinner" style="display: none;"></div>
-        <div id="result-container" class="result-container">
-            <h2>Колонки файла:</h2>
-            <ul id="columnsList"></ul>
+
+        <!-- Container for column configuration -->
+        <div id="columns-config-container" class="result-container" style="display: none;">
+            <h2>Настройте правила для колонок:</h2>
+            <div id="columns-list">
+                <!-- Column configurations will be injected here by JS -->
+            </div>
+            <button id="validateButton" class="action-button">Запустить проверку</button>
         </div>
+
+        <!-- Container for displaying validation results -->
+        <div id="validation-results-container" style="display: none;">
+            <h3>Результаты проверки:</h3>
+            <div id="results-output"></div>
+        </div>
+
         <div id="error-container" class="error-container"></div>
     </div>
     <script src="/static/script.js"></script>
