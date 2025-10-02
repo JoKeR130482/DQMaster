@@ -112,6 +112,9 @@ class Template(BaseModel):
     columns: List[str]
     rules: Dict[str, List[str]]
 
+class TemplateUpdateRequest(BaseModel):
+    name: str
+
 class MatchRequest(BaseModel):
     columns: List[str]
 
@@ -223,6 +226,27 @@ async def create_template(template: Template):
     templates.append(template)
     write_templates(templates)
     return template
+
+@app.put("/api/templates/{template_id}", response_model=Template)
+async def update_template(template_id: str, template_update: TemplateUpdateRequest):
+    """Updates the name of an existing template."""
+    templates = read_templates()
+    template_to_update = None
+    for t in templates:
+        if t.id == template_id:
+            template_to_update = t
+            break
+
+    if not template_to_update:
+        raise HTTPException(status_code=404, detail="Template not found.")
+
+    # Check if the new name is already used by another template
+    if any(t.name.lower() == template_update.name.lower() and t.id != template_id for t in templates):
+        raise HTTPException(status_code=400, detail=f"A template with the name '{template_update.name}' already exists.")
+
+    template_to_update.name = template_update.name
+    write_templates(templates)
+    return template_to_update
 
 @app.delete("/api/templates/{template_id}", status_code=204)
 async def delete_template(template_id: str):
