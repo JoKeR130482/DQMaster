@@ -100,6 +100,10 @@ async def read_rules_page():
 async def read_templates_page():
     return FileResponse(STATIC_DIR / "templates.html")
 
+@app.get("/templates/edit/{template_id}")
+async def read_edit_template_page(template_id: str):
+    return FileResponse(STATIC_DIR / "edit_template.html")
+
 # --- Pydantic Models ---
 
 class ValidationRequest(BaseModel):
@@ -111,9 +115,6 @@ class Template(BaseModel):
     name: str
     columns: List[str]
     rules: Dict[str, List[str]]
-
-class TemplateUpdateRequest(BaseModel):
-    name: str
 
 class MatchRequest(BaseModel):
     columns: List[str]
@@ -149,6 +150,7 @@ async def upload_file(file: UploadFile = File(...)):
     Saves the uploaded Excel file to a temporary location and returns a unique
     file ID along with the column headers.
     """
+    UPLOADS_DIR.mkdir(exist_ok=True) # Ensure directory exists
     if not file.filename or not (file.filename.endswith('.xlsx') or file.filename.endswith('.xls')):
         raise HTTPException(status_code=400, detail="Invalid file type. Please upload an Excel file.")
 
@@ -175,6 +177,7 @@ async def validate_data(request: ValidationRequest):
     """
     Validates the cached data file against the provided rules.
     """
+    UPLOADS_DIR.mkdir(exist_ok=True) # Ensure directory exists
     file_path = UPLOADS_DIR / request.fileId
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="File not found. It may have expired or never existed.")
@@ -194,10 +197,7 @@ async def validate_data(request: ValidationRequest):
 
                 validator = rule["validator"]
                 for index, value in df[col_name].items():
-                    # Skip validation for empty cells
-                    if pd.isna(value):
-                        continue
-
+                    # Each rule is now responsible for handling its expected data types.
                     if not validator(value):
                         errors.append({
                             "row": index + 2, # Adding 2 for 1-based indexing + header
@@ -228,25 +228,29 @@ async def create_template(template: Template):
     return template
 
 @app.put("/api/templates/{template_id}", response_model=Template)
-async def update_template(template_id: str, template_update: TemplateUpdateRequest):
-    """Updates the name of an existing template."""
+async def update_template(template_id: str, template_update: Template):
+    """Updates an existing template."""
     templates = read_templates()
-    template_to_update = None
-    for t in templates:
+
+    template_index = -1
+    for i, t in enumerate(templates):
         if t.id == template_id:
-            template_to_update = t
+            template_index = i
             break
 
-    if not template_to_update:
+    if template_index == -1:
         raise HTTPException(status_code=404, detail="Template not found.")
 
     # Check if the new name is already used by another template
     if any(t.name.lower() == template_update.name.lower() and t.id != template_id for t in templates):
         raise HTTPException(status_code=400, detail=f"A template with the name '{template_update.name}' already exists.")
 
-    template_to_update.name = template_update.name
+    # Update the template in the list
+    template_update.id = template_id # Ensure the ID from the path is used
+    templates[template_index] = template_update
+
     write_templates(templates)
-    return template_to_update
+    return template_update
 
 @app.delete("/api/templates/{template_id}", status_code=204)
 async def delete_template(template_id: str):
