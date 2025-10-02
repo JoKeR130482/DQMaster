@@ -3,29 +3,47 @@ document.addEventListener('DOMContentLoaded', () => {
     const fileInput = document.getElementById('fileInput');
     const fileLabel = document.querySelector('.file-label');
     const loadingSpinner = document.getElementById('loading');
+    const errorContainer = document.getElementById('error-container');
+
+    // Template Suggestions
+    const templateSuggestionContainer = document.getElementById('template-suggestion-container');
+    const templateSuggestionsList = document.getElementById('template-suggestions-list');
+    const skipTemplatesBtn = document.getElementById('skip-templates-btn');
+
+    // Columns Configuration
     const columnsConfigContainer = document.getElementById('columns-config-container');
     const columnsListDiv = document.getElementById('columns-list');
+    const saveTemplateBtn = document.getElementById('save-template-btn');
     const validateButton = document.getElementById('validateButton');
+
+    // Validation Results
     const resultsContainer = document.getElementById('validation-results-container');
     const resultsOutputDiv = document.getElementById('results-output');
-    const errorContainer = document.getElementById('error-container');
 
     // --- Application State ---
     let currentFileId = null;
+    let currentColumns = [];
     let availableRules = [];
-    let appliedRules = {}; // Structure: { "columnName": ["rule_id_1", "rule_id_2"] }
+    let appliedRules = {};
 
     // --- Helper Functions ---
-    const resetUI = () => {
+    const resetUI = (isNewFile = true) => {
+        templateSuggestionContainer.style.display = 'none';
         columnsConfigContainer.style.display = 'none';
         resultsContainer.style.display = 'none';
         errorContainer.style.display = 'none';
-        columnsListDiv.innerHTML = '';
-        resultsOutputDiv.innerHTML = '';
-        errorContainer.textContent = '';
-        fileLabel.textContent = 'Выберите файл...';
+
+        if (isNewFile) {
+            fileLabel.textContent = 'Выберите файл...';
+            currentFileId = null;
+            currentColumns = [];
+        }
         appliedRules = {};
-        currentFileId = null;
+    };
+
+    const showError = (message) => {
+        errorContainer.textContent = message;
+        errorContainer.style.display = 'block';
     };
 
     // --- API Calls ---
@@ -39,11 +57,15 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    // --- UI Rendering ---
-    const renderColumnsConfig = (columns) => {
+    // --- UI Rendering & Logic ---
+    const renderColumnsConfig = () => {
         columnsListDiv.innerHTML = '';
-        columns.forEach(column => {
-            appliedRules[column] = []; // Initialize empty rules for each column
+        currentColumns.forEach(column => {
+            // Ensure appliedRules has an entry for the column
+            if (!appliedRules[column]) {
+                appliedRules[column] = [];
+            }
+
             const columnDiv = document.createElement('div');
             columnDiv.className = 'column-config';
             columnDiv.innerHTML = `
@@ -59,6 +81,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div class="applied-rules-container" id="rules-for-${column}"></div>
             `;
             columnsListDiv.appendChild(columnDiv);
+            renderAppliedRulesForColumn(column); // Render any pre-applied rules (from a template)
         });
         columnsConfigContainer.style.display = 'block';
     };
@@ -80,9 +103,39 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     };
 
-    const showError = (message) => {
-        errorContainer.textContent = message;
-        errorContainer.style.display = 'block';
+    const renderValidationResults = (results) => {
+        resultsOutputDiv.innerHTML = '';
+        resultsContainer.style.display = 'block';
+
+        if (results.errors && results.errors.length > 0) {
+            const table = document.createElement('table');
+            table.className = 'results-table';
+            table.innerHTML = `
+                <thead><tr><th>Строка</th><th>Колонка</th><th>Значение</th><th>Нарушенное правило</th></tr></thead>
+                <tbody>
+                    ${results.errors.map(e => `<tr><td>${e.row}</td><td>${e.column}</td><td>${e.value}</td><td>${e.rule_name}</td></tr>`).join('')}
+                </tbody>
+            `;
+            resultsOutputDiv.appendChild(table);
+        } else {
+            resultsOutputDiv.innerHTML = '<div class="success-message">Проверка успешно завершена. Ошибок не найдено!</div>';
+        }
+    };
+
+    const showTemplateSuggestions = (templates) => {
+        templateSuggestionsList.innerHTML = '';
+        templates.forEach(template => {
+            const button = document.createElement('button');
+            button.className = 'action-button';
+            button.textContent = template.name;
+            button.onclick = () => {
+                appliedRules = JSON.parse(JSON.stringify(template.rules)); // Deep copy
+                templateSuggestionContainer.style.display = 'none';
+                renderColumnsConfig();
+            };
+            templateSuggestionsList.appendChild(button);
+        });
+        templateSuggestionContainer.style.display = 'block';
     };
 
     // --- Event Handlers ---
@@ -98,21 +151,38 @@ document.addEventListener('DOMContentLoaded', () => {
         formData.append('file', file);
 
         try {
-            const response = await fetch('/upload/', { method: 'POST', body: formData });
-            const data = await response.json();
+            // 1. Upload file
+            const uploadResponse = await fetch('/upload/', { method: 'POST', body: formData });
+            const uploadData = await uploadResponse.json();
+            if (!uploadResponse.ok) throw new Error(uploadData.detail || 'Failed to upload file');
 
-            if (!response.ok) {
-                throw new Error(data.detail || 'Failed to upload file');
+            currentFileId = uploadData.fileId;
+            currentColumns = uploadData.columns;
+
+            // 2. Find matching templates
+            const matchResponse = await fetch('/api/templates/find-matches', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ columns: currentColumns })
+            });
+            const matchingTemplates = await matchResponse.json();
+
+            if (matchingTemplates.length > 0) {
+                showTemplateSuggestions(matchingTemplates);
+            } else {
+                renderColumnsConfig();
             }
 
-            currentFileId = data.fileId;
-            renderColumnsConfig(data.columns);
-
         } catch (error) {
-            showError(`Ошибка загрузки: ${error.message}`);
+            showError(`Ошибка: ${error.message}`);
         } finally {
             loadingSpinner.style.display = 'none';
         }
+    });
+
+    skipTemplatesBtn.addEventListener('click', () => {
+        templateSuggestionContainer.style.display = 'none';
+        renderColumnsConfig();
     });
 
     columnsListDiv.addEventListener('change', (event) => {
@@ -120,16 +190,12 @@ document.addEventListener('DOMContentLoaded', () => {
             const selectedRuleId = event.target.value;
             if (!selectedRuleId) return;
 
-            const columnDiv = event.target.closest('.column-config');
-            const columnName = columnDiv.querySelector('.column-name').textContent;
-
-            // Add rule only if it's not already applied
+            const columnName = event.target.closest('.column-config').querySelector('.column-name').textContent;
             if (!appliedRules[columnName].includes(selectedRuleId)) {
                 appliedRules[columnName].push(selectedRuleId);
                 renderAppliedRulesForColumn(columnName);
             }
-
-            event.target.value = ""; // Reset dropdown
+            event.target.value = "";
         }
     });
 
@@ -141,74 +207,51 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    validateButton.addEventListener('click', async () => {
-        if (!currentFileId) {
-            showError("Нет загруженного файла для проверки.");
-            return;
+    saveTemplateBtn.addEventListener('click', async () => {
+        const templateName = prompt("Введите имя для нового шаблона:", "Мой шаблон");
+        if (!templateName) return;
+
+        const payload = {
+            name: templateName,
+            columns: currentColumns,
+            rules: appliedRules
+        };
+
+        try {
+            const response = await fetch('/api/templates', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.detail || 'Failed to save template');
+            alert(`Шаблон "${templateName}" успешно сохранен!`);
+        } catch (error) {
+            showError(`Ошибка сохранения шаблона: ${error.message}`);
         }
+    });
+
+    validateButton.addEventListener('click', async () => {
+        if (!currentFileId) return showError("Нет файла для проверки.");
 
         loadingSpinner.style.display = 'block';
         resultsContainer.style.display = 'none';
-        resultsOutputDiv.innerHTML = '';
-
-        const payload = {
-            fileId: currentFileId,
-            rules: appliedRules
-        };
 
         try {
             const response = await fetch('/api/validate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
+                body: JSON.stringify({ fileId: currentFileId, rules: appliedRules })
             });
             const results = await response.json();
-            if (!response.ok) {
-                throw new Error(results.detail || 'Validation request failed');
-            }
+            if (!response.ok) throw new Error(results.detail || 'Validation failed');
             renderValidationResults(results);
-
         } catch (error) {
             showError(`Ошибка проверки: ${error.message}`);
         } finally {
             loadingSpinner.style.display = 'none';
         }
     });
-
-
-    const renderValidationResults = (results) => {
-        resultsOutputDiv.innerHTML = ''; // Clear previous results
-        resultsContainer.style.display = 'block';
-
-        if (results.errors && results.errors.length > 0) {
-            const errors = results.errors;
-            const table = document.createElement('table');
-            table.className = 'results-table';
-            table.innerHTML = `
-                <thead>
-                    <tr>
-                        <th>Строка</th>
-                        <th>Колонка</th>
-                        <th>Значение</th>
-                        <th>Нарушенное правило</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${errors.map(error => `
-                        <tr>
-                            <td>${error.row}</td>
-                            <td>${error.column}</td>
-                            <td>${error.value}</td>
-                            <td>${error.rule_name}</td>
-                        </tr>
-                    `).join('')}
-                </tbody>
-            `;
-            resultsOutputDiv.appendChild(table);
-        } else {
-            resultsOutputDiv.innerHTML = '<div class="success-message">Проверка успешно завершена. Ошибок не найдено!</div>';
-        }
-    };
 
     // --- Initial Load ---
     fetchAvailableRules();

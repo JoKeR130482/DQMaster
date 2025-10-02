@@ -3,12 +3,13 @@ import importlib.util
 from pathlib import Path
 import uuid
 from typing import Dict, List
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 import pandas as pd
 import io
+import json
 
 # --- Globals & Setup ---
 
@@ -17,12 +18,15 @@ BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 RULES_DIR = BASE_DIR / "rules"
 UPLOADS_DIR = BASE_DIR / "uploads"
+TEMPLATES_FILE = BASE_DIR / "templates.json"
 RULE_REGISTRY = {}
 
 # --- Ensure core directories exist ---
 STATIC_DIR.mkdir(exist_ok=True)
 RULES_DIR.mkdir(exist_ok=True)
 UPLOADS_DIR.mkdir(exist_ok=True)
+if not TEMPLATES_FILE.exists():
+    TEMPLATES_FILE.write_text("[]")
 
 # --- Rule Discovery and Loading ---
 
@@ -92,11 +96,36 @@ async def read_root():
 async def read_rules_page():
     return FileResponse(STATIC_DIR / "rules.html")
 
+@app.get("/templates")
+async def read_templates_page():
+    return FileResponse(STATIC_DIR / "templates.html")
+
 # --- Pydantic Models ---
 
 class ValidationRequest(BaseModel):
     fileId: str
-    rules: Dict[str, List[str]] # e.g., {"ColumnName": ["rule_id_1", "rule_id_2"]}
+    rules: Dict[str, List[str]]
+
+class Template(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str
+    columns: List[str]
+    rules: Dict[str, List[str]]
+
+class MatchRequest(BaseModel):
+    columns: List[str]
+
+# --- Template Helper Functions ---
+
+def read_templates() -> List[Template]:
+    if not TEMPLATES_FILE.exists():
+        return []
+    return [Template(**t) for t in json.loads(TEMPLATES_FILE.read_text(encoding="utf-8"))]
+
+def write_templates(templates: List[Template]):
+    with open(TEMPLATES_FILE, "w", encoding="utf-8") as f:
+        json.dump([t.dict() for t in templates], f, indent=2, ensure_ascii=False)
+
 
 # --- API Endpoints ---
 
@@ -177,3 +206,42 @@ async def validate_data(request: ValidationRequest):
         return {"errors": errors}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Validation failed: {str(e)}")
+
+# --- Template API Endpoints ---
+
+@app.get("/api/templates", response_model=List[Template])
+async def get_templates():
+    """Returns a list of all saved validation templates."""
+    return read_templates()
+
+@app.post("/api/templates", response_model=Template, status_code=201)
+async def create_template(template: Template):
+    """Saves a new validation template."""
+    templates = read_templates()
+    if any(t.name.lower() == template.name.lower() for t in templates):
+        raise HTTPException(status_code=400, detail=f"A template with the name '{template.name}' already exists.")
+    templates.append(template)
+    write_templates(templates)
+    return template
+
+@app.delete("/api/templates/{template_id}", status_code=204)
+async def delete_template(template_id: str):
+    """Deletes a validation template by its ID."""
+    templates = read_templates()
+    initial_len = len(templates)
+    templates = [t for t in templates if t.id != template_id]
+    if len(templates) == initial_len:
+        raise HTTPException(status_code=404, detail="Template not found.")
+    write_templates(templates)
+    return
+
+@app.post("/api/templates/find-matches", response_model=List[Template])
+async def find_matching_templates(request: MatchRequest):
+    """Finds templates that have the same set of columns as the input."""
+    templates = read_templates()
+    # Using sets for order-insensitive comparison
+    request_columns_set = set(request.columns)
+    matching_templates = [
+        t for t in templates if set(t.columns) == request_columns_set
+    ]
+    return matching_templates

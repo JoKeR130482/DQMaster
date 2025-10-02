@@ -10,7 +10,10 @@
     <div class="container">
         <header class="rules-header">
             <h1>Загрузите Excel файл</h1>
-            <a href="/rules" class="back-link">Все правила &rarr;</a>
+            <div class="nav-links">
+                <a href="/rules" class="back-link">Все правила</a>
+                <a href="/templates" class="back-link">Шаблоны</a>
+            </div>
         </header>
         <p>Выберите файл, и приложение отобразит названия колонок из первой строки.</p>
         <div class="upload-container">
@@ -19,9 +22,20 @@
         </div>
         <div id="loading" class="loading-spinner" style="display: none;"></div>
 
+        <!-- Container for template suggestions -->
+        <div id="template-suggestion-container" class="suggestion-container" style="display: none;">
+            <h3>Найдены подходящие шаблоны!</h3>
+            <p>Хотите применить один из них?</p>
+            <div id="template-suggestions-list"></div>
+            <button id="skip-templates-btn" class="secondary-button">Нет, настроить вручную</button>
+        </div>
+
         <!-- Container for column configuration -->
         <div id="columns-config-container" class="result-container" style="display: none;">
-            <h2>Настройте правила для колонок:</h2>
+            <div class="config-header">
+                <h2>Настройте правила для колонок:</h2>
+                <button id="save-template-btn" class="secondary-button">Сохранить как шаблон</button>
+            </div>
             <div id="columns-list">
                 <!-- Column configurations will be injected here by JS -->
             </div>
