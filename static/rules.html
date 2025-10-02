@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DQMaster - Все правила</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div class="container">
+        <header class="rules-header">
+            <h1>Все доступные правила</h1>
+            <a href="/" class="back-link">&larr; На главную</a>
+        </header>
+
+        <div class="toolbar">
+            <input type="text" id="searchInput" class="search-input" placeholder="Поиск по названию или описанию...">
+            <div class="sort-buttons">
+                <span>Сортировать:</span>
+                <button id="sortByName" class="sort-btn">По имени (А-Я)</button>
+                <button id="sortByNameDesc" class="sort-btn">По имени (Я-А)</button>
+            </div>
+        </div>
+
+        <div id="rules-list-container" class="rules-list">
+            <!-- Rules will be dynamically inserted here by JavaScript -->
+        </div>
+        <div id="loading" class="loading-spinner"></div>
+        <div id="error-container" class="error-container"></div>
+    </div>
+    <script src="/static/rules.js"></script>
+</body>
+</html>

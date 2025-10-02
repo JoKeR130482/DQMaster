@@ -106,3 +106,228 @@ p {
     border-radius: 5px;
     display: none; /* Initially hidden */
 }
+
+/* --- Styles for Rules Page --- */
+
+.rules-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+
+.rules-header h1 {
+    margin-bottom: 0;
+}
+
+.back-link {
+    color: #3498db;
+    text-decoration: none;
+    font-weight: bold;
+    transition: color 0.3s ease;
+}
+
+.back-link:hover {
+    color: #2980b9;
+}
+
+.toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 30px;
+    flex-wrap: wrap;
+    gap: 15px;
+}
+
+.search-input {
+    flex-grow: 1;
+    padding: 10px 15px;
+    border: 2px solid #ecf0f1;
+    border-radius: 8px;
+    font-size: 16px;
+    transition: border-color 0.3s ease;
+}
+
+.search-input:focus {
+    outline: none;
+    border-color: #3498db;
+}
+
+.sort-buttons {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.sort-btn {
+    background-color: #ecf0f1;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+.sort-btn:hover {
+    background-color: #bdc3c7;
+}
+
+.rules-list {
+    display: grid;
+    gap: 20px;
+}
+
+.rule-card {
+    background-color: #f8f9fa;
+    padding: 20px;
+    border-radius: 8px;
+    border: 1px solid #ecf0f1;
+    text-align: left;
+}
+
+.rule-name {
+    margin-top: 0;
+    color: #2c3e50;
+}
+
+.rule-description {
+    color: #34495e;
+    margin-bottom: 15px;
+}
+
+.rule-id {
+    background-color: #e0e0e0;
+    color: #555;
+    padding: 3px 6px;
+    border-radius: 4px;
+    font-size: 12px;
+}
+
+/* --- Styles for Main Page Column Configuration --- */
+
+#columns-list {
+    margin-top: 20px;
+    text-align: left;
+}
+
+.column-config {
+    background-color: #f8f9fa;
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 15px;
+    border: 1px solid #ecf0f1;
+}
+
+.column-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.column-name {
+    font-weight: bold;
+    font-size: 1.1em;
+    color: #2c3e50;
+}
+
+.rule-select {
+    padding: 5px;
+    border-radius: 5px;
+    border: 1px solid #bdc3c7;
+    background-color: white;
+}
+
+.applied-rules-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    min-height: 20px; /* Ensure container has height even when empty */
+}
+
+.rule-tag {
+    background-color: #3498db;
+    color: white;
+    padding: 5px 10px;
+    border-radius: 15px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    cursor: default;
+}
+
+.rule-tag span {
+    white-space: nowrap;
+}
+
+.remove-rule-btn {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+}
+
+.action-button {
+    background-color: #27ae60;
+    color: white;
+    padding: 12px 25px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 16px;
+    margin-top: 20px;
+    transition: background-color 0.3s ease;
+}
+
+.action-button:hover {
+    background-color: #229954;
+}
+
+#validation-results-container {
+    margin-top: 30px;
+    text-align: left;
+}
+
+.results-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 15px;
+}
+
+.results-table th, .results-table td {
+    border: 1px solid #ddd;
+    padding: 12px;
+    text-align: left;
+}
+
+.results-table th {
+    background-color: #34495e;
+    color: white;
+    font-weight: bold;
+}
+
+.results-table tbody tr:nth-child(even) {
+    background-color: #f2f2f2;
+}
+
+.results-table tbody tr:hover {
+    background-color: #ddd;
+}
+
+.success-message {
+    background-color: #dff0d8;
+    color: #3c763d;
+    padding: 15px;
+    border-radius: 8px;
+    border: 1px solid #d6e9c6;
+    text-align: center;
+    font-weight: bold;
+}
