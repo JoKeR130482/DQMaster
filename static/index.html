@@ -50,6 +50,20 @@
 
         <div id="error-container" class="error-container"></div>
     </div>
+
+    <!-- Modal for saving a template -->
+    <div id="save-template-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <h2>Сохранить шаблон</h2>
+            <p>Введите имя для вашего нового шаблона.</p>
+            <input type="text" id="template-name-input" placeholder="Например, 'Ежемесячный отчет'">
+            <div class="modal-actions">
+                <button id="cancel-save-btn" class="secondary-button">Отмена</button>
+                <button id="confirm-save-btn" class="action-button">Сохранить</button>
+            </div>
+        </div>
+    </div>
+
     <script src="/static/script.js"></script>
 </body>
 </html>

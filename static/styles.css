@@ -240,23 +240,26 @@ p {
     color: #2c3e50;
 }
 
-.delete-template-btn {
-    background: #e74c3c;
-    color: white;
-    border: none;
-    border-radius: 50%;
-    width: 24px;
-    height: 24px;
-    font-size: 16px;
-    font-weight: bold;
-    cursor: pointer;
-    line-height: 24px;
-    text-align: center;
-    transition: background-color 0.3s ease;
+.template-actions {
+    display: flex;
+    gap: 10px;
 }
 
-.delete-template-btn:hover {
-    background: #c0392b;
+.edit-template-btn, .delete-template-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 20px;
+    padding: 0 5px;
+    transition: transform 0.2s ease;
+}
+
+.edit-template-btn:hover, .delete-template-btn:hover {
+    transform: scale(1.2);
+}
+
+.delete-template-btn {
+    color: #e74c3c;
 }
 
 .template-body p {
@@ -395,6 +398,62 @@ p {
     justify-content: center;
     gap: 15px;
     margin: 15px 0;
+}
+
+/* --- Styles for Modal --- */
+
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.6);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.modal-content {
+    background-color: white;
+    padding: 30px;
+    border-radius: 12px;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+    width: 90%;
+    max-width: 500px;
+    text-align: center;
+}
+
+.modal-content h2 {
+    margin-top: 0;
+    color: #2c3e50;
+}
+
+.modal-content p {
+    color: #7f8c8d;
+    margin-bottom: 20px;
+}
+
+#template-name-input {
+    width: 100%;
+    padding: 12px;
+    border: 2px solid #ecf0f1;
+    border-radius: 8px;
+    font-size: 16px;
+    margin-bottom: 20px;
+    box-sizing: border-box;
+}
+
+#template-name-input:focus {
+    outline: none;
+    border-color: #3498db;
+}
+
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
 }
 
 #validation-results-container {

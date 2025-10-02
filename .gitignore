@@ -2,6 +2,9 @@
 /uploads/
 /jules-scratch/
 
+# Data files
+templates.json
+
 # Python cache
 __pycache__/
 *.py[cod]

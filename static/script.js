@@ -20,6 +20,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const resultsContainer = document.getElementById('validation-results-container');
     const resultsOutputDiv = document.getElementById('results-output');
 
+    // Modal Elements
+    const saveTemplateModal = document.getElementById('save-template-modal');
+    const templateNameInput = document.getElementById('template-name-input');
+    const confirmSaveBtn = document.getElementById('confirm-save-btn');
+    const cancelSaveBtn = document.getElementById('cancel-save-btn');
+
     // --- Application State ---
     let currentFileId = null;
     let currentColumns = [];
@@ -61,7 +67,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const renderColumnsConfig = () => {
         columnsListDiv.innerHTML = '';
         currentColumns.forEach(column => {
-            // Ensure appliedRules has an entry for the column
             if (!appliedRules[column]) {
                 appliedRules[column] = [];
             }
@@ -81,13 +86,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div class="applied-rules-container" id="rules-for-${column}"></div>
             `;
             columnsListDiv.appendChild(columnDiv);
-            renderAppliedRulesForColumn(column); // Render any pre-applied rules (from a template)
+            renderAppliedRulesForColumn(column);
         });
         columnsConfigContainer.style.display = 'block';
     };
 
     const renderAppliedRulesForColumn = (columnName) => {
         const container = document.getElementById(`rules-for-${columnName}`);
+        if (!container) return;
         container.innerHTML = '';
         appliedRules[columnName].forEach(ruleId => {
             const rule = availableRules.find(r => r.id === ruleId);
@@ -129,7 +135,7 @@ document.addEventListener('DOMContentLoaded', () => {
             button.className = 'action-button';
             button.textContent = template.name;
             button.onclick = () => {
-                appliedRules = JSON.parse(JSON.stringify(template.rules)); // Deep copy
+                appliedRules = JSON.parse(JSON.stringify(template.rules));
                 templateSuggestionContainer.style.display = 'none';
                 renderColumnsConfig();
             };
@@ -151,7 +157,6 @@ document.addEventListener('DOMContentLoaded', () => {
         formData.append('file', file);
 
         try {
-            // 1. Upload file
             const uploadResponse = await fetch('/upload/', { method: 'POST', body: formData });
             const uploadData = await uploadResponse.json();
             if (!uploadResponse.ok) throw new Error(uploadData.detail || 'Failed to upload file');
@@ -159,7 +164,9 @@ document.addEventListener('DOMContentLoaded', () => {
             currentFileId = uploadData.fileId;
             currentColumns = uploadData.columns;
 
-            // 2. Find matching templates
+            // Initialize empty rules for all columns
+            currentColumns.forEach(col => { appliedRules[col] = []; });
+
             const matchResponse = await fetch('/api/templates/find-matches', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -172,7 +179,6 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 renderColumnsConfig();
             }
-
         } catch (error) {
             showError(`Ошибка: ${error.message}`);
         } finally {
@@ -207,15 +213,28 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    saveTemplateBtn.addEventListener('click', async () => {
-        const templateName = prompt("Введите имя для нового шаблона:", "Мой шаблон");
-        if (!templateName) return;
+    saveTemplateBtn.addEventListener('click', () => {
+        templateNameInput.value = '';
+        saveTemplateModal.style.display = 'flex';
+        templateNameInput.focus();
+    });
+
+    cancelSaveBtn.addEventListener('click', () => {
+        saveTemplateModal.style.display = 'none';
+    });
+
+    confirmSaveBtn.addEventListener('click', async () => {
+        const templateName = templateNameInput.value.trim();
+        if (!templateName) return showError("Имя шаблона не может быть пустым.");
 
         const payload = {
             name: templateName,
             columns: currentColumns,
             rules: appliedRules
         };
+
+        confirmSaveBtn.disabled = true;
+        confirmSaveBtn.textContent = 'Сохранение...';
 
         try {
             const response = await fetch('/api/templates', {
@@ -225,9 +244,14 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             const data = await response.json();
             if (!response.ok) throw new Error(data.detail || 'Failed to save template');
+
+            saveTemplateModal.style.display = 'none';
             alert(`Шаблон "${templateName}" успешно сохранен!`);
         } catch (error) {
             showError(`Ошибка сохранения шаблона: ${error.message}`);
+        } finally {
+            confirmSaveBtn.disabled = false;
+            confirmSaveBtn.textContent = 'Сохранить';
         }
     });
 
