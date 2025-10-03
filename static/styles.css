@@ -278,6 +278,16 @@ p {
     color: #2980b9;
 }
 
+.clickable-rule {
+    cursor: pointer;
+    text-decoration: underline;
+    text-decoration-style: dotted;
+}
+
+.clickable-rule:hover {
+    color: #2980b9;
+}
+
 .template-body p {
     margin: 0 0 10px 0;
 }

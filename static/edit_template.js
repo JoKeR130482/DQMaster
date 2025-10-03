@@ -64,10 +64,12 @@ document.addEventListener('DOMContentLoaded', () => {
         } finally {
             loadingSpinner.style.display = 'none';
             editContainer.style.display = 'block';
+            // This is the critical fix: ensure the inner container is also visible.
+            document.getElementById('columns-config-container').style.display = 'block';
         }
     };
 
-    // --- UI Rendering (Robust version) ---
+    // --- UI Rendering (Robust version using createElement) ---
     const renderEditor = () => {
         templateNameInput.value = currentTemplate.name;
         columnsListDiv.innerHTML = '';
@@ -137,7 +139,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const span = document.createElement('span');
             span.title = ruleDef.description;
             span.textContent = ruleDisplayName;
-            // Make the rule name clickable for editing
+
             if (ruleDef.is_configurable) {
                 span.classList.add('clickable-rule');
                 span.dataset.column = columnName;
@@ -174,7 +176,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     <label for="rule-case-sensitive">Учитывать регистр</label>
                 </div>
             `;
-            // Pre-fill form if editing
             if (existingConfig && existingConfig.params) {
                 document.getElementById('rule-mode').value = existingConfig.params.mode || 'contains';
                 document.getElementById('rule-value').value = existingConfig.params.value || '';
@@ -188,6 +189,23 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // --- Event Handlers ---
+    columnsListDiv.addEventListener('click', (event) => {
+        const target = event.target;
+        if (target.classList.contains('remove-rule-btn')) {
+            const { column, index } = target.dataset;
+            currentTemplate.rules[column].splice(index, 1);
+            renderAppliedRulesForColumn(column);
+        }
+        if (target.classList.contains('clickable-rule')) {
+            const { column, index } = target.dataset;
+            const ruleConfig = currentTemplate.rules[column][index];
+            const ruleDef = availableRules.find(r => r.id === ruleConfig.id);
+            if(ruleDef) {
+                openRuleConfigModal(ruleDef, column, ruleConfig, parseInt(index));
+            }
+        }
+    });
+
     columnsListDiv.addEventListener('change', (event) => {
         if (event.target.classList.contains('rule-select')) {
             const selectedRuleId = event.target.value;
@@ -248,24 +266,6 @@ document.addEventListener('DOMContentLoaded', () => {
     cancelRuleConfigBtn.addEventListener('click', () => {
         ruleConfigModal.style.display = 'none';
         pendingRuleConfig = {};
-    });
-
-    columnsListDiv.addEventListener('click', (event) => {
-        // Handle rule removal
-        if (event.target.classList.contains('remove-rule-btn')) {
-            const { column, index } = event.target.dataset;
-            currentTemplate.rules[column].splice(index, 1);
-            renderAppliedRulesForColumn(column);
-        }
-        // Handle rule editing
-        if (event.target.classList.contains('clickable-rule')) {
-            const { column, index } = event.target.dataset;
-            const ruleConfig = currentTemplate.rules[column][index];
-            const ruleDef = availableRules.find(r => r.id === ruleConfig.id);
-            if(ruleDef) {
-                openRuleConfigModal(ruleDef, column, ruleConfig, parseInt(index));
-            }
-        }
     });
 
     saveChangesBtn.addEventListener('click', async () => {
