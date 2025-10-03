@@ -125,12 +125,16 @@ document.addEventListener('DOMContentLoaded', () => {
         if (rule.id === 'substring_check') {
             ruleConfigForm.innerHTML = `
                 <label for="rule-mode">Режим:</label>
-                <select id="rule-mode">
+                <select id="rule-mode" class="rule-param-input">
                     <option value="contains">содержит</option>
                     <option value="not_contains">не содержит</option>
                 </select>
                 <label for="rule-value">Значение:</label>
-                <input type="text" id="rule-value" placeholder="Введите подстроку...">
+                <input type="text" id="rule-value" class="rule-param-input" placeholder="Введите подстроку...">
+                <div class="checkbox-container">
+                    <input type="checkbox" id="rule-case-sensitive" class="rule-param-input">
+                    <label for="rule-case-sensitive">Учитывать регистр</label>
+                </div>
             `;
         } else {
             ruleConfigForm.innerHTML = '<p>Это правило не требует дополнительной настройки.</p>';
@@ -169,6 +173,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (rule.id === 'substring_check') {
             params.mode = document.getElementById('rule-mode').value;
             params.value = document.getElementById('rule-value').value;
+            params.case_sensitive = document.getElementById('rule-case-sensitive').checked;
             if (!params.value) return showError('Значение для проверки не может быть пустым.');
         }
 
