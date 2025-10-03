@@ -70,6 +70,17 @@
     <!-- Notification Toast -->
     <div id="notification-toast" class="toast"></div>
 
+    <!-- Modal for selecting a sheet -->
+    <div id="sheet-select-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <h2>Выберите лист для проверки</h2>
+            <p>Ваш файл содержит несколько листов. Пожалуйста, выберите, какой из них вы хотите проверить.</p>
+            <div id="sheet-list" class="sheet-list">
+                <!-- Sheet buttons will be injected here -->
+            </div>
+        </div>
+    </div>
+
     <!-- Modal for configuring a rule -->
     <div id="rule-config-modal" class="modal-overlay" style="display: none;">
         <div class="modal-content">
