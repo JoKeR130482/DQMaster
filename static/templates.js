@@ -63,7 +63,6 @@ document.addEventListener('DOMContentLoaded', () => {
                                 const ruleNames = ruleConfigs.map(config => {
                                     const ruleDef = allRules.find(r => r.id === config.id);
                                     if (!ruleDef) return config.id;
-                                    // A simplified version of the formatter logic from the main script
                                     if (ruleDef.id === 'substring_check' && config.params) {
                                         const modeText = config.params.mode === 'contains' ? 'содержит (стоп-слово)' : 'не содержит (обязательно)';
                                         const caseText = config.params.case_sensitive ? 'с уч. регистра' : 'без уч. регистра';
@@ -106,7 +105,6 @@ document.addEventListener('DOMContentLoaded', () => {
     templatesListContainer.addEventListener('click', async (event) => {
         const target = event.target;
 
-        // Handle Delete
         if (target.classList.contains('delete-template-btn')) {
             const templateId = target.dataset.id;
             if (!templateId) return;
@@ -114,6 +112,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 try {
                     const response = await fetch(`/api/templates/${templateId}`, { method: 'DELETE' });
                     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                    showNotification('Шаблон успешно удален.');
                     fetchTemplates();
                 } catch (error) {
                     showError(`Не удалось удалить шаблон: ${error.message}`);
@@ -121,7 +120,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        // Handle Edit - Redirect to edit page
         if (target.classList.contains('edit-template-btn')) {
             const templateId = target.dataset.id;
             if (templateId) {
