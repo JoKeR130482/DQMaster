@@ -1,15 +1,4 @@
 document.addEventListener('DOMContentLoaded', () => {
-    const logList = document.getElementById('debug-log-list');
-    const log = (message) => {
-        if (logList) {
-            const li = document.createElement('li');
-            li.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
-            logList.appendChild(li);
-        }
-    };
-
-    log('Скрипт edit_template.js запущен.');
-
     // --- DOM Elements ---
     const editContainer = document.getElementById('edit-container');
     const templateNameInput = document.getElementById('template-name-input');
@@ -30,12 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let pendingRuleConfig = {};
 
     // --- Helper Functions ---
-    const getTemplateIdFromUrl = () => {
-        const pathParts = window.location.pathname.split('/');
-        const id = pathParts[pathParts.length - 1];
-        log(`Извлечен ID шаблона из URL: ${id}`);
-        return id;
-    };
+    const getTemplateIdFromUrl = () => window.location.pathname.split('/').pop();
 
     const showNotification = (message, type = 'success') => {
         const toast = document.getElementById('notification-toast');
@@ -46,10 +30,7 @@ document.addEventListener('DOMContentLoaded', () => {
         setTimeout(() => { toast.classList.remove('show'); }, 3000);
     };
 
-    const showError = (message) => {
-        log(`ОШИБКА: ${message}`);
-        showNotification(message, 'error');
-    };
+    const showError = (message) => showNotification(message, 'error');
 
     const formatRuleDisplayName = (ruleDef, ruleConfig) => {
         if (ruleDef.id === 'substring_check' && ruleConfig.params) {
@@ -62,105 +43,114 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- API Calls ---
     const fetchData = async () => {
-        log('Начало fetchData.');
         try {
             const [rulesResponse, templatesResponse] = await Promise.all([
                 fetch('/api/rules'),
                 fetch('/api/templates')
             ]);
-            log('Получены ответы от сервера.');
 
-            if (!rulesResponse.ok) throw new Error('Ошибка при загрузке правил');
+            if (!rulesResponse.ok) throw new Error('Failed to fetch rules');
             availableRules = await rulesResponse.json();
-            log(`Правила загружены: ${availableRules.length} шт.`);
 
-            if (!templatesResponse.ok) throw new Error('Ошибка при загрузке шаблонов');
+            if (!templatesResponse.ok) throw new Error('Failed to fetch templates');
             const allTemplates = await templatesResponse.json();
-            log(`Шаблоны загружены: ${allTemplates.length} шт.`);
 
             currentTemplate = allTemplates.find(t => t.id === templateId);
-            log(`Поиск шаблона с ID: ${templateId}. Результат: ${currentTemplate ? 'Найден' : 'Не найден'}`);
-
             if (!currentTemplate) throw new Error('Шаблон не найден');
 
             renderEditor();
         } catch (error) {
             showError(error.message);
         } finally {
-            log('Завершение fetchData.');
             loadingSpinner.style.display = 'none';
             editContainer.style.display = 'block';
-            log('Контейнер редактирования показан.');
         }
     };
 
-    // --- UI Rendering ---
+    // --- UI Rendering (Robust version using createElement) ---
     const renderEditor = () => {
-        log('Начало renderEditor.');
         templateNameInput.value = currentTemplate.name;
         columnsListDiv.innerHTML = '';
-        log('Имя шаблона установлено, список колонок очищен.');
 
         currentTemplate.columns.forEach(column => {
-            log(`Рендеринг колонки: ${column}`);
             const columnDiv = document.createElement('div');
             columnDiv.className = 'column-config';
-            columnDiv.innerHTML = `
-                <div class="column-header">
-                    <span class="column-name">${column}</span>
-                    <div class="rule-controls">
-                        <select class="rule-select">
-                            <option value="">-- Добавить правило --</option>
-                            ${availableRules.map(rule => `<option value="${rule.id}">${rule.name}</option>`).join('')}
-                        </select>
-                    </div>
-                </div>
-                <div class="applied-rules-container" id="rules-for-edit-${column}"></div>
-            `;
+
+            const columnHeader = document.createElement('div');
+            columnHeader.className = 'column-header';
+
+            const columnNameSpan = document.createElement('span');
+            columnNameSpan.className = 'column-name';
+            columnNameSpan.textContent = column;
+
+            const ruleControlsDiv = document.createElement('div');
+            ruleControlsDiv.className = 'rule-controls';
+
+            const select = document.createElement('select');
+            select.className = 'rule-select';
+
+            const defaultOption = document.createElement('option');
+            defaultOption.value = "";
+            defaultOption.textContent = "-- Добавить правило --";
+            select.appendChild(defaultOption);
+
+            availableRules.forEach(rule => {
+                const option = document.createElement('option');
+                option.value = rule.id;
+                option.textContent = rule.name;
+                select.appendChild(option);
+            });
+
+            ruleControlsDiv.appendChild(select);
+            columnHeader.appendChild(columnNameSpan);
+            columnHeader.appendChild(ruleControlsDiv);
+
+            const appliedRulesContainer = document.createElement('div');
+            appliedRulesContainer.className = 'applied-rules-container';
+            appliedRulesContainer.id = `rules-for-edit-${column}`;
+
+            columnDiv.appendChild(columnHeader);
+            columnDiv.appendChild(appliedRulesContainer);
+
             columnsListDiv.appendChild(columnDiv);
-            log(`Div для колонки ${column} добавлен на страницу.`);
+
             renderAppliedRulesForColumn(column);
         });
-        log('Завершение renderEditor.');
     };
 
     const renderAppliedRulesForColumn = (columnName) => {
-        log(`Начало renderAppliedRulesForColumn для колонки: ${columnName}`);
         const container = document.getElementById(`rules-for-edit-${columnName}`);
-        if (!container) {
-            log(`ОШИБКА: Контейнер #rules-for-edit-${columnName} не найден!`);
-            return;
-        }
+        if (!container) return;
 
         const rulesForColumn = currentTemplate.rules[columnName] || [];
         container.innerHTML = '';
-        log(`В колонке ${columnName} найдено ${rulesForColumn.length} правил.`);
 
         rulesForColumn.forEach((ruleConfig, index) => {
-            log(`- Обработка правила #${index}: ${JSON.stringify(ruleConfig)}`);
             const ruleDef = availableRules.find(r => r.id === ruleConfig.id);
-            if (!ruleDef) {
-                 log(`- ОШИБКА: Определение для правила ${ruleConfig.id} не найдено.`);
-                return;
-            }
+            if (!ruleDef) return;
 
             const ruleDisplayName = formatRuleDisplayName(ruleDef, ruleConfig);
-            log(`- Отформатированное имя: ${ruleDisplayName}`);
 
             const ruleTag = document.createElement('div');
             ruleTag.className = 'rule-tag';
-            ruleTag.innerHTML = `
-                <span title="${ruleDef.description}">${ruleDisplayName}</span>
-                <button class="remove-rule-btn" data-column="${columnName}" data-index="${index}">&times;</button>
-            `;
+
+            const span = document.createElement('span');
+            span.title = ruleDef.description;
+            span.textContent = ruleDisplayName;
+
+            const button = document.createElement('button');
+            button.className = 'remove-rule-btn';
+            button.innerHTML = '&times;';
+            button.dataset.column = columnName;
+            button.dataset.index = index;
+
+            ruleTag.appendChild(span);
+            ruleTag.appendChild(button);
             container.appendChild(ruleTag);
         });
-        log(`Завершение renderAppliedRulesForColumn для колонки: ${columnName}`);
     };
 
-    // ... (rest of the event handlers remain the same) ...
-    // NOTE: The following event handlers are copied from the previous correct version without changes.
-
+    // ... (rest of the event handlers are the same and correct) ...
     const openRuleConfigModal = (rule, columnName) => {
         pendingRuleConfig = { rule, columnName };
         ruleConfigTitle.textContent = `Настроить правило: ${rule.name}`;
