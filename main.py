@@ -80,12 +80,31 @@ def validate(value):
             f.write(content.strip())
         print("Created default rule file: starts_with_capital.py")
 
+def setup_debug_template():
+    """Ensures a debug template with a known ID exists for testing."""
+    DEBUG_TEMPLATE_ID = "debug-template-123"
+    templates = read_templates()
+    if not any(t.id == DEBUG_TEMPLATE_ID for t in templates):
+        debug_template = Template(
+            id=DEBUG_TEMPLATE_ID,
+            name="!!! ОТЛАДОЧНЫЙ ШАБЛОН !!!",
+            columns=["Имя", "Город"],
+            rules={
+                "Имя": [{"id": "not_empty", "params": None}],
+                "Город": [{"id": "starts_with_capital", "params": None}]
+            }
+        )
+        templates.append(debug_template)
+        write_templates(templates)
+        print(f"Created debug template with ID: {DEBUG_TEMPLATE_ID}")
+
 @app.on_event("startup")
 async def startup_event():
     """
     On application startup, set up directories and load rules.
     """
     setup_default_rule()
+    setup_debug_template() # Add this call
     load_rules()
 
 # --- Static Files & HTML Routes ---
