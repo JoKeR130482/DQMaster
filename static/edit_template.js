@@ -1,13 +1,22 @@
 document.addEventListener('DOMContentLoaded', () => {
+    const logList = document.getElementById('debug-log-list');
+    const log = (message) => {
+        if (logList) {
+            const li = document.createElement('li');
+            li.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logList.appendChild(li);
+        }
+    };
+
+    log('Скрипт edit_template.js запущен.');
+
     // --- DOM Elements ---
     const editContainer = document.getElementById('edit-container');
     const templateNameInput = document.getElementById('template-name-input');
     const columnsListDiv = document.getElementById('columns-list');
     const saveChangesBtn = document.getElementById('save-changes-btn');
     const loadingSpinner = document.getElementById('loading');
-    const errorContainer = document.getElementById('error-container');
 
-    // Rule Config Modal Elements
     const ruleConfigModal = document.getElementById('rule-config-modal');
     const ruleConfigTitle = document.getElementById('rule-config-title');
     const ruleConfigForm = document.getElementById('rule-config-form');
@@ -23,21 +32,24 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Helper Functions ---
     const getTemplateIdFromUrl = () => {
         const pathParts = window.location.pathname.split('/');
-        return pathParts[pathParts.length - 1];
+        const id = pathParts[pathParts.length - 1];
+        log(`Извлечен ID шаблона из URL: ${id}`);
+        return id;
     };
 
     const showNotification = (message, type = 'success') => {
         const toast = document.getElementById('notification-toast');
         if (!toast) return;
-
         toast.textContent = message;
         toast.className = 'toast show';
         toast.classList.add(type === 'error' ? 'error' : 'success');
-
         setTimeout(() => { toast.classList.remove('show'); }, 3000);
     };
 
-    const showError = (message) => showNotification(message, 'error');
+    const showError = (message) => {
+        log(`ОШИБКА: ${message}`);
+        showNotification(message, 'error');
+    };
 
     const formatRuleDisplayName = (ruleDef, ruleConfig) => {
         if (ruleDef.id === 'substring_check' && ruleConfig.params) {
@@ -50,36 +62,47 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- API Calls ---
     const fetchData = async () => {
+        log('Начало fetchData.');
         try {
             const [rulesResponse, templatesResponse] = await Promise.all([
                 fetch('/api/rules'),
                 fetch('/api/templates')
             ]);
+            log('Получены ответы от сервера.');
 
-            if (!rulesResponse.ok) throw new Error('Failed to fetch rules');
+            if (!rulesResponse.ok) throw new Error('Ошибка при загрузке правил');
             availableRules = await rulesResponse.json();
+            log(`Правила загружены: ${availableRules.length} шт.`);
 
-            if (!templatesResponse.ok) throw new Error('Failed to fetch templates');
+            if (!templatesResponse.ok) throw new Error('Ошибка при загрузке шаблонов');
             const allTemplates = await templatesResponse.json();
+            log(`Шаблоны загружены: ${allTemplates.length} шт.`);
 
             currentTemplate = allTemplates.find(t => t.id === templateId);
-            if (!currentTemplate) throw new Error('Template not found');
+            log(`Поиск шаблона с ID: ${templateId}. Результат: ${currentTemplate ? 'Найден' : 'Не найден'}`);
+
+            if (!currentTemplate) throw new Error('Шаблон не найден');
 
             renderEditor();
         } catch (error) {
             showError(error.message);
         } finally {
+            log('Завершение fetchData.');
             loadingSpinner.style.display = 'none';
             editContainer.style.display = 'block';
+            log('Контейнер редактирования показан.');
         }
     };
 
     // --- UI Rendering ---
     const renderEditor = () => {
+        log('Начало renderEditor.');
         templateNameInput.value = currentTemplate.name;
         columnsListDiv.innerHTML = '';
+        log('Имя шаблона установлено, список колонок очищен.');
 
         currentTemplate.columns.forEach(column => {
+            log(`Рендеринг колонки: ${column}`);
             const columnDiv = document.createElement('div');
             columnDiv.className = 'column-config';
             columnDiv.innerHTML = `
@@ -95,22 +118,34 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div class="applied-rules-container" id="rules-for-edit-${column}"></div>
             `;
             columnsListDiv.appendChild(columnDiv);
+            log(`Div для колонки ${column} добавлен на страницу.`);
             renderAppliedRulesForColumn(column);
         });
+        log('Завершение renderEditor.');
     };
 
     const renderAppliedRulesForColumn = (columnName) => {
+        log(`Начало renderAppliedRulesForColumn для колонки: ${columnName}`);
         const container = document.getElementById(`rules-for-edit-${columnName}`);
-        if (!container) return;
+        if (!container) {
+            log(`ОШИБКА: Контейнер #rules-for-edit-${columnName} не найден!`);
+            return;
+        }
 
         const rulesForColumn = currentTemplate.rules[columnName] || [];
         container.innerHTML = '';
+        log(`В колонке ${columnName} найдено ${rulesForColumn.length} правил.`);
 
         rulesForColumn.forEach((ruleConfig, index) => {
+            log(`- Обработка правила #${index}: ${JSON.stringify(ruleConfig)}`);
             const ruleDef = availableRules.find(r => r.id === ruleConfig.id);
-            if (!ruleDef) return;
+            if (!ruleDef) {
+                 log(`- ОШИБКА: Определение для правила ${ruleConfig.id} не найдено.`);
+                return;
+            }
 
             const ruleDisplayName = formatRuleDisplayName(ruleDef, ruleConfig);
+            log(`- Отформатированное имя: ${ruleDisplayName}`);
 
             const ruleTag = document.createElement('div');
             ruleTag.className = 'rule-tag';
@@ -120,7 +155,11 @@ document.addEventListener('DOMContentLoaded', () => {
             `;
             container.appendChild(ruleTag);
         });
+        log(`Завершение renderAppliedRulesForColumn для колонки: ${columnName}`);
     };
+
+    // ... (rest of the event handlers remain the same) ...
+    // NOTE: The following event handlers are copied from the previous correct version without changes.
 
     const openRuleConfigModal = (rule, columnName) => {
         pendingRuleConfig = { rule, columnName };
@@ -147,7 +186,6 @@ document.addEventListener('DOMContentLoaded', () => {
         ruleConfigModal.style.display = 'flex';
     };
 
-    // --- Event Handlers ---
     columnsListDiv.addEventListener('change', (event) => {
         if (event.target.classList.contains('rule-select')) {
             const selectedRuleId = event.target.value;
