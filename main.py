@@ -114,8 +114,13 @@ class RuleConfig(BaseModel):
     id: str
     params: Optional[Dict[str, Any]] = None
 
+class SheetSelectRequest(BaseModel):
+    fileId: str
+    sheetName: str
+
 class ValidationRequest(BaseModel):
     fileId: str
+    sheetName: str
     rules: Dict[str, List[RuleConfig]]
 
 class Template(BaseModel):
@@ -155,36 +160,49 @@ async def get_all_rules():
 @app.post("/upload/")
 async def upload_file(file: UploadFile = File(...)):
     """
-    Saves the uploaded Excel file to a temporary location and returns a unique
-    file ID along with the column headers.
+    Saves the uploaded Excel file and returns a file ID and a list of sheet names.
     """
-    UPLOADS_DIR.mkdir(exist_ok=True) # Ensure directory exists
+    UPLOADS_DIR.mkdir(exist_ok=True)
     if not file.filename or not (file.filename.endswith('.xlsx') or file.filename.endswith('.xls')):
         raise HTTPException(status_code=400, detail="Invalid file type. Please upload an Excel file.")
 
     try:
         contents = await file.read()
 
-        # Generate a unique ID for the file
         file_id = f"{uuid.uuid4()}_{file.filename}"
         file_path = UPLOADS_DIR / file_id
 
         with open(file_path, "wb") as f:
             f.write(contents)
 
-        # Read columns without keeping the whole file in memory
-        df = pd.read_excel(io.BytesIO(contents))
-        columns = df.columns.tolist()
+        # Use ExcelFile to get sheet names without loading the whole file
+        xls = pd.ExcelFile(io.BytesIO(contents))
+        sheet_names = xls.sheet_names
 
-        return {"fileId": file_id, "columns": columns}
+        return {"fileId": file_id, "sheets": sheet_names}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to process file: {str(e)}")
+
+@app.post("/api/select-sheet")
+async def select_sheet(request: SheetSelectRequest):
+    """
+    Reads a specific sheet from a saved Excel file and returns its columns.
+    """
+    file_path = UPLOADS_DIR / request.fileId
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found.")
+
+    try:
+        df = pd.read_excel(file_path, sheet_name=request.sheetName)
+        columns = df.columns.tolist()
+        return {"columns": columns}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to read sheet: {str(e)}")
 
 @app.post("/api/validate")
 async def validate_data(request: ValidationRequest):
     """
-    Validates the cached data file against the provided rules,
-    supporting configurable rules with parameters.
+    Validates a specific sheet within a cached data file against the provided rules.
     """
     UPLOADS_DIR.mkdir(exist_ok=True)
     file_path = UPLOADS_DIR / request.fileId
@@ -192,7 +210,7 @@ async def validate_data(request: ValidationRequest):
         raise HTTPException(status_code=404, detail="File not found. It may have expired or never existed.")
 
     try:
-        df = pd.read_excel(file_path)
+        df = pd.read_excel(file_path, sheet_name=request.sheetName)
         errors = []
         total_rows = len(df)
 
