@@ -16,7 +16,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let templateId = null;
     let availableRules = [];
     let currentTemplate = null;
-    let pendingRuleConfig = {};
+    let pendingRuleConfig = {}; // Stores { rule, columnName, index? }
 
     // --- Helper Functions ---
     const getTemplateIdFromUrl = () => window.location.pathname.split('/').pop();
@@ -67,7 +67,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    // --- UI Rendering (Robust version using createElement) ---
+    // --- UI Rendering (Robust version) ---
     const renderEditor = () => {
         templateNameInput.value = currentTemplate.name;
         columnsListDiv.innerHTML = '';
@@ -137,6 +137,12 @@ document.addEventListener('DOMContentLoaded', () => {
             const span = document.createElement('span');
             span.title = ruleDef.description;
             span.textContent = ruleDisplayName;
+            // Make the rule name clickable for editing
+            if (ruleDef.is_configurable) {
+                span.classList.add('clickable-rule');
+                span.dataset.column = columnName;
+                span.dataset.index = index;
+            }
 
             const button = document.createElement('button');
             button.className = 'remove-rule-btn';
@@ -150,17 +156,16 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     };
 
-    // ... (rest of the event handlers are the same and correct) ...
-    const openRuleConfigModal = (rule, columnName) => {
-        pendingRuleConfig = { rule, columnName };
+    const openRuleConfigModal = (rule, columnName, existingConfig = null, index = -1) => {
+        pendingRuleConfig = { rule, columnName, index };
         ruleConfigTitle.textContent = `Настроить правило: ${rule.name}`;
 
         if (rule.id === 'substring_check') {
             ruleConfigForm.innerHTML = `
                 <label for="rule-mode">Режим:</label>
                 <select id="rule-mode" class="rule-param-input">
-                    <option value="contains">содержит</option>
-                    <option value="not_contains">не содержит</option>
+                    <option value="contains">содержит (стоп-слово)</option>
+                    <option value="not_contains">не содержит (обязательно)</option>
                 </select>
                 <label for="rule-value">Значение:</label>
                 <input type="text" id="rule-value" class="rule-param-input" placeholder="Введите подстроку...">
@@ -169,6 +174,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     <label for="rule-case-sensitive">Учитывать регистр</label>
                 </div>
             `;
+            // Pre-fill form if editing
+            if (existingConfig && existingConfig.params) {
+                document.getElementById('rule-mode').value = existingConfig.params.mode || 'contains';
+                document.getElementById('rule-value').value = existingConfig.params.value || '';
+                document.getElementById('rule-case-sensitive').checked = existingConfig.params.case_sensitive || false;
+            }
         } else {
             ruleConfigForm.innerHTML = '<p>Это правило не требует дополнительной настройки.</p>';
         }
@@ -176,6 +187,7 @@ document.addEventListener('DOMContentLoaded', () => {
         ruleConfigModal.style.display = 'flex';
     };
 
+    // --- Event Handlers ---
     columnsListDiv.addEventListener('change', (event) => {
         if (event.target.classList.contains('rule-select')) {
             const selectedRuleId = event.target.value;
@@ -189,7 +201,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             if (rule.is_configurable) {
-                openRuleConfigModal(rule, columnName);
+                openRuleConfigModal(rule, columnName); // Open for new rule
             } else {
                 const newRule = { id: selectedRuleId, params: null };
                 const isDuplicate = currentTemplate.rules[columnName].some(existingRule => JSON.stringify(existingRule) === JSON.stringify(newRule));
@@ -205,7 +217,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     confirmRuleConfigBtn.addEventListener('click', () => {
-        const { rule, columnName } = pendingRuleConfig;
+        const { rule, columnName, index } = pendingRuleConfig;
         const params = {};
 
         if (rule.id === 'substring_check') {
@@ -216,15 +228,20 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const newRule = { id: rule.id, params: params };
-        const isDuplicate = currentTemplate.rules[columnName].some(existingRule => JSON.stringify(existingRule) === JSON.stringify(newRule));
 
-        if (isDuplicate) {
-            showNotification('Правило с такими же параметрами уже добавлено.', 'error');
-        } else {
+        if (index > -1) { // Editing existing rule
+            currentTemplate.rules[columnName][index] = newRule;
+        } else { // Adding new rule
+            const isDuplicate = currentTemplate.rules[columnName].some(existingRule => JSON.stringify(existingRule) === JSON.stringify(newRule));
+            if (isDuplicate) {
+                showNotification('Правило с такими же параметрами уже добавлено.', 'error');
+                return;
+            }
             currentTemplate.rules[columnName].push(newRule);
-            renderAppliedRulesForColumn(columnName);
-            ruleConfigModal.style.display = 'none';
         }
+
+        renderAppliedRulesForColumn(columnName);
+        ruleConfigModal.style.display = 'none';
         pendingRuleConfig = {};
     });
 
@@ -234,10 +251,20 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     columnsListDiv.addEventListener('click', (event) => {
+        // Handle rule removal
         if (event.target.classList.contains('remove-rule-btn')) {
             const { column, index } = event.target.dataset;
             currentTemplate.rules[column].splice(index, 1);
             renderAppliedRulesForColumn(column);
+        }
+        // Handle rule editing
+        if (event.target.classList.contains('clickable-rule')) {
+            const { column, index } = event.target.dataset;
+            const ruleConfig = currentTemplate.rules[column][index];
+            const ruleDef = availableRules.find(r => r.id === ruleConfig.id);
+            if(ruleDef) {
+                openRuleConfigModal(ruleDef, column, ruleConfig, parseInt(index));
+            }
         }
     });
 
