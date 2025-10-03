@@ -2,8 +2,9 @@ import os
 import importlib.util
 from pathlib import Path
 import uuid
-from typing import Dict, List
+from typing import Dict, List, Any, Optional
 from pydantic import BaseModel, Field
+import inspect
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -33,6 +34,7 @@ if not TEMPLATES_FILE.exists():
 def load_rules():
     """
     Discovers and loads validation rules from the 'rules' directory.
+    Also checks for configurable rules and their formatters.
     """
     RULE_REGISTRY.clear()
     for filename in os.listdir(RULES_DIR):
@@ -44,12 +46,14 @@ def load_rules():
                 if spec and spec.loader:
                     module = importlib.util.module_from_spec(spec)
                     spec.loader.exec_module(module)
-                    if hasattr(module, "validate") and hasattr(module, "RULE_NAME") and hasattr(module, "RULE_DESC"):
+                    if hasattr(module, "validate") and hasattr(module, "RULE_NAME"):
                         RULE_REGISTRY[rule_id] = {
                             "id": rule_id,
                             "name": module.RULE_NAME,
-                            "description": module.RULE_DESC,
-                            "validator": module.validate
+                            "description": getattr(module, "RULE_DESC", ""),
+                            "validator": module.validate,
+                            "is_configurable": getattr(module, "IS_CONFIGURABLE", False),
+                            "formatter": getattr(module, "format_name", None)
                         }
             except Exception as e:
                 print(f"Error loading rule from {filename}: {e}")
@@ -106,15 +110,19 @@ async def read_edit_template_page(template_id: str):
 
 # --- Pydantic Models ---
 
+class RuleConfig(BaseModel):
+    id: str
+    params: Optional[Dict[str, Any]] = None
+
 class ValidationRequest(BaseModel):
     fileId: str
-    rules: Dict[str, List[str]]
+    rules: Dict[str, List[RuleConfig]]
 
 class Template(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str
     columns: List[str]
-    rules: Dict[str, List[str]]
+    rules: Dict[str, List[RuleConfig]]
 
 class MatchRequest(BaseModel):
     columns: List[str]
@@ -138,11 +146,11 @@ async def get_all_rules():
     """
     Returns a list of all available validation rules, excluding the validator function.
     """
-    serializable_rules = {
-        rule_id: {"id": data["id"], "name": data["name"], "description": data["description"]}
-        for rule_id, data in RULE_REGISTRY.items()
-    }
-    return JSONResponse(content=list(serializable_rules.values()))
+    serializable_rules = [
+        {"id": data["id"], "name": data["name"], "description": data["description"], "is_configurable": data["is_configurable"]}
+        for data in RULE_REGISTRY.values()
+    ]
+    return JSONResponse(content=serializable_rules)
 
 @app.post("/upload/")
 async def upload_file(file: UploadFile = File(...)):
@@ -175,9 +183,10 @@ async def upload_file(file: UploadFile = File(...)):
 @app.post("/api/validate")
 async def validate_data(request: ValidationRequest):
     """
-    Validates the cached data file against the provided rules.
+    Validates the cached data file against the provided rules,
+    supporting configurable rules with parameters.
     """
-    UPLOADS_DIR.mkdir(exist_ok=True) # Ensure directory exists
+    UPLOADS_DIR.mkdir(exist_ok=True)
     file_path = UPLOADS_DIR / request.fileId
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="File not found. It may have expired or never existed.")
@@ -185,28 +194,39 @@ async def validate_data(request: ValidationRequest):
     try:
         df = pd.read_excel(file_path)
         errors = []
+        total_rows = len(df)
 
-        for col_name, rule_ids in request.rules.items():
+        for col_name, rule_configs in request.rules.items():
             if col_name not in df.columns:
-                continue # Skip if column from request is not in the file
+                continue
 
-            for rule_id in rule_ids:
-                rule = RULE_REGISTRY.get(rule_id)
+            for config in rule_configs:
+                rule = RULE_REGISTRY.get(config.id)
                 if not rule:
-                    continue # Skip if rule_id is invalid
+                    continue
 
                 validator = rule["validator"]
+                sig = inspect.signature(validator)
+
                 for index, value in df[col_name].items():
-                    # Each rule is now responsible for handling its expected data types.
-                    if not validator(value):
+                    is_valid = False
+                    if 'params' in sig.parameters:
+                        is_valid = validator(value, params=config.params)
+                    else:
+                        is_valid = validator(value)
+
+                    if not is_valid:
+                        formatter = rule.get("formatter")
+                        rule_name_for_error = formatter(config.params) if formatter and config.params else rule["name"]
                         errors.append({
-                            "row": index + 2, # Adding 2 for 1-based indexing + header
+                            "row": index + 2,
                             "column": col_name,
                             "value": str(value),
-                            "rule_name": rule["name"],
-                            "error": f"Value '{value}' failed validation for rule '{rule['name']}'"
+                            "rule_name": rule_name_for_error,
+                            "error": f"Value '{value}' failed validation for rule '{rule_name_for_error}'"
                         })
-        return {"errors": errors}
+
+        return {"total_rows": total_rows, "errors": errors}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Validation failed: {str(e)}")
 
