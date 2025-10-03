@@ -51,9 +51,25 @@ document.addEventListener('DOMContentLoaded', () => {
         appliedRules = {};
     };
 
+    const showNotification = (message, type = 'success') => {
+        const toast = document.getElementById('notification-toast');
+        if (!toast) return;
+
+        toast.textContent = message;
+        toast.className = 'toast show';
+        if (type === 'error') {
+            toast.classList.add('error');
+        } else {
+            toast.classList.add('success');
+        }
+
+        setTimeout(() => {
+            toast.classList.remove('show');
+        }, 3000);
+    };
+
     const showError = (message) => {
-        errorContainer.textContent = message;
-        errorContainer.style.display = 'block';
+        showNotification(message, 'error');
     };
 
     // --- API Calls ---
@@ -320,7 +336,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!response.ok) throw new Error(data.detail || 'Failed to save template');
 
             saveTemplateModal.style.display = 'none';
-            alert(`Шаблон "${templateName}" успешно сохранен!`);
+            showNotification(`Шаблон "${templateName}" успешно сохранен!`);
         } catch (error) {
             showError(`Ошибка сохранения шаблона: ${error.message}`);
         } finally {
