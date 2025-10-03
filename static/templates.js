@@ -71,9 +71,25 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     };
 
+    const showNotification = (message, type = 'success') => {
+        const toast = document.getElementById('notification-toast');
+        if (!toast) return;
+
+        toast.textContent = message;
+        toast.className = 'toast show';
+        if (type === 'error') {
+            toast.classList.add('error');
+        } else {
+            toast.classList.add('success');
+        }
+
+        setTimeout(() => {
+            toast.classList.remove('show');
+        }, 3000);
+    };
+
     const showError = (message) => {
-        errorContainer.textContent = message;
-        errorContainer.style.display = 'block';
+        showNotification(message, 'error');
     };
 
     // --- Event Handlers ---

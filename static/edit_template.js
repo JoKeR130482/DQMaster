@@ -18,9 +18,25 @@ document.addEventListener('DOMContentLoaded', () => {
         return pathParts[pathParts.length - 1];
     };
 
+    const showNotification = (message, type = 'success') => {
+        const toast = document.getElementById('notification-toast');
+        if (!toast) return;
+
+        toast.textContent = message;
+        toast.className = 'toast show';
+        if (type === 'error') {
+            toast.classList.add('error');
+        } else {
+            toast.classList.add('success');
+        }
+
+        setTimeout(() => {
+            toast.classList.remove('show');
+        }, 3000);
+    };
+
     const showError = (message) => {
-        errorContainer.textContent = message;
-        errorContainer.style.display = 'block';
+        showNotification(message, 'error');
     };
 
     // --- API Calls ---
@@ -141,8 +157,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await response.json();
             if (!response.ok) throw new Error(data.detail || 'Failed to update template');
 
-            alert('Шаблон успешно обновлен!');
-            window.location.href = '/templates'; // Redirect back to the list
+            showNotification('Шаблон успешно обновлен!');
+            // Redirect after a short delay to allow user to see the message
+            setTimeout(() => {
+                window.location.href = '/templates';
+            }, 1000);
         } catch (error) {
             showError(`Ошибка сохранения: ${error.message}`);
         } finally {
