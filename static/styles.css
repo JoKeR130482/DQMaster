@@ -476,12 +476,27 @@ p {
 }
 
 #rule-config-form select,
-#rule-config-form input {
+#rule-config-form input[type="text"] {
     width: 100%;
     padding: 10px;
     border: 1px solid #ccc;
     border-radius: 5px;
     box-sizing: border-box;
+}
+
+.checkbox-container {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.checkbox-container input[type="checkbox"] {
+    width: auto;
+}
+
+.checkbox-container label {
+    font-weight: normal;
+    margin-bottom: 0;
 }
 
 #validation-results-container {
