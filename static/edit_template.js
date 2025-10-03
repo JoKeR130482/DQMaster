@@ -39,6 +39,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const showError = (message) => showNotification(message, 'error');
 
+    const formatRuleDisplayName = (ruleDef, ruleConfig) => {
+        if (ruleDef.id === 'substring_check' && ruleConfig.params) {
+            const modeText = ruleConfig.params.mode === 'contains' ? 'содержит (стоп-слово)' : 'не содержит (обязательно)';
+            const caseText = ruleConfig.params.case_sensitive ? 'с уч. регистра' : 'без уч. регистра';
+            return `${ruleDef.name} (${modeText}: '${ruleConfig.params.value}', ${caseText})`;
+        }
+        return ruleDef.name;
+    };
+
     // --- API Calls ---
     const fetchData = async () => {
         try {
@@ -101,13 +110,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const ruleDef = availableRules.find(r => r.id === ruleConfig.id);
             if (!ruleDef) return;
 
-            let ruleDisplayName = ruleDef.name;
-            // Manual formatting on the frontend to match the backend formatter
-            if (ruleDef.id === 'substring_check' && ruleConfig.params) {
-                const modeText = ruleConfig.params.mode === 'contains' ? 'содержит (стоп-слово)' : 'не содержит (обязательно)';
-                const caseText = ruleConfig.params.case_sensitive ? 'с уч. регистра' : 'без уч. регистра';
-                ruleDisplayName = `${ruleDef.name} (${modeText}: '${ruleConfig.params.value}', ${caseText})`;
-            }
+            const ruleDisplayName = formatRuleDisplayName(ruleDef, ruleConfig);
 
             const ruleTag = document.createElement('div');
             ruleTag.className = 'rule-tag';
