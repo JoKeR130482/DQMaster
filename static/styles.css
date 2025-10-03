@@ -462,6 +462,28 @@ p {
     gap: 10px;
 }
 
+#rule-config-form {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    text-align: left;
+    margin-bottom: 20px;
+}
+
+#rule-config-form label {
+    font-weight: bold;
+    color: #34495e;
+}
+
+#rule-config-form select,
+#rule-config-form input {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    box-sizing: border-box;
+}
+
 #validation-results-container {
     margin-top: 30px;
     text-align: left;

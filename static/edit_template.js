@@ -7,10 +7,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const loadingSpinner = document.getElementById('loading');
     const errorContainer = document.getElementById('error-container');
 
+    // Rule Config Modal Elements
+    const ruleConfigModal = document.getElementById('rule-config-modal');
+    const ruleConfigTitle = document.getElementById('rule-config-title');
+    const ruleConfigForm = document.getElementById('rule-config-form');
+    const confirmRuleConfigBtn = document.getElementById('confirm-rule-config-btn');
+    const cancelRuleConfigBtn = document.getElementById('cancel-rule-config-btn');
+
     // --- State ---
     let templateId = null;
     let availableRules = [];
     let currentTemplate = null;
+    let pendingRuleConfig = {};
 
     // --- Helper Functions ---
     const getTemplateIdFromUrl = () => {
@@ -24,25 +32,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
         toast.textContent = message;
         toast.className = 'toast show';
-        if (type === 'error') {
-            toast.classList.add('error');
-        } else {
-            toast.classList.add('success');
-        }
+        toast.classList.add(type === 'error' ? 'error' : 'success');
 
-        setTimeout(() => {
-            toast.classList.remove('show');
-        }, 3000);
+        setTimeout(() => { toast.classList.remove('show'); }, 3000);
     };
 
-    const showError = (message) => {
-        showNotification(message, 'error');
-    };
+    const showError = (message) => showNotification(message, 'error');
 
     // --- API Calls ---
     const fetchData = async () => {
         try {
-            // Fetch rules and template data in parallel
             const [rulesResponse, templatesResponse] = await Promise.all([
                 fetch('/api/rules'),
                 fetch('/api/templates')
@@ -55,7 +54,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const allTemplates = await templatesResponse.json();
 
             currentTemplate = allTemplates.find(t => t.id === templateId);
-
             if (!currentTemplate) throw new Error('Template not found');
 
             renderEditor();
@@ -99,18 +97,46 @@ document.addEventListener('DOMContentLoaded', () => {
         const rulesForColumn = currentTemplate.rules[columnName] || [];
         container.innerHTML = '';
 
-        rulesForColumn.forEach(ruleId => {
-            const rule = availableRules.find(r => r.id === ruleId);
-            if (!rule) return;
+        rulesForColumn.forEach((ruleConfig, index) => {
+            const ruleDef = availableRules.find(r => r.id === ruleConfig.id);
+            if (!ruleDef) return;
+
+            let ruleDisplayName = ruleDef.name;
+            // A more robust formatter logic might be needed for different rules
+            if (ruleDef.is_configurable && ruleConfig.params && ruleConfig.params.value) {
+                 const modeText = ruleConfig.params.mode === 'contains' ? 'содержит' : 'не содержит';
+                 ruleDisplayName = `${ruleDef.name} (${modeText}: '${ruleConfig.params.value}')`;
+            }
 
             const ruleTag = document.createElement('div');
             ruleTag.className = 'rule-tag';
             ruleTag.innerHTML = `
-                <span title="${rule.description}">${rule.name}</span>
-                <button class="remove-rule-btn" data-column="${columnName}" data-rule="${ruleId}">&times;</button>
+                <span title="${ruleDef.description}">${ruleDisplayName}</span>
+                <button class="remove-rule-btn" data-column="${columnName}" data-index="${index}">&times;</button>
             `;
             container.appendChild(ruleTag);
         });
+    };
+
+    const openRuleConfigModal = (rule, columnName) => {
+        pendingRuleConfig = { rule, columnName };
+        ruleConfigTitle.textContent = `Настроить правило: ${rule.name}`;
+
+        if (rule.id === 'substring_check') {
+            ruleConfigForm.innerHTML = `
+                <label for="rule-mode">Режим:</label>
+                <select id="rule-mode">
+                    <option value="contains">содержит</option>
+                    <option value="not_contains">не содержит</option>
+                </select>
+                <label for="rule-value">Значение:</label>
+                <input type="text" id="rule-value" placeholder="Введите подстроку...">
+            `;
+        } else {
+            ruleConfigForm.innerHTML = '<p>Это правило не требует дополнительной настройки.</p>';
+        }
+
+        ruleConfigModal.style.display = 'flex';
     };
 
     // --- Event Handlers ---
@@ -119,22 +145,49 @@ document.addEventListener('DOMContentLoaded', () => {
             const selectedRuleId = event.target.value;
             if (!selectedRuleId) return;
 
+            const rule = availableRules.find(r => r.id === selectedRuleId);
             const columnName = event.target.closest('.column-config').querySelector('.column-name').textContent;
+
             if (!currentTemplate.rules[columnName]) {
                 currentTemplate.rules[columnName] = [];
             }
-            if (!currentTemplate.rules[columnName].includes(selectedRuleId)) {
-                currentTemplate.rules[columnName].push(selectedRuleId);
+
+            if (rule.is_configurable) {
+                openRuleConfigModal(rule, columnName);
+            } else {
+                currentTemplate.rules[columnName].push({ id: selectedRuleId, params: null });
                 renderAppliedRulesForColumn(columnName);
             }
-            event.target.value = ""; // Reset dropdown
+            event.target.value = "";
         }
+    });
+
+    confirmRuleConfigBtn.addEventListener('click', () => {
+        const { rule, columnName } = pendingRuleConfig;
+        const params = {};
+
+        if (rule.id === 'substring_check') {
+            params.mode = document.getElementById('rule-mode').value;
+            params.value = document.getElementById('rule-value').value;
+            if (!params.value) return showError('Значение для проверки не может быть пустым.');
+        }
+
+        currentTemplate.rules[columnName].push({ id: rule.id, params: params });
+        renderAppliedRulesForColumn(columnName);
+
+        ruleConfigModal.style.display = 'none';
+        pendingRuleConfig = {};
+    });
+
+    cancelRuleConfigBtn.addEventListener('click', () => {
+        ruleConfigModal.style.display = 'none';
+        pendingRuleConfig = {};
     });
 
     columnsListDiv.addEventListener('click', (event) => {
         if (event.target.classList.contains('remove-rule-btn')) {
-            const { column, rule } = event.target.dataset;
-            currentTemplate.rules[column] = currentTemplate.rules[column].filter(r => r !== rule);
+            const { column, index } = event.target.dataset;
+            currentTemplate.rules[column].splice(index, 1);
             renderAppliedRulesForColumn(column);
         }
     });
@@ -158,10 +211,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!response.ok) throw new Error(data.detail || 'Failed to update template');
 
             showNotification('Шаблон успешно обновлен!');
-            // Redirect after a short delay to allow user to see the message
-            setTimeout(() => {
-                window.location.href = '/templates';
-            }, 1000);
+            setTimeout(() => { window.location.href = '/templates'; }, 1000);
         } catch (error) {
             showError(`Ошибка сохранения: ${error.message}`);
         } finally {
