@@ -299,8 +299,14 @@ document.addEventListener('DOMContentLoaded', () => {
             if (rule.is_configurable) {
                 openRuleConfigModal(rule, columnName);
             } else {
-                appliedRules[columnName].push({ id: selectedRuleId, params: null });
-                renderAppliedRulesForColumn(columnName);
+                const newRule = { id: selectedRuleId, params: null };
+                const isDuplicate = appliedRules[columnName].some(existingRule => JSON.stringify(existingRule) === JSON.stringify(newRule));
+                if (isDuplicate) {
+                    showNotification('Это правило уже добавлено к данной колонке.', 'error');
+                } else {
+                    appliedRules[columnName].push(newRule);
+                    renderAppliedRulesForColumn(columnName);
+                }
             }
             event.target.value = "";
         }
@@ -317,10 +323,16 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!params.value) return showError('Значение для проверки не может быть пустым.');
         }
 
-        appliedRules[columnName].push({ id: rule.id, params: params });
-        renderAppliedRulesForColumn(columnName);
+        const newRule = { id: rule.id, params: params };
+        const isDuplicate = appliedRules[columnName].some(existingRule => JSON.stringify(existingRule) === JSON.stringify(newRule));
 
-        ruleConfigModal.style.display = 'none';
+        if (isDuplicate) {
+            showNotification('Правило с такими же параметрами уже добавлено.', 'error');
+        } else {
+            appliedRules[columnName].push(newRule);
+            renderAppliedRulesForColumn(columnName);
+            ruleConfigModal.style.display = 'none';
+        }
         pendingRuleConfig = {};
     });
 
