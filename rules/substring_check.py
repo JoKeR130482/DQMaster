@@ -1,7 +1,7 @@
 import re
 
 RULE_NAME = "Проверка на подстроку"
-RULE_DESC = "Проверяет, содержит ли значение указанную подстроку или не содержит ее, с возможностью учета регистра."
+RULE_DESC = "Режим 'содержит': ошибка, если подстрока найдена. Режим 'не содержит': ошибка, если подстрока не найдена."
 IS_CONFIGURABLE = True
 
 def format_name(params):
@@ -10,15 +10,16 @@ def format_name(params):
     value = params.get("value", "")
     case_sensitive = params.get("case_sensitive", False)
 
-    mode_text = "содержит" if mode == "contains" else "не содержит"
+    mode_text = "содержит (стоп-слово)" if mode == "contains" else "не содержит (обязательно)"
     case_text = "с учетом регистра" if case_sensitive else "без учета регистра"
 
     return f"{RULE_NAME} ({mode_text}: '{value}', {case_text})"
 
 def validate(value, params=None):
     """
-    Checks if a string contains or does not contain a specific substring,
-    with an option for case sensitivity.
+    Checks for the presence or absence of a substring.
+    - 'contains' mode fails if the substring is found.
+    - 'not_contains' mode fails if the substring is NOT found.
     """
     if not isinstance(value, str):
         return True # This rule only applies to strings.
@@ -38,9 +39,11 @@ def validate(value, params=None):
     search_string = substring if case_sensitive else substring.lower()
 
     if mode == "contains":
-        return search_string in main_string
+        # It's an ERROR if the substring IS found.
+        return not (search_string in main_string)
     elif mode == "not_contains":
-        return search_string not in main_string
+        # It's an ERROR if the substring IS NOT found.
+        return search_string in main_string
 
     # Invalid mode, treat as a pass
     return True

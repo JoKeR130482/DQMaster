@@ -58,9 +58,19 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div class="template-rules">
                         <strong>Правила:</strong>
                         <ul>
-                            ${Object.entries(template.rules).map(([col, ruleIds]) => {
-                                if (ruleIds.length === 0) return '';
-                                const ruleNames = ruleIds.map(id => allRules.find(r => r.id === id)?.name || id).join(', ');
+                            ${Object.entries(template.rules).map(([col, ruleConfigs]) => {
+                                if (ruleConfigs.length === 0) return '';
+                                const ruleNames = ruleConfigs.map(config => {
+                                    const ruleDef = allRules.find(r => r.id === config.id);
+                                    if (!ruleDef) return config.id;
+                                    // A simplified version of the formatter logic from the main script
+                                    if (ruleDef.id === 'substring_check' && config.params) {
+                                        const modeText = config.params.mode === 'contains' ? 'содержит (стоп-слово)' : 'не содержит (обязательно)';
+                                        const caseText = config.params.case_sensitive ? 'с уч. регистра' : 'без уч. регистра';
+                                        return `${ruleDef.name} (${modeText}: '${config.params.value}', ${caseText})`;
+                                    }
+                                    return ruleDef.name;
+                                }).join(', ');
                                 return `<li><strong>${col}:</strong> ${ruleNames}</li>`;
                             }).join('')}
                         </ul>

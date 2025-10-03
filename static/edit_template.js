@@ -102,10 +102,11 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!ruleDef) return;
 
             let ruleDisplayName = ruleDef.name;
-            // A more robust formatter logic might be needed for different rules
-            if (ruleDef.is_configurable && ruleConfig.params && ruleConfig.params.value) {
-                 const modeText = ruleConfig.params.mode === 'contains' ? 'содержит' : 'не содержит';
-                 ruleDisplayName = `${ruleDef.name} (${modeText}: '${ruleConfig.params.value}')`;
+            // Manual formatting on the frontend to match the backend formatter
+            if (ruleDef.id === 'substring_check' && ruleConfig.params) {
+                const modeText = ruleConfig.params.mode === 'contains' ? 'содержит (стоп-слово)' : 'не содержит (обязательно)';
+                const caseText = ruleConfig.params.case_sensitive ? 'с уч. регистра' : 'без уч. регистра';
+                ruleDisplayName = `${ruleDef.name} (${modeText}: '${ruleConfig.params.value}', ${caseText})`;
             }
 
             const ruleTag = document.createElement('div');

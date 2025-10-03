@@ -117,10 +117,11 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!ruleDef) return;
 
             let ruleDisplayName = ruleDef.name;
-            if (ruleDef.formatter && ruleConfig.params) {
-                // This assumes a simple formatter for now. A real implementation might be more complex.
-                const paramsString = Object.entries(ruleConfig.params).map(([key, val]) => `${val}`).join(', ');
-                ruleDisplayName = `${ruleDef.name} (${paramsString})`;
+            // Manual formatting on the frontend to match the backend formatter
+            if (ruleDef.id === 'substring_check' && ruleConfig.params) {
+                const modeText = ruleConfig.params.mode === 'contains' ? 'содержит (стоп-слово)' : 'не содержит (обязательно)';
+                const caseText = ruleConfig.params.case_sensitive ? 'с уч. регистра' : 'без уч. регистра';
+                ruleDisplayName = `${ruleDef.name} (${modeText}: '${ruleConfig.params.value}', ${caseText})`;
             }
 
             const ruleTag = document.createElement('div');
@@ -182,6 +183,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const summaryTable = document.createElement('table');
         summaryTable.className = 'results-table summary-table';
         summaryTable.innerHTML = `
+            <caption>Всего строк в файле для проверки: ${totalRows}</caption>
             <thead><tr><th>Название проверки</th><th>Количество ошибок</th><th>Процент ошибок</th></tr></thead>
             <tbody>
                 ${Object.entries(errorsByRule).map(([ruleName, errors]) => `
