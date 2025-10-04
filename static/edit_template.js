@@ -5,7 +5,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const columnsListDiv = document.getElementById('columns-list');
     const saveChangesBtn = document.getElementById('save-changes-btn');
     const loadingSpinner = document.getElementById('loading');
-
     const ruleConfigModal = document.getElementById('rule-config-modal');
     const ruleConfigTitle = document.getElementById('rule-config-title');
     const ruleConfigForm = document.getElementById('rule-config-form');
@@ -15,8 +14,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- State ---
     let templateId = null;
     let availableRules = [];
-    let currentTemplate = null;
-    let pendingRuleConfig = {}; // Stores { rule, columnName, index? }
+    let currentTemplate = null; // Will hold the full template object, including the new structure
+    let pendingRuleConfig = {};
 
     // --- Helper Functions ---
     const getTemplateIdFromUrl = () => window.location.pathname.split('/').pop();
@@ -48,74 +47,50 @@ document.addEventListener('DOMContentLoaded', () => {
                 fetch('/api/rules'),
                 fetch('/api/templates')
             ]);
-
             if (!rulesResponse.ok) throw new Error('Failed to fetch rules');
             availableRules = await rulesResponse.json();
-
             if (!templatesResponse.ok) throw new Error('Failed to fetch templates');
             const allTemplates = await templatesResponse.json();
-
             currentTemplate = allTemplates.find(t => t.id === templateId);
             if (!currentTemplate) throw new Error('Шаблон не найден');
-
             renderEditor();
         } catch (error) {
             showError(error.message);
         } finally {
             loadingSpinner.style.display = 'none';
             editContainer.style.display = 'block';
-            // This is the critical fix: ensure the inner container is also visible.
-            document.getElementById('columns-config-container').style.display = 'block';
         }
     };
 
-    // --- UI Rendering (Robust version using createElement) ---
+    // --- UI Rendering ---
     const renderEditor = () => {
         templateNameInput.value = currentTemplate.name;
         columnsListDiv.innerHTML = '';
-
         currentTemplate.columns.forEach(column => {
+            const columnConfig = currentTemplate.rules[column] || { is_required: false, rules: [] };
+            const isChecked = columnConfig.is_required ? 'checked' : '';
+
             const columnDiv = document.createElement('div');
             columnDiv.className = 'column-config';
-
-            const columnHeader = document.createElement('div');
-            columnHeader.className = 'column-header';
-
-            const columnNameSpan = document.createElement('span');
-            columnNameSpan.className = 'column-name';
-            columnNameSpan.textContent = column;
-
-            const ruleControlsDiv = document.createElement('div');
-            ruleControlsDiv.className = 'rule-controls';
-
-            const select = document.createElement('select');
-            select.className = 'rule-select';
-
-            const defaultOption = document.createElement('option');
-            defaultOption.value = "";
-            defaultOption.textContent = "-- Добавить правило --";
-            select.appendChild(defaultOption);
-
-            availableRules.forEach(rule => {
-                const option = document.createElement('option');
-                option.value = rule.id;
-                option.textContent = rule.name;
-                select.appendChild(option);
-            });
-
-            ruleControlsDiv.appendChild(select);
-            columnHeader.appendChild(columnNameSpan);
-            columnHeader.appendChild(ruleControlsDiv);
-
-            const appliedRulesContainer = document.createElement('div');
-            appliedRulesContainer.className = 'applied-rules-container';
-            appliedRulesContainer.id = `rules-for-edit-${column}`;
-
-            columnDiv.appendChild(columnHeader);
-            columnDiv.appendChild(appliedRulesContainer);
-
+            columnDiv.innerHTML = `
+                <div class="column-header">
+                    <span class="column-name">${column}</span>
+                    <div class="column-actions">
+                         <div class="checkbox-container required-field-container">
+                            <input type="checkbox" id="required-check-${column}" class="required-checkbox" data-column="${column}" ${isChecked}>
+                            <label for="required-check-${column}">Обязательное</label>
+                        </div>
+                        <div class="rule-controls">
+                            <select class="rule-select">
+                                <option value="">-- Добавить правило --</option>
+                                ${availableRules.map(rule => `<option value="${rule.id}">${rule.name}</option>`).join('')}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="applied-rules-container" id="rules-for-edit-${column}"></div>
+            `;
             columnsListDiv.appendChild(columnDiv);
-
             renderAppliedRulesForColumn(column);
         });
     };
@@ -123,37 +98,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const renderAppliedRulesForColumn = (columnName) => {
         const container = document.getElementById(`rules-for-edit-${columnName}`);
         if (!container) return;
-
-        const rulesForColumn = currentTemplate.rules[columnName] || [];
+        const rulesForColumn = currentTemplate.rules[columnName]?.rules || [];
         container.innerHTML = '';
-
         rulesForColumn.forEach((ruleConfig, index) => {
             const ruleDef = availableRules.find(r => r.id === ruleConfig.id);
             if (!ruleDef) return;
-
             const ruleDisplayName = formatRuleDisplayName(ruleDef, ruleConfig);
-
             const ruleTag = document.createElement('div');
             ruleTag.className = 'rule-tag';
-
-            const span = document.createElement('span');
-            span.title = ruleDef.description;
-            span.textContent = ruleDisplayName;
-
-            if (ruleDef.is_configurable) {
-                span.classList.add('clickable-rule');
-                span.dataset.column = columnName;
-                span.dataset.index = index;
-            }
-
-            const button = document.createElement('button');
-            button.className = 'remove-rule-btn';
-            button.innerHTML = '&times;';
-            button.dataset.column = columnName;
-            button.dataset.index = index;
-
-            ruleTag.appendChild(span);
-            ruleTag.appendChild(button);
+            ruleTag.innerHTML = `
+                <span class="clickable-rule" data-column="${columnName}" data-index="${index}" title="${ruleDef.description}">${ruleDisplayName}</span>
+                <button class="remove-rule-btn" data-column="${columnName}" data-index="${index}">&times;</button>
+            `;
             container.appendChild(ruleTag);
         });
     };
@@ -161,20 +117,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const openRuleConfigModal = (rule, columnName, existingConfig = null, index = -1) => {
         pendingRuleConfig = { rule, columnName, index };
         ruleConfigTitle.textContent = `Настроить правило: ${rule.name}`;
-
         if (rule.id === 'substring_check') {
             ruleConfigForm.innerHTML = `
                 <label for="rule-mode">Режим:</label>
-                <select id="rule-mode" class="rule-param-input">
-                    <option value="contains">содержит (стоп-слово)</option>
-                    <option value="not_contains">не содержит (обязательно)</option>
-                </select>
+                <select id="rule-mode" class="rule-param-input"><option value="contains">содержит (стоп-слово)</option><option value="not_contains">не содержит (обязательно)</option></select>
                 <label for="rule-value">Значение:</label>
                 <input type="text" id="rule-value" class="rule-param-input" placeholder="Введите подстроку...">
-                <div class="checkbox-container">
-                    <input type="checkbox" id="rule-case-sensitive" class="rule-param-input">
-                    <label for="rule-case-sensitive">Учитывать регистр</label>
-                </div>
+                <div class="checkbox-container"><input type="checkbox" id="rule-case-sensitive" class="rule-param-input"><label for="rule-case-sensitive">Учитывать регистр</label></div>
             `;
             if (existingConfig && existingConfig.params) {
                 document.getElementById('rule-mode').value = existingConfig.params.mode || 'contains';
@@ -184,7 +133,6 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             ruleConfigForm.innerHTML = '<p>Это правило не требует дополнительной настройки.</p>';
         }
-
         ruleConfigModal.style.display = 'flex';
     };
 
@@ -193,71 +141,69 @@ document.addEventListener('DOMContentLoaded', () => {
         const target = event.target;
         if (target.classList.contains('remove-rule-btn')) {
             const { column, index } = target.dataset;
-            currentTemplate.rules[column].splice(index, 1);
+            currentTemplate.rules[column].rules.splice(index, 1);
             renderAppliedRulesForColumn(column);
         }
         if (target.classList.contains('clickable-rule')) {
             const { column, index } = target.dataset;
-            const ruleConfig = currentTemplate.rules[column][index];
+            const ruleConfig = currentTemplate.rules[column].rules[index];
             const ruleDef = availableRules.find(r => r.id === ruleConfig.id);
-            if(ruleDef) {
+            if(ruleDef && ruleDef.is_configurable) {
                 openRuleConfigModal(ruleDef, column, ruleConfig, parseInt(index));
             }
         }
     });
 
     columnsListDiv.addEventListener('change', (event) => {
-        if (event.target.classList.contains('rule-select')) {
-            const selectedRuleId = event.target.value;
-            if (!selectedRuleId) return;
-
-            const rule = availableRules.find(r => r.id === selectedRuleId);
-            const columnName = event.target.closest('.column-config').querySelector('.column-name').textContent;
-
-            if (!currentTemplate.rules[columnName]) {
-                currentTemplate.rules[columnName] = [];
+        const target = event.target;
+        if (target.classList.contains('required-checkbox')) {
+            const columnName = target.dataset.column;
+            if (currentTemplate.rules[columnName]) {
+                currentTemplate.rules[columnName].is_required = target.checked;
             }
-
+        }
+        if (target.classList.contains('rule-select')) {
+            const selectedRuleId = target.value;
+            if (!selectedRuleId) return;
+            const rule = availableRules.find(r => r.id === selectedRuleId);
+            const columnName = target.closest('.column-config').querySelector('.column-name').textContent;
+            if (!currentTemplate.rules[columnName]) {
+                currentTemplate.rules[columnName] = { is_required: false, rules: [] };
+            }
             if (rule.is_configurable) {
-                openRuleConfigModal(rule, columnName); // Open for new rule
+                openRuleConfigModal(rule, columnName);
             } else {
                 const newRule = { id: selectedRuleId, params: null };
-                const isDuplicate = currentTemplate.rules[columnName].some(existingRule => JSON.stringify(existingRule) === JSON.stringify(newRule));
-                if (isDuplicate) {
+                if (currentTemplate.rules[columnName].rules.some(r => JSON.stringify(r) === JSON.stringify(newRule))) {
                     showNotification('Это правило уже добавлено к данной колонке.', 'error');
                 } else {
-                    currentTemplate.rules[columnName].push(newRule);
+                    currentTemplate.rules[columnName].rules.push(newRule);
                     renderAppliedRulesForColumn(columnName);
                 }
             }
-            event.target.value = "";
+            target.value = "";
         }
     });
 
     confirmRuleConfigBtn.addEventListener('click', () => {
         const { rule, columnName, index } = pendingRuleConfig;
         const params = {};
-
         if (rule.id === 'substring_check') {
             params.mode = document.getElementById('rule-mode').value;
             params.value = document.getElementById('rule-value').value;
             params.case_sensitive = document.getElementById('rule-case-sensitive').checked;
             if (!params.value) return showError('Значение для проверки не может быть пустым.');
         }
-
         const newRule = { id: rule.id, params: params };
-
-        if (index > -1) { // Editing existing rule
-            currentTemplate.rules[columnName][index] = newRule;
-        } else { // Adding new rule
-            const isDuplicate = currentTemplate.rules[columnName].some(existingRule => JSON.stringify(existingRule) === JSON.stringify(newRule));
-            if (isDuplicate) {
+        if (index > -1) {
+            currentTemplate.rules[columnName].rules[index] = newRule;
+        } else {
+            if (currentTemplate.rules[columnName].rules.some(r => JSON.stringify(r) === JSON.stringify(newRule))) {
                 showNotification('Правило с такими же параметрами уже добавлено.', 'error');
                 return;
             }
-            currentTemplate.rules[columnName].push(newRule);
+            currentTemplate.rules[columnName].rules.push(newRule);
         }
-
         renderAppliedRulesForColumn(columnName);
         ruleConfigModal.style.display = 'none';
         pendingRuleConfig = {};
@@ -271,12 +217,9 @@ document.addEventListener('DOMContentLoaded', () => {
     saveChangesBtn.addEventListener('click', async () => {
         const newName = templateNameInput.value.trim();
         if (!newName) return showError('Имя шаблона не может быть пустым.');
-
         currentTemplate.name = newName;
-
         saveChangesBtn.disabled = true;
         saveChangesBtn.textContent = 'Сохранение...';
-
         try {
             const response = await fetch(`/api/templates/${templateId}`, {
                 method: 'PUT',
@@ -285,7 +228,6 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             const data = await response.json();
             if (!response.ok) throw new Error(data.detail || 'Failed to update template');
-
             showNotification('Шаблон успешно обновлен!');
             setTimeout(() => { window.location.href = '/templates'; }, 1000);
         } catch (error) {

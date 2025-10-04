@@ -118,16 +118,20 @@ class SheetSelectRequest(BaseModel):
     fileId: str
     sheetName: str
 
+class ColumnConfig(BaseModel):
+    is_required: bool = False
+    rules: List[RuleConfig] = []
+
 class ValidationRequest(BaseModel):
     fileId: str
     sheetName: str
-    rules: Dict[str, List[RuleConfig]]
+    rules: Dict[str, ColumnConfig]
 
 class Template(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str
     columns: List[str]
-    rules: Dict[str, List[RuleConfig]]
+    rules: Dict[str, ColumnConfig]
 
 class MatchRequest(BaseModel):
     columns: List[str]
@@ -202,49 +206,59 @@ async def select_sheet(request: SheetSelectRequest):
 @app.post("/api/validate")
 async def validate_data(request: ValidationRequest):
     """
-    Validates a specific sheet within a cached data file against the provided rules.
+    Validates a specific sheet, supporting required fields and returning row-based error stats.
     """
     UPLOADS_DIR.mkdir(exist_ok=True)
     file_path = UPLOADS_DIR / request.fileId
     if not file_path.exists():
-        raise HTTPException(status_code=404, detail="File not found. It may have expired or never existed.")
+        raise HTTPException(status_code=404, detail="File not found.")
 
     try:
         df = pd.read_excel(file_path, sheet_name=request.sheetName)
         errors = []
         total_rows = len(df)
 
-        for col_name, rule_configs in request.rules.items():
+        for col_name, col_config in request.rules.items():
             if col_name not in df.columns:
                 continue
 
-            for config in rule_configs:
-                rule = RULE_REGISTRY.get(config.id)
-                if not rule:
-                    continue
+            for index, value in df[col_name].items():
+                # Check for required field violation first
+                if col_config.is_required and (pd.isna(value) or (isinstance(value, str) and not value.strip())):
+                    errors.append({
+                        "row": index + 2, "column": col_name, "value": "ПУСТО",
+                        "rule_name": "Обязательное поле",
+                        "error": "Поле не должно быть пустым"
+                    })
+                    # We still check other rules for this row, as it might have other errors.
 
-                validator = rule["validator"]
-                sig = inspect.signature(validator)
+                # Apply other rules regardless of the required check
+                for config in col_config.rules:
+                    rule = RULE_REGISTRY.get(config.id)
+                    if not rule: continue
 
-                for index, value in df[col_name].items():
-                    is_valid = False
-                    if 'params' in sig.parameters:
-                        is_valid = validator(value, params=config.params)
-                    else:
-                        is_valid = validator(value)
+                    validator = rule["validator"]
+                    sig = inspect.signature(validator)
+
+                    is_valid = validator(value, params=config.params) if 'params' in sig.parameters else validator(value)
 
                     if not is_valid:
                         formatter = rule.get("formatter")
                         rule_name_for_error = formatter(config.params) if formatter and config.params else rule["name"]
                         errors.append({
-                            "row": index + 2,
-                            "column": col_name,
-                            "value": str(value),
+                            "row": index + 2, "column": col_name, "value": str(value),
                             "rule_name": rule_name_for_error,
-                            "error": f"Value '{value}' failed validation for rule '{rule_name_for_error}'"
+                            "error": f"Значение '{value}' не прошло проверку '{rule_name_for_error}'"
                         })
 
-        return {"total_rows": total_rows, "errors": errors}
+        # Calculate unique rows with errors
+        error_rows_set = {e["row"] for e in errors}
+
+        return {
+            "total_rows": total_rows,
+            "error_rows_count": len(error_rows_set),
+            "errors": errors
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Validation failed: {str(e)}")
 

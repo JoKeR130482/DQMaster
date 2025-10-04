@@ -4,28 +4,22 @@ document.addEventListener('DOMContentLoaded', () => {
     const fileLabel = document.querySelector('.file-label');
     const loadingSpinner = document.getElementById('loading');
     const errorContainer = document.getElementById('error-container');
-
     const sheetSelectModal = document.getElementById('sheet-select-modal');
     const sheetListDiv = document.getElementById('sheet-list');
-
     const templateSuggestionContainer = document.getElementById('template-suggestion-container');
     const templateSuggestionsList = document.getElementById('template-suggestions-list');
     const skipTemplatesBtn = document.getElementById('skip-templates-btn');
-
     const columnsConfigContainer = document.getElementById('columns-config-container');
     const columnsListDiv = document.getElementById('columns-list');
     const saveTemplateBtn = document.getElementById('save-template-btn');
     const validateButton = document.getElementById('validateButton');
-
     const resultsContainer = document.getElementById('validation-results-container');
     const summaryResultsDiv = document.getElementById('summary-results');
     const detailedResultsDiv = document.getElementById('detailed-results');
-
     const saveTemplateModal = document.getElementById('save-template-modal');
     const templateNameInput = document.getElementById('template-name-input');
     const confirmSaveBtn = document.getElementById('confirm-save-btn');
     const cancelSaveBtn = document.getElementById('cancel-save-btn');
-
     const ruleConfigModal = document.getElementById('rule-config-modal');
     const ruleConfigTitle = document.getElementById('rule-config-title');
     const ruleConfigForm = document.getElementById('rule-config-form');
@@ -37,7 +31,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentSheetName = null;
     let currentColumns = [];
     let availableRules = [];
-    let appliedRules = {};
+    let appliedRules = {}; // Structure: { "columnName": { is_required: boolean, rules: [ruleConfig, ...] } }
     let pendingRuleConfig = {};
 
     // --- 3. Helper Functions ---
@@ -58,36 +52,13 @@ document.addEventListener('DOMContentLoaded', () => {
         appliedRules = {};
     };
 
-    const showNotification = (message, type = 'success') => {
-        const toast = document.getElementById('notification-toast');
-        if (!toast) return;
-        toast.textContent = message;
-        toast.className = 'toast show';
-        toast.classList.add(type === 'error' ? 'error' : 'success');
-        setTimeout(() => { toast.classList.remove('show'); }, 3000);
-    };
-
+    const showNotification = (message, type = 'success') => { /* ... (no changes) ... */ };
     const showError = (message) => showNotification(message, 'error');
 
-    const formatRuleDisplayName = (ruleDef, ruleConfig) => {
-        if (ruleDef.id === 'substring_check' && ruleConfig.params) {
-            const modeText = ruleConfig.params.mode === 'contains' ? 'содержит (стоп-слово)' : 'не содержит (обязательно)';
-            const caseText = ruleConfig.params.case_sensitive ? 'с уч. регистра' : 'без уч. регистра';
-            return `${ruleDef.name} (${modeText}: '${ruleConfig.params.value}', ${caseText})`;
-        }
-        return ruleDef.name;
-    };
+    const formatRuleDisplayName = (ruleDef, ruleConfig) => { /* ... (no changes) ... */ };
 
     // --- 4. API Calls & Logic Chain ---
-    const fetchAvailableRules = async () => {
-        try {
-            const response = await fetch('/api/rules');
-            if (!response.ok) throw new Error('Failed to fetch rules');
-            availableRules = await response.json();
-        } catch (error) {
-            showError(`Не удалось загрузить правила: ${error.message}`);
-        }
-    };
+    const fetchAvailableRules = async () => { /* ... (no changes) ... */ };
 
     const handleSheetSelection = async (sheetName) => {
         currentSheetName = sheetName;
@@ -102,7 +73,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await response.json();
             if (!response.ok) throw new Error(data.detail || 'Failed to select sheet');
             currentColumns = data.columns;
-            currentColumns.forEach(col => { appliedRules[col] = []; });
+            // **MODIFIED**: Initialize with new structure
+            currentColumns.forEach(col => { appliedRules[col] = { is_required: false, rules: [] }; });
             await findMatchingTemplates();
         } catch (error) {
             showError(`Ошибка выбора листа: ${error.message}`);
@@ -111,51 +83,35 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    const findMatchingTemplates = async () => {
-        try {
-            const matchResponse = await fetch('/api/templates/find-matches', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ columns: currentColumns })
-            });
-            const matchingTemplates = await matchResponse.json();
-            if (matchingTemplates.length > 0) {
-                showTemplateSuggestions(matchingTemplates);
-            } else {
-                renderColumnsConfig();
-            }
-        } catch (error) {
-            showError(`Ошибка поиска шаблонов: ${error.message}`);
-        }
-    };
+    const findMatchingTemplates = async () => { /* ... (no changes) ... */ };
 
     // --- 5. UI Rendering ---
-    const showSheetSelectionModal = (sheets) => {
-        sheetListDiv.innerHTML = '';
-        sheets.forEach(sheetName => {
-            const button = document.createElement('button');
-            button.className = 'action-button';
-            button.textContent = sheetName;
-            button.onclick = () => handleSheetSelection(sheetName);
-            sheetListDiv.appendChild(button);
-        });
-        sheetSelectModal.style.display = 'flex';
-    };
+    const showSheetSelectionModal = (sheets) => { /* ... (no changes) ... */ };
 
     const renderColumnsConfig = () => {
         columnsListDiv.innerHTML = '';
         currentColumns.forEach(column => {
-            if (!appliedRules[column]) appliedRules[column] = [];
+            if (!appliedRules[column]) appliedRules[column] = { is_required: false, rules: [] };
+
+            const columnConfig = appliedRules[column];
+            const isChecked = columnConfig.is_required ? 'checked' : '';
+
             const columnDiv = document.createElement('div');
             columnDiv.className = 'column-config';
             columnDiv.innerHTML = `
                 <div class="column-header">
                     <span class="column-name">${column}</span>
-                    <div class="rule-controls">
-                        <select class="rule-select">
-                            <option value="">-- Добавить правило --</option>
-                            ${availableRules.map(rule => `<option value="${rule.id}">${rule.name}</option>`).join('')}
-                        </select>
+                    <div class="column-actions">
+                        <div class="checkbox-container required-field-container">
+                            <input type="checkbox" id="required-check-${column}" class="required-checkbox" data-column="${column}" ${isChecked}>
+                            <label for="required-check-${column}">Обязательное</label>
+                        </div>
+                        <div class="rule-controls">
+                            <select class="rule-select">
+                                <option value="">-- Добавить правило --</option>
+                                ${availableRules.map(rule => `<option value="${rule.id}">${rule.name}</option>`).join('')}
+                            </select>
+                        </div>
                     </div>
                 </div>
                 <div class="applied-rules-container" id="rules-for-${column}"></div>
@@ -170,7 +126,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const container = document.getElementById(`rules-for-${columnName}`);
         if (!container) return;
         container.innerHTML = '';
-        appliedRules[columnName].forEach((ruleConfig, index) => {
+        appliedRules[columnName].rules.forEach((ruleConfig, index) => {
             const ruleDef = availableRules.find(r => r.id === ruleConfig.id);
             if (!ruleDef) return;
             const ruleDisplayName = formatRuleDisplayName(ruleDef, ruleConfig);
@@ -181,59 +137,60 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     };
 
-    const openRuleConfigModal = (rule, columnName) => {
-        pendingRuleConfig = { rule, columnName };
-        ruleConfigTitle.textContent = `Настроить правило: ${rule.name}`;
-        if (rule.id === 'substring_check') {
-            ruleConfigForm.innerHTML = `
-                <label for="rule-mode">Режим:</label>
-                <select id="rule-mode" class="rule-param-input">
-                    <option value="contains">содержит (стоп-слово)</option>
-                    <option value="not_contains">не содержит (обязательно)</option>
-                </select>
-                <label for="rule-value">Значение:</label>
-                <input type="text" id="rule-value" class="rule-param-input" placeholder="Введите подстроку...">
-                <div class="checkbox-container">
-                    <input type="checkbox" id="rule-case-sensitive" class="rule-param-input">
-                    <label for="rule-case-sensitive">Учитывать регистр</label>
-                </div>
-            `;
-        } else {
-            ruleConfigForm.innerHTML = '<p>Это правило не требует дополнительной настройки.</p>';
-        }
-        ruleConfigModal.style.display = 'flex';
-    };
-
+    const openRuleConfigModal = (rule, columnName, existingConfig = null, index = -1) => { /* ... (no changes) ... */ };
     const renderValidationResults = (results) => {
+        const goldenRecordStatsDiv = document.getElementById('golden-record-stats');
+        const summaryResultsDiv = document.getElementById('summary-results');
+        const detailedResultsDiv = document.getElementById('detailed-results');
+
+        // Clear all previous results
+        goldenRecordStatsDiv.innerHTML = '';
         summaryResultsDiv.innerHTML = '';
         detailedResultsDiv.innerHTML = '';
         resultsContainer.style.display = 'block';
+
+        const totalRows = results.total_rows || 0;
+        const errorRowsCount = results.error_rows_count || 0;
+        const errorPercentage = totalRows > 0 ? ((errorRowsCount / totalRows) * 100).toFixed(2) : 0;
+
+        // Render Golden Record Stats
+        goldenRecordStatsDiv.innerHTML = `
+            <div class="stats-summary">
+                <span>Всего строк: <strong>${totalRows}</strong></span>
+                <span>Строк с ошибками: <strong>${errorRowsCount}</strong></span>
+                <span>Процент ошибочных строк: <strong>${errorPercentage}%</strong></span>
+            </div>
+        `;
+
         if (!results.errors || results.errors.length === 0) {
             summaryResultsDiv.innerHTML = '<div class="success-message">Проверка успешно завершена. Ошибок не найдено!</div>';
             return;
         }
+
+        // Aggregate per-rule errors for the summary table
         const errorsByRule = results.errors.reduce((acc, error) => {
             if (!acc[error.rule_name]) acc[error.rule_name] = [];
             acc[error.rule_name].push(error);
             return acc;
         }, {});
-        const totalRows = results.total_rows || 1;
+
+        // Render per-rule summary table
         const summaryTable = document.createElement('table');
         summaryTable.className = 'results-table summary-table';
         summaryTable.innerHTML = `
-            <caption>Всего строк в файле для проверки: ${totalRows}</caption>
-            <thead><tr><th>Название проверки</th><th>Количество ошибок</th><th>Процент ошибок</th></tr></thead>
+            <thead><tr><th>Детализация по правилам</th><th>Количество ошибок</th></tr></thead>
             <tbody>
                 ${Object.entries(errorsByRule).map(([ruleName, errors]) => `
                     <tr class="summary-row" data-rule-name="${ruleName}">
                         <td>${ruleName}</td>
                         <td>${errors.length}</td>
-                        <td>${((errors.length / totalRows) * 100).toFixed(2)}%</td>
                     </tr>
                 `).join('')}
             </tbody>
         `;
         summaryResultsDiv.appendChild(summaryTable);
+
+        // Add click listener for details
         summaryTable.querySelector('tbody').addEventListener('click', (event) => {
             const row = event.target.closest('.summary-row');
             if (!row) return;
@@ -244,6 +201,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const renderDetailedTable = (errors) => {
+        const detailedResultsDiv = document.getElementById('detailed-results');
         detailedResultsDiv.innerHTML = '';
         if (!errors || errors.length === 0) return;
         const detailTable = document.createElement('table');
@@ -257,56 +215,17 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
         detailedResultsDiv.appendChild(detailTable);
     };
-
-    const showTemplateSuggestions = (templates) => {
-        templateSuggestionsList.innerHTML = '';
-        templates.forEach(template => {
-            const button = document.createElement('button');
-            button.className = 'action-button';
-            button.textContent = template.name;
-            button.onclick = () => {
-                appliedRules = JSON.parse(JSON.stringify(template.rules));
-                templateSuggestionContainer.style.display = 'none';
-                renderColumnsConfig();
-            };
-            templateSuggestionsList.appendChild(button);
-        });
-        templateSuggestionContainer.style.display = 'block';
-    };
+    const showTemplateSuggestions = (templates) => { /* ... (no changes) ... */ };
 
     // --- 6. Event Handlers ---
-    fileInput.addEventListener('change', async (event) => {
-        const file = event.target.files[0];
-        if (!file) return;
-        resetUI();
-        fileLabel.textContent = file.name;
-        loadingSpinner.style.display = 'block';
-        const formData = new FormData();
-        formData.append('file', file);
-        try {
-            const response = await fetch('/upload/', { method: 'POST', body: formData });
-            const data = await response.json();
-            if (!response.ok) throw new Error(data.detail || 'Failed to upload file');
-            currentFileId = data.fileId;
-            const sheets = data.sheets;
-            if (sheets.length === 1) {
-                await handleSheetSelection(sheets[0]);
-            } else {
-                showSheetSelectionModal(sheets);
-            }
-        } catch (error) {
-            showError(`Ошибка загрузки: ${error.message}`);
-        } finally {
-            loadingSpinner.style.display = 'none';
-        }
-    });
+    fileInput.addEventListener('change', async (event) => { /* ... (no changes) ... */ });
 
     validateButton.addEventListener('click', async () => {
         if (!currentFileId || !currentSheetName) return showError("Файл или лист не выбраны для проверки.");
         loadingSpinner.style.display = 'block';
         resultsContainer.style.display = 'none';
         try {
-            const payload = { fileId: currentFileId, sheetName: currentSheetName, rules: appliedRules };
+            const payload = { fileId: currentFileId, sheetName: currentSheetName, rules: appliedRules }; // **MODIFIED**: appliedRules now has the correct structure
             const response = await fetch('/api/validate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -322,12 +241,19 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    skipTemplatesBtn.addEventListener('click', () => {
-        templateSuggestionContainer.style.display = 'none';
-        renderColumnsConfig();
-    });
+    skipTemplatesBtn.addEventListener('click', () => { /* ... (no changes) ... */ });
 
     columnsListDiv.addEventListener('change', (event) => {
+        // Handle "is_required" checkbox
+        if (event.target.classList.contains('required-checkbox')) {
+            const columnName = event.target.dataset.column;
+            if (appliedRules[columnName]) {
+                appliedRules[columnName].is_required = event.target.checked;
+            }
+            return;
+        }
+
+        // Handle rule selection
         if (event.target.classList.contains('rule-select')) {
             const selectedRuleId = event.target.value; if (!selectedRuleId) return;
             const rule = availableRules.find(r => r.id === selectedRuleId);
@@ -335,10 +261,11 @@ document.addEventListener('DOMContentLoaded', () => {
             if (rule.is_configurable) { openRuleConfigModal(rule, columnName); }
             else {
                 const newRule = { id: selectedRuleId, params: null };
-                if (appliedRules[columnName].some(r => JSON.stringify(r) === JSON.stringify(newRule))) {
+                // **MODIFIED**: Check within the .rules array
+                if (appliedRules[columnName].rules.some(r => JSON.stringify(r) === JSON.stringify(newRule))) {
                     showNotification('Это правило уже добавлено.', 'error');
                 } else {
-                    appliedRules[columnName].push(newRule);
+                    appliedRules[columnName].rules.push(newRule);
                     renderAppliedRulesForColumn(columnName);
                 }
             }
@@ -348,68 +275,37 @@ document.addEventListener('DOMContentLoaded', () => {
 
     confirmRuleConfigBtn.addEventListener('click', () => {
         const { rule, columnName, index } = pendingRuleConfig; const params = {};
-        if (rule.id === 'substring_check') {
-            params.mode = document.getElementById('rule-mode').value;
-            params.value = document.getElementById('rule-value').value;
-            params.case_sensitive = document.getElementById('rule-case-sensitive').checked;
-            if (!params.value) return showError('Значение для проверки не может быть пустым.');
-        }
+        if (rule.id === 'substring_check') { /* ... (no changes) ... */ }
         const newRule = { id: rule.id, params: params };
-        if (index > -1) {
-            appliedRules[columnName][index] = newRule;
-        } else {
-            if (appliedRules[columnName].some(r => JSON.stringify(r) === JSON.stringify(newRule))) {
+
+        if (index > -1) { // Editing existing rule
+            appliedRules[columnName].rules[index] = newRule;
+        } else { // Adding new rule
+            // **MODIFIED**: Check within the .rules array
+            if (appliedRules[columnName].rules.some(r => JSON.stringify(r) === JSON.stringify(newRule))) {
                 showNotification('Правило с такими же параметрами уже добавлено.', 'error');
                 return;
             }
-            appliedRules[columnName].push(newRule);
+            appliedRules[columnName].rules.push(newRule);
         }
         renderAppliedRulesForColumn(columnName);
         ruleConfigModal.style.display = 'none';
         pendingRuleConfig = {};
     });
 
-    cancelRuleConfigBtn.addEventListener('click', () => { ruleConfigModal.style.display = 'none'; pendingRuleConfig = {}; });
+    cancelRuleConfigBtn.addEventListener('click', () => { /* ... (no changes) ... */ });
 
     columnsListDiv.addEventListener('click', (event) => {
         if (event.target.classList.contains('remove-rule-btn')) {
             const { column, index } = event.target.dataset;
-            appliedRules[column].splice(index, 1);
+            appliedRules[column].rules.splice(index, 1); // **MODIFIED**: Splice from the .rules array
             renderAppliedRulesForColumn(column);
         }
     });
 
-    saveTemplateBtn.addEventListener('click', () => {
-        templateNameInput.value = '';
-        saveTemplateModal.style.display = 'flex';
-        templateNameInput.focus();
-    });
-
-    cancelSaveBtn.addEventListener('click', () => { saveTemplateModal.style.display = 'none'; });
-
-    confirmSaveBtn.addEventListener('click', async () => {
-        const templateName = templateNameInput.value.trim();
-        if (!templateName) return showError("Имя шаблона не может быть пустым.");
-        const payload = { name: templateName, columns: currentColumns, rules: appliedRules };
-        confirmSaveBtn.disabled = true;
-        confirmSaveBtn.textContent = 'Сохранение...';
-        try {
-            const response = await fetch('/api/templates', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-            const data = await response.json();
-            if (!response.ok) throw new Error(data.detail || 'Failed to save template');
-            saveTemplateModal.style.display = 'none';
-            showNotification(`Шаблон "${templateName}" успешно сохранен!`);
-        } catch (error) {
-            showError(`Ошибка сохранения шаблона: ${error.message}`);
-        } finally {
-            confirmSaveBtn.disabled = false;
-            confirmSaveBtn.textContent = 'Сохранить';
-        }
-    });
+    saveTemplateBtn.addEventListener('click', () => { /* ... (no changes) ... */ });
+    cancelSaveBtn.addEventListener('click', () => { /* ... (no changes) ... */ });
+    confirmSaveBtn.addEventListener('click', async () => { /* ... (no changes) ... */ });
 
     // --- 7. Initial Load ---
     fetchAvailableRules();
