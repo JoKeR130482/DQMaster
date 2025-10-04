@@ -83,10 +83,63 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    const findMatchingTemplates = async () => { /* ... (no changes) ... */ };
+    const findMatchingTemplates = async () => {
+        loadingSpinner.style.display = 'block';
+        try {
+            const response = await fetch('/api/templates/find-matches', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ columns: currentColumns })
+            });
+            if (!response.ok) throw new Error('Failed to find matching templates');
+            const templates = await response.json();
+            showTemplateSuggestions(templates);
+        } catch (error) {
+            showError(`Ошибка поиска шаблонов: ${error.message}`);
+            renderColumnsConfig(); // Fallback
+        } finally {
+            loadingSpinner.style.display = 'none';
+        }
+    };
+
+    const showTemplateSuggestions = (templates) => {
+        if (templates.length === 0) {
+            renderColumnsConfig();
+            return;
+        }
+
+        templateSuggestionContainer.style.display = 'block';
+        templateSuggestionsList.innerHTML = ''; // Clear old suggestions
+
+        templates.forEach(template => {
+            const card = document.createElement('div');
+            card.className = 'template-suggestion';
+            card.dataset.id = template.id;
+            card.innerHTML = `<h4>${template.name}</h4><p>Нажмите, чтобы применить этот шаблон.</p>`;
+
+            card.addEventListener('click', () => {
+                appliedRules = template.rules;
+                templateSuggestionContainer.style.display = 'none';
+                renderColumnsConfig();
+                showNotification(`Шаблон "${template.name}" применен.`);
+            });
+
+            templateSuggestionsList.appendChild(card);
+        });
+    };
 
     // --- 5. UI Rendering ---
-    const showSheetSelectionModal = (sheets) => { /* ... (no changes) ... */ };
+    const showSheetSelectionModal = (sheets) => {
+        sheetListDiv.innerHTML = '';
+        sheets.forEach(name => {
+            const sheetButton = document.createElement('button');
+            sheetButton.className = 'sheet-button';
+            sheetButton.textContent = name;
+            sheetButton.addEventListener('click', () => handleSheetSelection(name));
+            sheetListDiv.appendChild(sheetButton);
+        });
+        sheetSelectModal.style.display = 'flex';
+    };
 
     const renderColumnsConfig = () => {
         columnsListDiv.innerHTML = '';

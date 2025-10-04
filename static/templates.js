@@ -58,14 +58,23 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div class="template-rules">
                         <strong>Правила:</strong>
                         <ul>
-                            ${Object.entries(template.rules).map(([col, ruleConfigs]) => {
-                                if (ruleConfigs.length === 0) return '';
-                                const ruleNames = ruleConfigs.map(config => {
+                            ${Object.entries(template.rules).map(([col, columnConfig]) => {
+                                const rules = columnConfig.rules || [];
+                                const isRequired = columnConfig.is_required;
+                                if (rules.length === 0 && !isRequired) return '';
+
+                                const requiredText = isRequired ? '<span class="required-tag">Обязательное</span>' : '';
+                                const ruleNames = rules.map(config => {
                                     const ruleDef = allRules.find(r => r.id === config.id);
                                     if (!ruleDef) return config.id; // Fallback to ID if definition not found
                                     return formatRuleDisplayName(ruleDef, config);
                                 }).join(', ');
-                                return `<li><strong>${col}:</strong> ${ruleNames}</li>`;
+
+                                let content = '';
+                                if (requiredText) content += requiredText;
+                                if (ruleNames) content += (content ? ' ' : '') + ruleNames;
+
+                                return `<li><strong>${col}:</strong> ${content}</li>`;
                             }).join('')}
                         </ul>
                     </div>
