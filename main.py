@@ -139,13 +139,55 @@ class MatchRequest(BaseModel):
 # --- Template Helper Functions ---
 
 def read_templates() -> List[Template]:
+    """
+    Reads templates from the JSON file.
+    Includes migration logic to handle a legacy format where column rules were a
+    direct list instead of an object containing 'is_required' and 'rules'.
+    """
     if not TEMPLATES_FILE.exists():
         return []
-    return [Template(**t) for t in json.loads(TEMPLATES_FILE.read_text(encoding="utf-8"))]
+
+    try:
+        raw_data = TEMPLATES_FILE.read_text(encoding="utf-8")
+        # Handle case where file is empty
+        if not raw_data.strip():
+            return []
+        templates_data = json.loads(raw_data)
+    except (json.JSONDecodeError, FileNotFoundError):
+        # Return empty list if file is corrupt or doesn't exist
+        return []
+
+    needs_rewrite = False
+    for template_dict in templates_data:
+        # Ensure rules is a dict before iterating
+        if "rules" in template_dict and isinstance(template_dict["rules"], dict):
+            rules = template_dict["rules"]
+            for col_name, col_config in rules.items():
+                # Check if the value is a list (old format)
+                if isinstance(col_config, list):
+                    # Convert to new format
+                    rules[col_name] = {"is_required": False, "rules": col_config}
+                    needs_rewrite = True
+
+    # Now, validate and create Pydantic objects
+    try:
+        validated_templates = [Template(**t) for t in templates_data]
+    except Exception as e:
+        print(f"Pydantic validation failed after migration attempt: {e}")
+        return []
+
+    # If we made changes, write them back to the file
+    if needs_rewrite:
+        write_templates(validated_templates)
+
+    return validated_templates
 
 def write_templates(templates: List[Template]):
+    """Saves a list of Template objects to the JSON file."""
     with open(TEMPLATES_FILE, "w", encoding="utf-8") as f:
-        json.dump([t.dict() for t in templates], f, indent=2, ensure_ascii=False)
+        # For Pydantic v2, model_dump() is used to get a dictionary.
+        json_data = [t.model_dump() for t in templates]
+        json.dump(json_data, f, indent=2, ensure_ascii=False)
 
 
 # --- API Endpoints ---
