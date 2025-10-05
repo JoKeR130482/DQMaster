@@ -17,11 +17,19 @@
 
         <div id="project-content">
             <!-- This is the restored UI from the original index.html -->
-            <p>Выберите файл, и приложение отобразит названия колонок из первой строки.</p>
-            <div class="upload-container">
-                <input type="file" id="fileInput" accept=".xlsx, .xls" class="file-input">
-                <label for="fileInput" class="file-label">Выберите файл...</label>
+            <div id="file-display-container" style="display: none;">
+                <p>Загруженный файл: <strong id="file-name-display"></strong></p>
+                <button id="delete-file-btn" class="secondary-button danger">Удалить файл</button>
             </div>
+
+            <div id="upload-section">
+                <p>Выберите файл для анализа.</p>
+                <div class="upload-container">
+                    <input type="file" id="fileInput" accept=".xlsx, .xls" class="file-input">
+                    <label for="fileInput" class="file-label">Выберите файл...</label>
+                </div>
+            </div>
+
             <div id="loading" class="loading-spinner" style="display: none;"></div>
 
             <!-- Container for template suggestions -->
