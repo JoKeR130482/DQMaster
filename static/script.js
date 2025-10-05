@@ -1,401 +1,249 @@
 document.addEventListener('DOMContentLoaded', () => {
     // --- 1. DOM Elements ---
-    const fileInput = document.getElementById('fileInput');
-    const fileLabel = document.querySelector('.file-label');
     const loadingSpinner = document.getElementById('loading');
-    const errorContainer = document.getElementById('error-container');
-    const sheetSelectModal = document.getElementById('sheet-select-modal');
-    const sheetListDiv = document.getElementById('sheet-list');
-    const templateSuggestionContainer = document.getElementById('template-suggestion-container');
-    const templateSuggestionsList = document.getElementById('template-suggestions-list');
-    const skipTemplatesBtn = document.getElementById('skip-templates-btn');
-    const columnsConfigContainer = document.getElementById('columns-config-container');
-    const columnsListDiv = document.getElementById('columns-list');
-    const saveTemplateBtn = document.getElementById('save-template-btn');
-    const validateButton = document.getElementById('validateButton');
-    const resultsContainer = document.getElementById('validation-results-container');
-    const summaryResultsDiv = document.getElementById('summary-results');
-    const detailedResultsDiv = document.getElementById('detailed-results');
-    const saveTemplateModal = document.getElementById('save-template-modal');
-    const templateNameInput = document.getElementById('template-name-input');
-    const confirmSaveBtn = document.getElementById('confirm-save-btn');
-    const cancelSaveBtn = document.getElementById('cancel-save-btn');
-    const ruleConfigModal = document.getElementById('rule-config-modal');
-    const ruleConfigTitle = document.getElementById('rule-config-title');
-    const ruleConfigForm = document.getElementById('rule-config-form');
-    const confirmRuleConfigBtn = document.getElementById('confirm-rule-config-btn');
-    const cancelRuleConfigBtn = document.getElementById('cancel-rule-config-btn');
+    const createProjectBtn = document.getElementById('create-project-btn');
+    const projectsTbody = document.getElementById('projects-tbody');
+    const noProjectsMessage = document.getElementById('no-projects-message');
 
-    // --- 2. Application State ---
-    let currentFileId = null;
-    let currentSheetName = null;
-    let currentColumns = [];
-    let availableRules = [];
-    let appliedRules = {}; // Structure: { "columnName": { is_required: boolean, rules: [ruleConfig, ...] } }
-    let pendingRuleConfig = {};
+    // Create Project Modal Elements
+    const createProjectModal = document.getElementById('create-project-modal');
+    const projectNameInput = document.getElementById('project-name-input');
+    const projectDescriptionInput = document.getElementById('project-description-input');
+    const confirmCreateProjectBtn = document.getElementById('confirm-create-project-btn');
+    const cancelCreateProjectBtn = document.getElementById('cancel-create-project-btn');
 
-    // --- 3. Helper Functions ---
-    const resetUI = (isNewFile = true) => {
-        sheetSelectModal.style.display = 'none';
-        templateSuggestionContainer.style.display = 'none';
-        columnsConfigContainer.style.display = 'none';
-        resultsContainer.style.display = 'none';
-        errorContainer.style.display = 'none';
-        summaryResultsDiv.innerHTML = '';
-        detailedResultsDiv.innerHTML = '';
-        if (isNewFile) {
-            fileLabel.textContent = 'Выберите файл...';
-            currentFileId = null;
-            currentSheetName = null;
-            currentColumns = [];
-        }
-        appliedRules = {};
+    // Edit Project Modal Elements
+    const editProjectModal = document.getElementById('edit-project-modal');
+    const editProjectIdInput = document.getElementById('edit-project-id');
+    const editProjectNameInput = document.getElementById('edit-project-name-input');
+    const editProjectDescriptionInput = document.getElementById('edit-project-description-input');
+    const confirmEditProjectBtn = document.getElementById('confirm-edit-project-btn');
+    const cancelEditProjectBtn = document.getElementById('cancel-edit-project-btn');
+
+    // Notification Toast
+    const notificationToast = document.getElementById('notification-toast');
+
+    // --- 2. Helper Functions ---
+    const showNotification = (message, type = 'success') => {
+        notificationToast.textContent = message;
+        notificationToast.className = `toast show ${type}`;
+        setTimeout(() => {
+            notificationToast.className = notificationToast.className.replace('show', '');
+        }, 3000);
     };
 
-    const showNotification = (message, type = 'success') => { /* ... (no changes) ... */ };
-    const showError = (message) => showNotification(message, 'error');
+    const formatDate = (isoString) => {
+        if (!isoString) return 'N/A';
+        const date = new Date(isoString);
+        return date.toLocaleString('ru-RU', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+        });
+    };
 
-    const formatRuleDisplayName = (ruleDef, ruleConfig) => { /* ... (no changes) ... */ };
+    // --- 3. Core Functions ---
 
-    // --- 4. API Calls & Logic Chain ---
-    const fetchAvailableRules = async () => { /* ... (no changes) ... */ };
-
-    const handleSheetSelection = async (sheetName) => {
-        currentSheetName = sheetName;
-        sheetSelectModal.style.display = 'none';
+    const fetchAndRenderProjects = async () => {
         loadingSpinner.style.display = 'block';
-        try {
-            const response = await fetch('/api/select-sheet', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ fileId: currentFileId, sheetName: currentSheetName })
-            });
-            const data = await response.json();
-            if (!response.ok) throw new Error(data.detail || 'Failed to select sheet');
-            currentColumns = data.columns;
-            // **MODIFIED**: Initialize with new structure
-            currentColumns.forEach(col => { appliedRules[col] = { is_required: false, rules: [] }; });
-            await findMatchingTemplates();
-        } catch (error) {
-            showError(`Ошибка выбора листа: ${error.message}`);
-        } finally {
-            loadingSpinner.style.display = 'none';
-        }
-    };
-
-    const findMatchingTemplates = async () => {
-        loadingSpinner.style.display = 'block';
-        try {
-            const response = await fetch('/api/templates/find-matches', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ columns: currentColumns })
-            });
-            if (!response.ok) throw new Error('Failed to find matching templates');
-            const templates = await response.json();
-            showTemplateSuggestions(templates);
-        } catch (error) {
-            showError(`Ошибка поиска шаблонов: ${error.message}`);
-            renderColumnsConfig(); // Fallback
-        } finally {
-            loadingSpinner.style.display = 'none';
-        }
-    };
-
-    const showTemplateSuggestions = (templates) => {
-        if (templates.length === 0) {
-            renderColumnsConfig();
-            return;
-        }
-
-        templateSuggestionContainer.style.display = 'block';
-        templateSuggestionsList.innerHTML = ''; // Clear old suggestions
-
-        templates.forEach(template => {
-            const card = document.createElement('div');
-            card.className = 'template-suggestion';
-            card.dataset.id = template.id;
-            card.innerHTML = `<h4>${template.name}</h4><p>Нажмите, чтобы применить этот шаблон.</p>`;
-
-            card.addEventListener('click', () => {
-                appliedRules = template.rules;
-                templateSuggestionContainer.style.display = 'none';
-                renderColumnsConfig();
-                showNotification(`Шаблон "${template.name}" применен.`);
-            });
-
-            templateSuggestionsList.appendChild(card);
-        });
-    };
-
-    // --- 5. UI Rendering ---
-    const showSheetSelectionModal = (sheets) => {
-        sheetListDiv.innerHTML = '';
-        sheets.forEach(name => {
-            const sheetButton = document.createElement('button');
-            sheetButton.className = 'sheet-button';
-            sheetButton.textContent = name;
-            sheetButton.addEventListener('click', () => handleSheetSelection(name));
-            sheetListDiv.appendChild(sheetButton);
-        });
-        sheetSelectModal.style.display = 'flex';
-    };
-
-    const renderColumnsConfig = () => {
-        columnsListDiv.innerHTML = '';
-        currentColumns.forEach(column => {
-            if (!appliedRules[column]) appliedRules[column] = { is_required: false, rules: [] };
-
-            const columnConfig = appliedRules[column];
-            const isChecked = columnConfig.is_required ? 'checked' : '';
-
-            const columnDiv = document.createElement('div');
-            columnDiv.className = 'column-config';
-            columnDiv.innerHTML = `
-                <div class="column-header">
-                    <span class="column-name">${column}</span>
-                    <div class="column-actions">
-                        <div class="checkbox-container required-field-container">
-                            <input type="checkbox" id="required-check-${column}" class="required-checkbox" data-column="${column}" ${isChecked}>
-                            <label for="required-check-${column}">Обязательное</label>
-                        </div>
-                        <div class="rule-controls">
-                            <select class="rule-select">
-                                <option value="">-- Добавить правило --</option>
-                                ${availableRules.map(rule => `<option value="${rule.id}">${rule.name}</option>`).join('')}
-                            </select>
-                        </div>
-                    </div>
-                </div>
-                <div class="applied-rules-container" id="rules-for-${column}"></div>
-            `;
-            columnsListDiv.appendChild(columnDiv);
-            renderAppliedRulesForColumn(column);
-        });
-        columnsConfigContainer.style.display = 'block';
-    };
-
-    const renderAppliedRulesForColumn = (columnName) => {
-        const container = document.getElementById(`rules-for-${columnName}`);
-        if (!container) return;
-        container.innerHTML = '';
-        appliedRules[columnName].rules.forEach((ruleConfig, index) => {
-            const ruleDef = availableRules.find(r => r.id === ruleConfig.id);
-            if (!ruleDef) return;
-            const ruleDisplayName = formatRuleDisplayName(ruleDef, ruleConfig);
-            const ruleTag = document.createElement('div');
-            ruleTag.className = 'rule-tag';
-            ruleTag.innerHTML = `<span title="${ruleDef.description}">${ruleDisplayName}</span><button class="remove-rule-btn" data-column="${columnName}" data-index="${index}">&times;</button>`;
-            container.appendChild(ruleTag);
-        });
-    };
-
-    const openRuleConfigModal = (rule, columnName, existingConfig = null, index = -1) => { /* ... (no changes) ... */ };
-    const renderValidationResults = (results) => {
-        const goldenRecordStatsDiv = document.getElementById('golden-record-stats');
-        const summaryResultsDiv = document.getElementById('summary-results');
-        const detailedResultsDiv = document.getElementById('detailed-results');
-
-        // Clear all previous results
-        goldenRecordStatsDiv.innerHTML = '';
-        summaryResultsDiv.innerHTML = '';
-        detailedResultsDiv.innerHTML = '';
-        resultsContainer.style.display = 'block';
-
-        const totalRows = results.total_rows || 0;
-        const errorRowsCount = results.error_rows_count || 0;
-        const errorPercentage = totalRows > 0 ? ((errorRowsCount / totalRows) * 100).toFixed(2) : 0;
-
-        // Render Golden Record Stats
-        goldenRecordStatsDiv.innerHTML = `
-            <div class="stats-summary">
-                <span>Всего строк: <strong>${totalRows}</strong></span>
-                <span>Строк с ошибками: <strong>${errorRowsCount}</strong></span>
-                <span>Процент ошибочных строк: <strong>${errorPercentage}%</strong></span>
-            </div>
-        `;
-
-        if (!results.errors || results.errors.length === 0) {
-            summaryResultsDiv.innerHTML = '<div class="success-message">Проверка успешно завершена. Ошибок не найдено!</div>';
-            return;
-        }
-
-        // Aggregate per-rule errors for the summary table
-        const errorsByRule = results.errors.reduce((acc, error) => {
-            if (!acc[error.rule_name]) acc[error.rule_name] = [];
-            acc[error.rule_name].push(error);
-            return acc;
-        }, {});
-
-        // Render per-rule summary table
-        const summaryTable = document.createElement('table');
-        summaryTable.className = 'results-table summary-table';
-        summaryTable.innerHTML = `
-            <thead><tr><th>Детализация по правилам</th><th>Количество ошибок</th></tr></thead>
-            <tbody>
-                ${Object.entries(errorsByRule).map(([ruleName, errors]) => `
-                    <tr class="summary-row" data-rule-name="${ruleName}">
-                        <td>${ruleName}</td>
-                        <td>${errors.length}</td>
-                    </tr>
-                `).join('')}
-            </tbody>
-        `;
-        summaryResultsDiv.appendChild(summaryTable);
-
-        // Add click listener for details
-        summaryTable.querySelector('tbody').addEventListener('click', (event) => {
-            const row = event.target.closest('.summary-row');
-            if (!row) return;
-            document.querySelectorAll('.summary-row').forEach(r => r.classList.remove('active'));
-            row.classList.add('active');
-            renderDetailedTable(errorsByRule[row.dataset.ruleName]);
-        });
-    };
-
-    const renderDetailedTable = (errors) => {
-        const detailedResultsDiv = document.getElementById('detailed-results');
-        detailedResultsDiv.innerHTML = '';
-        if (!errors || errors.length === 0) return;
-        const detailTable = document.createElement('table');
-        detailTable.className = 'results-table detail-table';
-        detailTable.innerHTML = `
-            <caption>Детали по ошибкам для: "${errors[0].rule_name}"</caption>
-            <thead><tr><th>Строка</th><th>Колонка</th><th>Значение</th></tr></thead>
-            <tbody>
-                ${errors.map(e => `<tr><td>${e.row}</td><td>${e.column}</td><td>${e.value}</td></tr>`).join('')}
-            </tbody>
-        `;
-        detailedResultsDiv.appendChild(detailTable);
-    };
-
-    // --- 6. Event Handlers ---
-    fileInput.addEventListener('change', async (event) => {
-        const file = event.target.files[0];
-        if (!file) return;
-
-        resetUI();
-        loadingSpinner.style.display = 'block';
-        fileLabel.textContent = file.name;
-
-        const formData = new FormData();
-        formData.append('file', file);
+        projectsTbody.innerHTML = '';
 
         try {
-            const response = await fetch('/upload/', {
-                method: 'POST',
-                body: formData,
-            });
-
-            const data = await response.json();
+            const response = await fetch('/api/projects');
             if (!response.ok) {
-                throw new Error(data.detail || 'File upload failed');
+                throw new Error('Не удалось загрузить проекты');
             }
+            const projects = await response.json();
 
-            currentFileId = data.fileId;
-            if (data.sheets && data.sheets.length > 1) {
-                showSheetSelectionModal(data.sheets);
-            } else if (data.sheets && data.sheets.length === 1) {
-                await handleSheetSelection(data.sheets[0]);
+            if (projects.length === 0) {
+                noProjectsMessage.style.display = 'block';
             } else {
-                throw new Error('No sheets found in the uploaded file.');
+                noProjectsMessage.style.display = 'none';
+                renderProjects(projects);
             }
         } catch (error) {
-            showError(`Ошибка загрузки: ${error.message}`);
-        } finally {
-            loadingSpinner.style.display = 'none';
-            // Reset file input to allow re-uploading the same file
-            fileInput.value = '';
-        }
-    });
-
-    validateButton.addEventListener('click', async () => {
-        if (!currentFileId || !currentSheetName) return showError("Файл или лист не выбраны для проверки.");
-        loadingSpinner.style.display = 'block';
-        resultsContainer.style.display = 'none';
-        try {
-            const payload = { fileId: currentFileId, sheetName: currentSheetName, rules: appliedRules }; // **MODIFIED**: appliedRules now has the correct structure
-            const response = await fetch('/api/validate', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-            const results = await response.json();
-            if (!response.ok) throw new Error(results.detail || 'Validation failed');
-            renderValidationResults(results);
-        } catch (error) {
-            showError(`Ошибка проверки: ${error.message}`);
+            showNotification(error.message, 'error');
         } finally {
             loadingSpinner.style.display = 'none';
         }
-    });
+    };
 
-    skipTemplatesBtn.addEventListener('click', () => { /* ... (no changes) ... */ });
+    const renderProjects = (projects) => {
+        projects.forEach(project => {
+            const row = document.createElement('tr');
+            row.dataset.projectId = project.id;
+            row.innerHTML = `
+                <td><a href="/projects/${project.id}" class="project-link">${project.name}</a></td>
+                <td>${project.description || '---'}</td>
+                <td>${project.size_kb} KB</td>
+                <td>${formatDate(project.updated_at)}</td>
+                <td class="project-actions">
+                    <button class="edit-project-btn" data-project-id="${project.id}" data-project-name="${project.name}" data-project-description="${project.description || ''}">Редактировать</button>
+                    <button class="delete-project-btn" data-project-id="${project.id}" data-project-name="${project.name}">Удалить</button>
+                </td>
+            `;
+            projectsTbody.appendChild(row);
+        });
+    };
 
-    columnsListDiv.addEventListener('change', (event) => {
-        // Handle "is_required" checkbox
-        if (event.target.classList.contains('required-checkbox')) {
-            const columnName = event.target.dataset.column;
-            if (appliedRules[columnName]) {
-                appliedRules[columnName].is_required = event.target.checked;
-            }
+    const openCreateProjectModal = () => {
+        projectNameInput.value = '';
+        projectDescriptionInput.value = '';
+        createProjectModal.style.display = 'flex';
+        projectNameInput.focus();
+    };
+
+    const closeCreateProjectModal = () => {
+        createProjectModal.style.display = 'none';
+    };
+
+    const handleCreateProject = async () => {
+        const name = projectNameInput.value.trim();
+        const description = projectDescriptionInput.value.trim();
+
+        if (!name) {
+            showNotification('Название проекта не может быть пустым.', 'error');
             return;
         }
 
-        // Handle rule selection
-        if (event.target.classList.contains('rule-select')) {
-            const selectedRuleId = event.target.value; if (!selectedRuleId) return;
-            const rule = availableRules.find(r => r.id === selectedRuleId);
-            const columnName = event.target.closest('.column-config').querySelector('.column-name').textContent;
-            if (rule.is_configurable) { openRuleConfigModal(rule, columnName); }
-            else {
-                const newRule = { id: selectedRuleId, params: null };
-                // **MODIFIED**: Check within the .rules array
-                if (appliedRules[columnName].rules.some(r => JSON.stringify(r) === JSON.stringify(newRule))) {
-                    showNotification('Это правило уже добавлено.', 'error');
-                } else {
-                    appliedRules[columnName].rules.push(newRule);
-                    renderAppliedRulesForColumn(columnName);
-                }
+        confirmCreateProjectBtn.disabled = true;
+
+        try {
+            const response = await fetch('/api/projects', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, description }),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.detail || 'Не удалось создать проект');
             }
-            event.target.value = "";
+
+            showNotification('Проект успешно создан!', 'success');
+            closeCreateProjectModal();
+            await fetchAndRenderProjects();
+
+        } catch (error) {
+            showNotification(error.message, 'error');
+        } finally {
+            confirmCreateProjectBtn.disabled = false;
         }
-    });
+    };
 
-    confirmRuleConfigBtn.addEventListener('click', () => {
-        const { rule, columnName, index } = pendingRuleConfig; const params = {};
-        if (rule.id === 'substring_check') { /* ... (no changes) ... */ }
-        const newRule = { id: rule.id, params: params };
+    const handleDeleteProject = async (projectId, projectName) => {
+        if (!confirm(`Вы уверены, что хотите удалить проект "${projectName}"? Это действие необратимо.`)) {
+            return;
+        }
 
-        if (index > -1) { // Editing existing rule
-            appliedRules[columnName].rules[index] = newRule;
-        } else { // Adding new rule
-            // **MODIFIED**: Check within the .rules array
-            if (appliedRules[columnName].rules.some(r => JSON.stringify(r) === JSON.stringify(newRule))) {
-                showNotification('Правило с такими же параметрами уже добавлено.', 'error');
-                return;
+        try {
+            const response = await fetch(`/api/projects/${projectId}`, {
+                method: 'DELETE',
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.detail || 'Не удалось удалить проект');
             }
-            appliedRules[columnName].rules.push(newRule);
+
+            // Show notification first, so the test can use it as a signal.
+            showNotification(`Проект "${projectName}" успешно удален.`, 'success');
+            // Then, re-fetch the list to update the UI.
+            await fetchAndRenderProjects();
+
+        } catch (error) {
+            showNotification(error.message, 'error');
         }
-        renderAppliedRulesForColumn(columnName);
-        ruleConfigModal.style.display = 'none';
-        pendingRuleConfig = {};
+    };
+
+
+    const openEditProjectModal = (id, name, description) => {
+        editProjectIdInput.value = id;
+        editProjectNameInput.value = name;
+        editProjectDescriptionInput.value = description;
+        editProjectModal.style.display = 'flex';
+        editProjectNameInput.focus();
+    };
+
+    const closeEditProjectModal = () => {
+        editProjectModal.style.display = 'none';
+    };
+
+    const handleEditProject = async () => {
+        const id = editProjectIdInput.value;
+        const name = editProjectNameInput.value.trim();
+        const description = editProjectDescriptionInput.value.trim();
+
+        if (!name) {
+            showNotification('Название проекта не может быть пустым.', 'error');
+            return;
+        }
+
+        confirmEditProjectBtn.disabled = true;
+
+        try {
+            const response = await fetch(`/api/projects/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, description }),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.detail || 'Не удалось обновить проект');
+            }
+
+            const updatedProject = await response.json();
+
+            showNotification('Проект успешно обновлен!', 'success');
+            closeEditProjectModal();
+
+            // Update the row in the table
+            const rowToUpdate = projectsTbody.querySelector(`tr[data-project-id="${id}"]`);
+            if (rowToUpdate) {
+                rowToUpdate.querySelector('a.project-link').textContent = updatedProject.name;
+                const cells = rowToUpdate.getElementsByTagName('td');
+                cells[1].textContent = updatedProject.description || '---';
+                cells[3].textContent = formatDate(updatedProject.updated_at);
+                // Also update the dataset for the edit button
+                const editButton = rowToUpdate.querySelector('.edit-project-btn');
+                editButton.dataset.projectName = updatedProject.name;
+                editButton.dataset.projectDescription = updatedProject.description || '';
+            }
+
+        } catch (error) {
+            showNotification(error.message, 'error');
+        } finally {
+            confirmEditProjectBtn.disabled = false;
+        }
+    };
+
+
+    // --- 4. Event Listeners ---
+    createProjectBtn.addEventListener('click', openCreateProjectModal);
+    cancelCreateProjectBtn.addEventListener('click', closeCreateProjectModal);
+    confirmCreateProjectBtn.addEventListener('click', handleCreateProject);
+
+    cancelEditProjectBtn.addEventListener('click', closeEditProjectModal);
+    confirmEditProjectBtn.addEventListener('click', handleEditProject);
+
+    projectsTbody.addEventListener('click', (event) => {
+        const button = event.target;
+        if (button.classList.contains('delete-project-btn')) {
+            const projectId = button.dataset.projectId;
+            const projectName = button.dataset.projectName;
+            handleDeleteProject(projectId, projectName);
+        } else if (button.classList.contains('edit-project-btn')) {
+            const projectId = button.dataset.projectId;
+            const projectName = button.dataset.projectName;
+            const projectDescription = button.dataset.projectDescription;
+            openEditProjectModal(projectId, projectName, projectDescription);
+        }
     });
 
-    cancelRuleConfigBtn.addEventListener('click', () => { /* ... (no changes) ... */ });
-
-    columnsListDiv.addEventListener('click', (event) => {
-        if (event.target.classList.contains('remove-rule-btn')) {
-            const { column, index } = event.target.dataset;
-            appliedRules[column].rules.splice(index, 1); // **MODIFIED**: Splice from the .rules array
-            renderAppliedRulesForColumn(column);
-        }
-    });
-
-    saveTemplateBtn.addEventListener('click', () => { /* ... (no changes) ... */ });
-    cancelSaveBtn.addEventListener('click', () => { /* ... (no changes) ... */ });
-    confirmSaveBtn.addEventListener('click', async () => { /* ... (no changes) ... */ });
-
-    // --- 7. Initial Load ---
-    fetchAvailableRules();
+    // --- 5. Initial Load ---
+    fetchAndRenderProjects();
 });

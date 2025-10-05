@@ -3,68 +3,75 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DQMaster - Загрузка Excel</title>
+    <title>DQMaster - Мои проекты</title>
     <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
     <div class="container">
-        <header class="rules-header">
-            <h1>Загрузите Excel файл</h1>
-            <div class="nav-links">
-                <a href="/rules" class="back-link">Все правила</a>
-                <a href="/templates" class="back-link">Шаблоны</a>
+        <header class="page-header">
+            <h1>📁 Мои проекты</h1>
+            <div class="header-actions">
+                <a href="/templates" class="nav-link">Библиотека правил</a>
+                <button id="create-project-btn" class="action-button">Создать проект</button>
             </div>
         </header>
-        <p>Выберите файл, и приложение отобразит названия колонок из первой строки.</p>
-        <div class="upload-container">
-            <input type="file" id="fileInput" accept=".xlsx, .xls" class="file-input">
-            <label for="fileInput" class="file-label">Выберите файл...</label>
-        </div>
+
         <div id="loading" class="loading-spinner" style="display: none;"></div>
 
-        <!-- Container for template suggestions -->
-        <div id="template-suggestion-container" class="suggestion-container" style="display: none;">
-            <h3>Найдены подходящие шаблоны!</h3>
-            <p>Хотите применить один из них?</p>
-            <div id="template-suggestions-list"></div>
-            <button id="skip-templates-btn" class="secondary-button">Нет, настроить вручную</button>
+        <div id="projects-list-container">
+            <table class="projects-table">
+                <thead>
+                    <tr>
+                        <th>Название</th>
+                        <th>Описание</th>
+                        <th>Размер</th>
+                        <th>Последнее изменение</th>
+                        <th>Действия</th>
+                    </tr>
+                </thead>
+                <tbody id="projects-tbody">
+                    <!-- Project rows will be injected here by JS -->
+                </tbody>
+            </table>
+            <p id="no-projects-message" style="display: none;">Проектов пока нет. Создайте первый!</p>
         </div>
-
-        <!-- Container for column configuration -->
-        <div id="columns-config-container" class="result-container" style="display: none;">
-            <div class="config-header">
-                <h2>Настройте правила для колонок:</h2>
-                <button id="save-template-btn" class="secondary-button">Сохранить как шаблон</button>
-            </div>
-            <div id="columns-list">
-                <!-- Column configurations will be injected here by JS -->
-            </div>
-            <button id="validateButton" class="action-button">Запустить проверку</button>
-        </div>
-
-        <!-- Container for displaying validation results -->
-        <div id="validation-results-container" style="display: none;">
-            <h3>Результаты проверки:</h3>
-            <!-- Golden Record Stats will be rendered here -->
-            <div id="golden-record-stats"></div>
-            <!-- Summary table will be rendered here -->
-            <div id="summary-results"></div>
-            <!-- Detailed tables will be rendered here on click -->
-            <div id="detailed-results"></div>
-        </div>
-
-        <div id="error-container" class="error-container"></div>
     </div>
 
-    <!-- Modal for saving a template -->
-    <div id="save-template-modal" class="modal-overlay" style="display: none;">
+    <!-- Modal for creating a new project -->
+    <div id="create-project-modal" class="modal-overlay" style="display: none;">
         <div class="modal-content">
-            <h2>Сохранить шаблон</h2>
-            <p>Введите имя для вашего нового шаблона.</p>
-            <input type="text" id="template-name-input" placeholder="Например, 'Ежемесячный отчет'">
+            <h2>Создать новый проект</h2>
+            <div class="form-group">
+                <label for="project-name-input">Название проекта</label>
+                <input type="text" id="project-name-input" placeholder="Например, 'Анализ клиентов Q3'">
+            </div>
+            <div class="form-group">
+                <label for="project-description-input">Описание (необязательно)</label>
+                <textarea id="project-description-input" rows="3" placeholder="Краткое описание целей проекта"></textarea>
+            </div>
             <div class="modal-actions">
-                <button id="cancel-save-btn" class="secondary-button">Отмена</button>
-                <button id="confirm-save-btn" class="action-button">Сохранить</button>
+                <button id="cancel-create-project-btn" class="secondary-button">Отмена</button>
+                <button id="confirm-create-project-btn" class="action-button">Создать</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for editing a project -->
+    <div id="edit-project-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <h2>Редактировать проект</h2>
+            <input type="hidden" id="edit-project-id">
+            <div class="form-group">
+                <label for="edit-project-name-input">Название проекта</label>
+                <input type="text" id="edit-project-name-input">
+            </div>
+            <div class="form-group">
+                <label for="edit-project-description-input">Описание (необязательно)</label>
+                <textarea id="edit-project-description-input" rows="3"></textarea>
+            </div>
+            <div class="modal-actions">
+                <button id="cancel-edit-project-btn" class="secondary-button">Отмена</button>
+                <button id="confirm-edit-project-btn" class="action-button">Сохранить</button>
             </div>
         </div>
     </div>
@@ -72,31 +79,6 @@
     <!-- Notification Toast -->
     <div id="notification-toast" class="toast"></div>
 
-    <!-- Modal for selecting a sheet -->
-    <div id="sheet-select-modal" class="modal-overlay" style="display: none;">
-        <div class="modal-content">
-            <h2>Выберите лист для проверки</h2>
-            <p>Ваш файл содержит несколько листов. Пожалуйста, выберите, какой из них вы хотите проверить.</p>
-            <div id="sheet-list" class="sheet-list">
-                <!-- Sheet buttons will be injected here -->
-            </div>
-        </div>
-    </div>
-
-    <!-- Modal for configuring a rule -->
-    <div id="rule-config-modal" class="modal-overlay" style="display: none;">
-        <div class="modal-content">
-            <h2 id="rule-config-title">Настроить правило</h2>
-            <div id="rule-config-form">
-                <!-- Dynamic form fields will be injected here -->
-            </div>
-            <div class="modal-actions">
-                <button id="cancel-rule-config-btn" class="secondary-button">Отмена</button>
-                <button id="confirm-rule-config-btn" class="action-button">Применить</button>
-            </div>
-        </div>
-    </div>
-
-    <script src="/static/script.js?v=2.0"></script>
+    <script src="/static/script.js?v=3.0"></script>
 </body>
 </html>
