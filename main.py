@@ -46,6 +46,9 @@ class Project(BaseModel):
     files: List[Dict[str, Any]] = []
     rules: Dict[str, ColumnConfig] = {}
 
+class ProjectInfo(Project):
+    size_kb: float
+
 class ProjectCreateRequest(BaseModel):
     name: str
     description: Optional[str] = ""
@@ -125,18 +128,20 @@ def load_rules():
 
 # --- API Endpoints ---
 
-@api_router.get("/api/projects")
+@api_router.get("/api/projects", response_model=List[ProjectInfo])
 async def get_projects():
     projects = []
     for project_dir in PROJECTS_DIR.iterdir():
         if project_dir.is_dir():
             project = read_project(project_dir.name)
             if project:
-                project_dict = project.model_dump()
                 total_size = sum(f.stat().st_size for f in project_dir.glob('**/*') if f.is_file())
-                project_dict["size_kb"] = round(total_size / 1024, 2)
-                projects.append(project_dict)
-    projects.sort(key=lambda p: p['updated_at'], reverse=True)
+                project_info = ProjectInfo(
+                    **project.model_dump(),
+                    size_kb=round(total_size / 1024, 2)
+                )
+                projects.append(project_info)
+    projects.sort(key=lambda p: p.updated_at, reverse=True)
     return projects
 
 @api_router.post("/api/projects", status_code=201, response_model=Project)
