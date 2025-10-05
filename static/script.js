@@ -123,9 +123,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error(errorData.detail || 'Не удалось создать проект');
             }
 
-            showNotification('Проект успешно создан!', 'success');
-            closeCreateProjectModal();
-            await fetchAndRenderProjects();
+            const newProject = await response.json();
+            showNotification('Проект успешно создан! Перенаправление...', 'success');
+
+            // Redirect to the new project's page
+            window.location.href = `/projects/${newProject.id}`;
 
         } catch (error) {
             showNotification(error.message, 'error');

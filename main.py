@@ -181,6 +181,30 @@ async def delete_project(project_id: str):
     if not project_dir.is_dir(): raise HTTPException(status_code=404, detail="Project not found")
     shutil.rmtree(project_dir)
 
+@app.delete("/api/projects/{project_id}/file", response_model=Project)
+async def delete_project_file(project_id: str):
+    project = read_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    if not project.files:
+        raise HTTPException(status_code=400, detail="No file to delete")
+
+    # Assuming one file per project for now
+    file_info = project.files[0]
+    project_files_dir = PROJECTS_DIR / project_id / "files"
+    file_path = project_files_dir / file_info['saved_name']
+
+    if file_path.exists():
+        file_path.unlink()
+
+    # Clear file info and associated rules
+    project.files = []
+    project.rules = {}
+
+    write_project(project_id, project)
+    return project
+
 # --- Project File & Validation Operations ---
 @app.post("/api/projects/{project_id}/upload")
 async def upload_file_to_project(project_id: str, file: UploadFile = File(...)):
