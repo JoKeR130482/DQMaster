@@ -442,7 +442,36 @@ p {
     justify-content: center;
     gap: 15px;
     margin: 15px 0;
+    flex-wrap: wrap;
 }
+
+.template-suggestion {
+    border: 1px solid #aed6f1;
+    background-color: #f2f8fc;
+    padding: 15px 20px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background-color 0.3s, box-shadow 0.3s;
+    text-align: center;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.template-suggestion:hover {
+    background-color: #eaf2f8;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.template-suggestion h4 {
+    margin: 0 0 5px 0;
+    color: #2980b9;
+}
+
+.template-suggestion p {
+    margin: 0;
+    font-size: 14px;
+    color: #34495e;
+}
+
 
 /* --- Styles for Modal --- */
 
