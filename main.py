@@ -10,7 +10,7 @@ import pandas as pd
 import io
 import json
 
-from fastapi import FastAPI, APIRouter, File, UploadFile, HTTPException
+from fastapi import FastAPI, APIRouter, File, UploadFile, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -317,6 +317,18 @@ async def read_templates_page():
 @app.get("/templates/edit/{template_id}")
 async def read_edit_template_page(template_id: str):
     return FileResponse(STATIC_DIR / "edit_template.html")
+
+# This is a catch-all for debugging 404s. It should be the last route.
+@app.post("/{full_path:path}")
+async def catch_all_post(request: Request, full_path: str):
+    print(f"--- DEBUG: Необработанный POST-запрос получен ---")
+    print(f"Полный путь: /{full_path}")
+    print(f"Метод: {request.method}")
+    print(f"Заголовки: {request.headers}")
+    body = await request.body()
+    print(f"Тело запроса: {body.decode()}")
+    print("-------------------------------------------------")
+    raise HTTPException(status_code=404, detail=f"Эндпоинт POST /{full_path} не найден.")
 
 def setup_default_rule():
     default_rule_path = RULES_DIR / "starts_with_capital.py"
