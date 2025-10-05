@@ -245,5 +245,13 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // --- 5. Initial Load ---
-    fetchAndRenderProjects();
+    try {
+        console.log("Attempting to fetch and render projects...");
+        fetchAndRenderProjects();
+        console.log("Initial fetch call succeeded.");
+    } catch (e) {
+        console.error("Critical error on initial load:", e);
+        alert("Критическая ошибка при загрузке скрипта: " + e.message);
+    }
 });
+console.log("DQMaster script.js loaded successfully.");
