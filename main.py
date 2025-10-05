@@ -395,10 +395,17 @@ def write_project(project_id: str, project_data: Project):
 @app.post("/api/projects", status_code=201, response_model=Project)
 async def create_project(project_data: ProjectCreateRequest):
     import datetime
+    print("--- Создание нового проекта ---")
+    print(f"Полученные данные: {project_data}")
 
     project_id = str(uuid.uuid4())
+    print(f"Сгенерирован ID проекта: {project_id}")
+
     project_dir = PROJECTS_DIR / project_id
+    print(f"Путь для директории проекта: {project_dir}")
+
     project_dir.mkdir(exist_ok=True)
+    print(f"Директория проекта создана (или уже существовала).")
 
     now = datetime.datetime.utcnow().isoformat()
 
@@ -410,7 +417,11 @@ async def create_project(project_data: ProjectCreateRequest):
         updated_at=now,
     )
 
+    print(f"Подготовлены данные для project.json: {project_info.model_dump_json(indent=2)}")
+
     write_project(project_id, project_info)
+    print(f"Данные успешно записаны в project.json.")
+    print("--- Завершение создания проекта ---")
     return project_info
 
 @app.get("/api/projects")
