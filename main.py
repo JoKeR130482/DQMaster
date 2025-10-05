@@ -152,16 +152,22 @@ async def create_project(project_data: ProjectCreateRequest):
     write_project(project_id, project_info)
     return project_info
 
-@app.get("/api/projects", response_model=List[Project])
+@app.get("/api/projects")
 async def get_projects():
-    projects = []
-    for project_dir in PROJECTS_DIR.iterdir():
-        if project_dir.is_dir():
-            project = read_project(project_dir.name)
-            if project:
-                projects.append(project)
-    projects.sort(key=lambda p: p.updated_at, reverse=True)
-    return projects
+    print("--- DEBUG: Запрос к /api/projects получен ---")
+    # Временно возвращаем жестко закодированный список для отладки
+    # Это поможет понять, связана ли ошибка с логикой чтения проектов или с самим роутингом
+    test_project = {
+        "id": "test-id-1",
+        "name": "Тестовый проект (из кода)",
+        "description": "Если вы видите это, значит роутинг работает.",
+        "created_at": datetime.datetime.utcnow().isoformat(),
+        "updated_at": datetime.datetime.utcnow().isoformat(),
+        "files": [],
+        "rules": {}
+    }
+    print(f"--- DEBUG: Отправка тестового проекта: {test_project} ---")
+    return [test_project]
 
 @app.get("/api/projects/{project_id}", response_model=Project)
 async def get_project_details(project_id: str):
