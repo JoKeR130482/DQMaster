@@ -15,9 +15,9 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-print("--- SCRIPT main.py IS RUNNING ---")
-
-# --- Globals & Setup ---
+# ==============================================================================
+# 1. Globals & App Initialization
+# ==============================================================================
 app = FastAPI()
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -27,7 +27,9 @@ PROJECTS_DIR = BASE_DIR / "projects"
 TEMPLATES_FILE = BASE_DIR / "templates.json"
 RULE_REGISTRY = {}
 
-# --- Pydantic Models ---
+# ==============================================================================
+# 2. Pydantic Models
+# ==============================================================================
 
 class RuleConfig(BaseModel):
     id: str
@@ -75,7 +77,9 @@ class Template(BaseModel):
 class MatchRequest(BaseModel):
     columns: List[str]
 
-# --- Helper Functions ---
+# ==============================================================================
+# 3. Helper Functions
+# ==============================================================================
 
 def read_project(project_id: str) -> Optional[Project]:
     config_path = PROJECTS_DIR / project_id / "project.json"
@@ -126,12 +130,13 @@ def load_rules():
             except Exception as e:
                 print(f"Error loading rule from {filename}: {e}")
 
-# --- API Endpoints ---
+# ==============================================================================
+# 4. API Endpoints
+# ==============================================================================
 
-print("--- Defining GET /api/projects route ---")
+# --- Project Management ---
 @app.get("/api/projects", response_model=List[ProjectInfo])
 async def get_projects():
-    print("--- >>> Entering get_projects function <<< ---")
     projects = []
     for project_dir in PROJECTS_DIR.iterdir():
         if project_dir.is_dir():
@@ -146,16 +151,13 @@ async def get_projects():
     projects.sort(key=lambda p: p.updated_at, reverse=True)
     return projects
 
-print("--- Defining POST /api/projects route ---")
-@app.post("/api/projects", status_code=201) # Temporarily removed response_model for debugging
+@app.post("/api/projects", status_code=201, response_model=Project)
 async def create_project(project_data: ProjectCreateRequest):
-    print("--- >>> Entering create_project function <<< ---")
     project_id = str(uuid.uuid4())
     (PROJECTS_DIR / project_id).mkdir(exist_ok=True)
     now = datetime.datetime.utcnow().isoformat()
     project = Project(id=project_id, name=project_data.name, description=project_data.description, created_at=now, updated_at=now)
     write_project(project_id, project)
-    print(f"--- <<< Successfully created project {project_id}. Returning. >>> ---")
     return project
 
 @app.get("/api/projects/{project_id}", response_model=Project)
@@ -179,6 +181,7 @@ async def delete_project(project_id: str):
     if not project_dir.is_dir(): raise HTTPException(status_code=404, detail="Project not found")
     shutil.rmtree(project_dir)
 
+# --- Project File & Validation Operations ---
 @app.post("/api/projects/{project_id}/upload")
 async def upload_file_to_project(project_id: str, file: UploadFile = File(...)):
     project = read_project(project_id)
@@ -255,6 +258,7 @@ async def validate_project_data(project_id: str, request: ValidationRequest):
 
     return {"total_rows": len(df), "error_rows_count": len({e["row"] for e in errors}), "errors": errors}
 
+# --- Rule & Template Library ---
 @app.get("/api/rules")
 async def get_all_rules():
     return [{"id": data["id"], "name": data["name"], "description": data["description"], "is_configurable": data["is_configurable"]} for data in RULE_REGISTRY.values()]
@@ -297,8 +301,9 @@ async def find_matching_templates(request: MatchRequest):
     request_columns_set = set(request.columns)
     return [t for t in templates if set(t.columns) == request_columns_set]
 
-# --- App Setup ---
-
+# ==============================================================================
+# 5. Static Files & HTML Routes
+# ==============================================================================
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 @app.get("/")
@@ -323,6 +328,9 @@ async def read_templates_page():
 async def read_edit_template_page(template_id: str):
     return FileResponse(STATIC_DIR / "edit_template.html")
 
+# ==============================================================================
+# 6. Startup Logic
+# ==============================================================================
 def setup_default_rule():
     default_rule_path = RULES_DIR / "starts_with_capital.py"
     if not default_rule_path.exists():
@@ -347,5 +355,3 @@ async def startup_event():
 
     setup_default_rule()
     load_rules()
-
-print("--- SCRIPT main.py has finished defining all routes ---")
