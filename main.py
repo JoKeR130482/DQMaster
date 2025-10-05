@@ -379,3 +379,10 @@ async def startup_event():
 
     setup_default_rule()
     load_rules()
+
+    # --- DEBUG: Print all registered routes ---
+    print("\n--- Registered Routes ---")
+    for route in app.routes:
+        if hasattr(route, "methods"):
+            print(f"Path: {route.path}, Methods: {route.methods}")
+    print("-------------------------\n")
