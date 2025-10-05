@@ -271,7 +271,44 @@ document.addEventListener('DOMContentLoaded', () => {
     const showTemplateSuggestions = (templates) => { /* ... (no changes) ... */ };
 
     // --- 6. Event Handlers ---
-    fileInput.addEventListener('change', async (event) => { /* ... (no changes) ... */ });
+    fileInput.addEventListener('change', async (event) => {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        resetUI();
+        loadingSpinner.style.display = 'block';
+        fileLabel.textContent = file.name;
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        try {
+            const response = await fetch('/upload/', {
+                method: 'POST',
+                body: formData,
+            });
+
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.detail || 'File upload failed');
+            }
+
+            currentFileId = data.fileId;
+            if (data.sheets && data.sheets.length > 1) {
+                showSheetSelectionModal(data.sheets);
+            } else if (data.sheets && data.sheets.length === 1) {
+                await handleSheetSelection(data.sheets[0]);
+            } else {
+                throw new Error('No sheets found in the uploaded file.');
+            }
+        } catch (error) {
+            showError(`Ошибка загрузки: ${error.message}`);
+        } finally {
+            loadingSpinner.style.display = 'none';
+            // Reset file input to allow re-uploading the same file
+            fileInput.value = '';
+        }
+    });
 
     validateButton.addEventListener('click', async () => {
         if (!currentFileId || !currentSheetName) return showError("Файл или лист не выбраны для проверки.");
