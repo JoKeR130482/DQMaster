@@ -112,7 +112,7 @@ document.addEventListener('DOMContentLoaded', () => {
         confirmCreateProjectBtn.disabled = true;
 
         try {
-            const response = await fetch('/api/projects', {
+            const response = await fetch('/api/create_new_project_test', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name, description }),

@@ -151,8 +151,9 @@ async def get_projects():
     projects.sort(key=lambda p: p.updated_at, reverse=True)
     return projects
 
-@app.post("/api/projects", status_code=201, response_model=Project)
-async def create_project(project_data: ProjectCreateRequest):
+# NEW, RENAMED ENDPOINT FOR DEBUGGING
+@app.post("/api/create_new_project_test", status_code=201, response_model=Project)
+async def create_project_test(project_data: ProjectCreateRequest):
     project_id = str(uuid.uuid4())
     (PROJECTS_DIR / project_id).mkdir(exist_ok=True)
     now = datetime.datetime.utcnow().isoformat()
@@ -180,30 +181,6 @@ async def delete_project(project_id: str):
     project_dir = PROJECTS_DIR / project_id
     if not project_dir.is_dir(): raise HTTPException(status_code=404, detail="Project not found")
     shutil.rmtree(project_dir)
-
-@app.delete("/api/projects/{project_id}/file", response_model=Project)
-async def delete_project_file(project_id: str):
-    project = read_project(project_id)
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-
-    if not project.files:
-        raise HTTPException(status_code=400, detail="No file to delete")
-
-    # Assuming one file per project for now
-    file_info = project.files[0]
-    project_files_dir = PROJECTS_DIR / project_id / "files"
-    file_path = project_files_dir / file_info['saved_name']
-
-    if file_path.exists():
-        file_path.unlink()
-
-    # Clear file info and associated rules
-    project.files = []
-    project.rules = {}
-
-    write_project(project_id, project)
-    return project
 
 # --- Project File & Validation Operations ---
 @app.post("/api/projects/{project_id}/upload")
@@ -379,10 +356,3 @@ async def startup_event():
 
     setup_default_rule()
     load_rules()
-
-    # --- DEBUG: Print all registered routes ---
-    print("\n--- Registered Routes ---")
-    for route in app.routes:
-        if hasattr(route, "methods"):
-            print(f"Path: {route.path}, Methods: {route.methods}")
-    print("-------------------------\n")
