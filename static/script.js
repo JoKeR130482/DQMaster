@@ -268,7 +268,6 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
         detailedResultsDiv.appendChild(detailTable);
     };
-    const showTemplateSuggestions = (templates) => { /* ... (no changes) ... */ };
 
     // --- 6. Event Handlers ---
     fileInput.addEventListener('change', async (event) => {
