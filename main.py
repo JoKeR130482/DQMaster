@@ -19,6 +19,7 @@ BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 RULES_DIR = BASE_DIR / "rules"
 UPLOADS_DIR = BASE_DIR / "uploads"
+PROJECTS_DIR = BASE_DIR / "projects"
 TEMPLATES_FILE = BASE_DIR / "templates.json"
 RULE_REGISTRY = {}
 
@@ -26,6 +27,7 @@ RULE_REGISTRY = {}
 STATIC_DIR.mkdir(exist_ok=True)
 RULES_DIR.mkdir(exist_ok=True)
 UPLOADS_DIR.mkdir(exist_ok=True)
+PROJECTS_DIR.mkdir(exist_ok=True)
 if not TEMPLATES_FILE.exists():
     TEMPLATES_FILE.write_text("[]")
 
@@ -95,6 +97,13 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 @app.get("/")
 async def read_root():
     return FileResponse(STATIC_DIR / "index.html")
+
+@app.get("/projects/{project_id}")
+async def read_project_page(project_id: str):
+    project_dir = PROJECTS_DIR / project_id
+    if not project_dir.is_dir():
+        raise HTTPException(status_code=404, detail="Project not found")
+    return FileResponse(STATIC_DIR / "project.html")
 
 @app.get("/rules")
 async def read_rules_page():
@@ -203,40 +212,74 @@ async def get_all_rules():
     ]
     return JSONResponse(content=serializable_rules)
 
-@app.post("/upload/")
-async def upload_file(file: UploadFile = File(...)):
+@app.post("/api/projects/{project_id}/upload")
+async def upload_file_to_project(project_id: str, file: UploadFile = File(...)):
     """
-    Saves the uploaded Excel file and returns a file ID and a list of sheet names.
+    Saves an uploaded file to a specific project, updates project.json,
+    and returns the file info and sheet names.
     """
-    UPLOADS_DIR.mkdir(exist_ok=True)
+    project = read_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
     if not file.filename or not (file.filename.endswith('.xlsx') or file.filename.endswith('.xls')):
         raise HTTPException(status_code=400, detail="Invalid file type. Please upload an Excel file.")
+
+    project_files_dir = PROJECTS_DIR / project_id / "files"
+    project_files_dir.mkdir(exist_ok=True)
 
     try:
         contents = await file.read()
 
-        file_id = f"{uuid.uuid4()}_{file.filename}"
-        file_path = UPLOADS_DIR / file_id
+        file_id = str(uuid.uuid4())
+        file_extension = Path(file.filename).suffix
+        saved_filename = f"{file_id}{file_extension}"
+        file_path = project_files_dir / saved_filename
 
         with open(file_path, "wb") as f:
             f.write(contents)
 
-        # Use ExcelFile to get sheet names without loading the whole file
         xls = pd.ExcelFile(io.BytesIO(contents))
         sheet_names = xls.sheet_names
 
-        return {"fileId": file_id, "sheets": sheet_names}
+        # If a file already exists, remove it. This simplifies the UI to one file per project.
+        if project.files:
+            for old_file in project.files:
+                old_file_path = project_files_dir / old_file['saved_name']
+                if old_file_path.exists():
+                    old_file_path.unlink()
+
+        file_info = {
+            "id": file_id,
+            "original_name": file.filename,
+            "saved_name": saved_filename,
+            "sheets": sheet_names
+        }
+        project.files = [file_info]
+        project.rules = {} # Reset rules on new file upload
+
+        write_project(project_id, project)
+
+        return file_info
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to process file: {str(e)}")
 
-@app.post("/api/select-sheet")
-async def select_sheet(request: SheetSelectRequest):
+@app.post("/api/projects/{project_id}/select-sheet")
+async def select_project_sheet(project_id: str, request: SheetSelectRequest):
     """
-    Reads a specific sheet from a saved Excel file and returns its columns.
+    Reads a specific sheet from a file within a project and returns its columns.
     """
-    file_path = UPLOADS_DIR / request.fileId
+    project = read_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    file_info = next((f for f in project.files if f['id'] == request.fileId), None)
+    if not file_info:
+        raise HTTPException(status_code=404, detail="File not found in project")
+
+    file_path = PROJECTS_DIR / project_id / "files" / file_info['saved_name']
     if not file_path.exists():
-        raise HTTPException(status_code=404, detail="File not found.")
+        raise HTTPException(status_code=404, detail="File data not found on disk.")
 
     try:
         df = pd.read_excel(file_path, sheet_name=request.sheetName)
@@ -245,15 +288,27 @@ async def select_sheet(request: SheetSelectRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to read sheet: {str(e)}")
 
-@app.post("/api/validate")
-async def validate_data(request: ValidationRequest):
+@app.post("/api/projects/{project_id}/validate")
+async def validate_project_data(project_id: str, request: ValidationRequest):
     """
-    Validates a specific sheet, supporting required fields and returning row-based error stats.
+    Validates data from a file in a project, saves the applied rule configuration,
+    and returns validation results.
     """
-    UPLOADS_DIR.mkdir(exist_ok=True)
-    file_path = UPLOADS_DIR / request.fileId
+    project = read_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Save the rule configuration to the project
+    project.rules = request.rules
+    write_project(project_id, project)
+
+    file_info = next((f for f in project.files if f['id'] == request.fileId), None)
+    if not file_info:
+        raise HTTPException(status_code=404, detail="File not found in project")
+
+    file_path = PROJECTS_DIR / project_id / "files" / file_info['saved_name']
     if not file_path.exists():
-        raise HTTPException(status_code=404, detail="File not found.")
+        raise HTTPException(status_code=404, detail="File data not found on disk.")
 
     try:
         df = pd.read_excel(file_path, sheet_name=request.sheetName)
@@ -265,23 +320,19 @@ async def validate_data(request: ValidationRequest):
                 continue
 
             for index, value in df[col_name].items():
-                # Check for required field violation first
                 if col_config.is_required and (pd.isna(value) or (isinstance(value, str) and not value.strip())):
                     errors.append({
                         "row": index + 2, "column": col_name, "value": "ПУСТО",
                         "rule_name": "Обязательное поле",
                         "error": "Поле не должно быть пустым"
                     })
-                    # We still check other rules for this row, as it might have other errors.
 
-                # Apply other rules regardless of the required check
                 for config in col_config.rules:
                     rule = RULE_REGISTRY.get(config.id)
                     if not rule: continue
 
                     validator = rule["validator"]
                     sig = inspect.signature(validator)
-
                     is_valid = validator(value, params=config.params) if 'params' in sig.parameters else validator(value)
 
                     if not is_valid:
@@ -293,7 +344,6 @@ async def validate_data(request: ValidationRequest):
                             "error": f"Значение '{value}' не прошло проверку '{rule_name_for_error}'"
                         })
 
-        # Calculate unique rows with errors
         error_rows_set = {e["row"] for e in errors}
 
         return {
@@ -303,6 +353,118 @@ async def validate_data(request: ValidationRequest):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Validation failed: {str(e)}")
+
+# --- Project Management Models ---
+
+class Project(BaseModel):
+    id: str
+    name: str
+    description: Optional[str] = ""
+    created_at: str
+    updated_at: str
+    files: List[Dict[str, Any]] = []
+    rules: Dict[str, ColumnConfig] = {}
+
+class ProjectCreateRequest(BaseModel):
+    name: str
+    description: Optional[str] = ""
+
+# --- Project Helper Functions ---
+
+def read_project(project_id: str) -> Optional[Project]:
+    config_path = PROJECTS_DIR / project_id / "project.json"
+    if not config_path.exists():
+        return None
+    try:
+        # Pydantic will validate the data upon instantiation
+        return Project(**json.loads(config_path.read_text(encoding="utf-8")))
+    except (json.JSONDecodeError, TypeError, ValueError) as e:
+        print(f"Error reading or validating project {project_id}: {e}")
+        return None
+
+def write_project(project_id: str, project_data: Project):
+    import datetime
+    config_path = PROJECTS_DIR / project_id / "project.json"
+    project_data.updated_at = datetime.datetime.utcnow().isoformat()
+    with open(config_path, "w", encoding="utf-8") as f:
+        json.dump(project_data.model_dump(), f, indent=2, ensure_ascii=False)
+
+
+# --- Project API Endpoints ---
+
+@app.post("/api/projects", status_code=201, response_model=Project)
+async def create_project(project_data: ProjectCreateRequest):
+    import datetime
+
+    project_id = str(uuid.uuid4())
+    project_dir = PROJECTS_DIR / project_id
+    project_dir.mkdir(exist_ok=True)
+
+    now = datetime.datetime.utcnow().isoformat()
+
+    project_info = Project(
+        id=project_id,
+        name=project_data.name,
+        description=project_data.description,
+        created_at=now,
+        updated_at=now,
+    )
+
+    write_project(project_id, project_info)
+    return project_info
+
+@app.get("/api/projects")
+async def get_projects():
+    projects = []
+    for project_dir in PROJECTS_DIR.iterdir():
+        if project_dir.is_dir():
+            project = read_project(project_dir.name)
+            if project:
+                total_size = sum(f.stat().st_size for f in project_dir.glob('**/*') if f.is_file())
+                project_dict = project.model_dump()
+                project_dict["size_kb"] = round(total_size / 1024, 2)
+                projects.append(project_dict)
+
+    projects.sort(key=lambda p: p['updated_at'], reverse=True)
+    return projects
+
+@app.get("/api/projects/{project_id}", response_model=Project)
+async def get_project_details(project_id: str):
+    project = read_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return project
+
+
+@app.delete("/api/projects/{project_id}", status_code=204)
+async def delete_project(project_id: str):
+    import shutil
+    project_dir = PROJECTS_DIR / project_id
+    if not project_dir.is_dir():
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    try:
+        shutil.rmtree(project_dir)
+    except OSError as e:
+        raise HTTPException(status_code=500, detail=f"Error deleting project directory: {e}")
+
+class ProjectUpdateRequest(BaseModel):
+    name: str
+    description: Optional[str] = ""
+
+@app.put("/api/projects/{project_id}", response_model=Project)
+async def update_project(project_id: str, project_update: ProjectUpdateRequest):
+    project = read_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    project.name = project_update.name
+    project.description = project_update.description
+
+    write_project(project_id, project)
+
+    return project
+
 
 # --- Template API Endpoints ---
 
