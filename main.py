@@ -1,3 +1,8 @@
+import sys
+# This is a diagnostic "bomb". If the server starts normally,
+# it means this file is NOT the one being executed.
+sys.exit("--- SUCCESS: The correct main.py is being executed. The problem is deeper. ---")
+
 import os
 import importlib.util
 from pathlib import Path
@@ -151,12 +156,14 @@ async def get_projects():
     projects.sort(key=lambda p: p.updated_at, reverse=True)
     return projects
 
-@app.post("/api/projects", status_code=200)
-async def create_project():
-    print("--- >>> SUCCESS! Entering create_project function (no-args version) <<< ---")
-    # This is a dummy response for debugging.
-    # If this works, the problem is with Pydantic model binding.
-    return {"status": "ok", "message": "Route is working, problem is with model binding."}
+@app.post("/api/projects", status_code=201, response_model=Project)
+async def create_project(project_data: ProjectCreateRequest):
+    project_id = str(uuid.uuid4())
+    (PROJECTS_DIR / project_id).mkdir(exist_ok=True)
+    now = datetime.datetime.utcnow().isoformat()
+    project = Project(id=project_id, name=project_data.name, description=project_data.description, created_at=now, updated_at=now)
+    write_project(project_id, project)
+    return project
 
 @app.get("/api/projects/{project_id}", response_model=Project)
 async def get_project_details(project_id: str):
