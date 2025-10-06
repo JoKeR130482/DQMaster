@@ -151,15 +151,12 @@ async def get_projects():
     projects.sort(key=lambda p: p.updated_at, reverse=True)
     return projects
 
-@app.post("/api/projects", status_code=201, response_model=Project)
-async def create_project(project_data: ProjectCreateRequest):
-    print(f"--- SERVER: Запрос на создание проекта получен. Данные: {project_data.model_dump_json()} ---")
-    project_id = str(uuid.uuid4())
-    (PROJECTS_DIR / project_id).mkdir(exist_ok=True)
-    now = datetime.datetime.utcnow().isoformat()
-    project = Project(id=project_id, name=project_data.name, description=project_data.description, created_at=now, updated_at=now)
-    write_project(project_id, project)
-    return project
+@app.post("/api/projects", status_code=200)
+async def create_project():
+    print("--- >>> SUCCESS! Entering create_project function (no-args version) <<< ---")
+    # This is a dummy response for debugging.
+    # If this works, the problem is with Pydantic model binding.
+    return {"status": "ok", "message": "Route is working, problem is with model binding."}
 
 @app.get("/api/projects/{project_id}", response_model=Project)
 async def get_project_details(project_id: str):
