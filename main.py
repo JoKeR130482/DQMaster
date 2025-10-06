@@ -151,9 +151,9 @@ async def get_projects():
     projects.sort(key=lambda p: p.updated_at, reverse=True)
     return projects
 
-# NEW, RENAMED ENDPOINT FOR DEBUGGING
-@app.post("/api/create_new_project_test", status_code=201, response_model=Project)
-async def create_project_test(project_data: ProjectCreateRequest):
+@app.post("/api/projects", status_code=201, response_model=Project)
+async def create_project(project_data: ProjectCreateRequest):
+    print(f"--- SERVER: Запрос на создание проекта получен. Данные: {project_data.model_dump_json()} ---")
     project_id = str(uuid.uuid4())
     (PROJECTS_DIR / project_id).mkdir(exist_ok=True)
     now = datetime.datetime.utcnow().isoformat()
