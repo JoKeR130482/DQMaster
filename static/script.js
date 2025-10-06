@@ -72,33 +72,21 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const renderProjects = (projects) => {
-        const projectsContainer = document.getElementById('projects-tbody');
-        projectsContainer.innerHTML = ''; // Clear previous entries
+        projectsTbody.innerHTML = ''; // Clear previous entries
         projects.forEach(project => {
-            const card = document.createElement('div');
-            card.className = 'project-card';
-            card.dataset.projectId = project.id;
-
-            card.innerHTML = `
-                <a href="/projects/${project.id}" class="project-card-link"></a>
-                <div class="project-card-header">
-                    <h2 class="project-card-name">${project.name}</h2>
-                </div>
-                <div class="project-card-body">
-                    <p class="project-card-description">${project.description || 'Нет описания.'}</p>
-                </div>
-                <div class="project-card-footer">
-                    <div class="project-card-meta">
-                        <span>${formatDate(project.updated_at)}</span>
-                        <span>${project.size_kb} KB</span>
-                    </div>
-                    <div class="project-card-actions">
-                        <button class="edit-project-btn" data-project-id="${project.id}" data-project-name="${project.name}" data-project-description="${project.description || ''}">Править</button>
-                        <button class="delete-project-btn" data-project-id="${project.id}" data-project-name="${project.name}">Удалить</button>
-                    </div>
-                </div>
+            const row = document.createElement('tr');
+            row.dataset.projectId = project.id;
+            row.innerHTML = `
+                <td><a href="/projects/${project.id}" class="project-link">${project.name}</a></td>
+                <td>${project.description || '---'}</td>
+                <td>${project.size_kb} KB</td>
+                <td>${formatDate(project.updated_at)}</td>
+                <td class="project-actions">
+                    <button class="edit-project-btn" data-project-id="${project.id}" data-project-name="${project.name}" data-project-description="${project.description || ''}">Редактировать</button>
+                    <button class="delete-project-btn" data-project-id="${project.id}" data-project-name="${project.name}">Удалить</button>
+                </td>
             `;
-            projectsContainer.appendChild(card);
+            projectsTbody.appendChild(row);
         });
     };
 
@@ -214,29 +202,17 @@ document.addEventListener('DOMContentLoaded', () => {
             showNotification('Проект успешно обновлен!', 'success');
             closeEditProjectModal();
 
-            // Instead of a full re-render, update the specific card in-place
-            const cardToUpdate = document.querySelector(`.project-card[data-project-id="${id}"]`);
-            if (cardToUpdate) {
-                cardToUpdate.querySelector('.project-card-name').textContent = updatedProject.name;
-                cardToUpdate.querySelector('.project-card-description').textContent = updatedProject.description || 'Нет описания.';
-
-                // Update meta info
-                const meta = cardToUpdate.querySelector('.project-card-meta');
-                meta.children[0].textContent = formatDate(updatedProject.updated_at);
-
-                // Update the dataset for the buttons
-                const editButton = cardToUpdate.querySelector('.edit-project-btn');
-                if (editButton) {
-                    editButton.dataset.projectName = updatedProject.name;
-                    editButton.dataset.projectDescription = updatedProject.description || '';
-                }
-                const deleteButton = cardToUpdate.querySelector('.delete-project-btn');
-                 if (deleteButton) {
-                    deleteButton.dataset.projectName = updatedProject.name;
-                }
-            } else {
-                // As a fallback if the card isn't found, just re-render the whole list
-                fetchAndRenderProjects();
+            // Update the row in the table
+            const rowToUpdate = projectsTbody.querySelector(`tr[data-project-id="${id}"]`);
+            if (rowToUpdate) {
+                rowToUpdate.querySelector('a.project-link').textContent = updatedProject.name;
+                const cells = rowToUpdate.getElementsByTagName('td');
+                cells[1].textContent = updatedProject.description || '---';
+                cells[3].textContent = formatDate(updatedProject.updated_at);
+                // Also update the dataset for the edit button
+                const editButton = rowToUpdate.querySelector('.edit-project-btn');
+                editButton.dataset.projectName = updatedProject.name;
+                editButton.dataset.projectDescription = updatedProject.description || '';
             }
 
         } catch (error) {

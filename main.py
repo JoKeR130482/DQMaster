@@ -24,7 +24,6 @@ BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 RULES_DIR = BASE_DIR / "rules"
 PROJECTS_DIR = BASE_DIR / "projects"
-TEMPLATES_FILE = BASE_DIR / "templates.json"
 RULE_REGISTRY = {}
 
 # ==============================================================================
@@ -47,6 +46,7 @@ class Project(BaseModel):
     updated_at: str
     files: List[Dict[str, Any]] = []
     rules: Dict[str, ColumnConfig] = {}
+    selected_sheet: Optional[str] = None
 
 class ProjectInfo(Project):
     size_kb: float
@@ -68,15 +68,6 @@ class ValidationRequest(BaseModel):
     sheetName: str
     rules: Dict[str, ColumnConfig]
 
-class Template(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    name: str
-    columns: List[str]
-    rules: Dict[str, ColumnConfig]
-
-class MatchRequest(BaseModel):
-    columns: List[str]
-
 # ==============================================================================
 # 3. Helper Functions
 # ==============================================================================
@@ -94,20 +85,6 @@ def write_project(project_id: str, project_data: Project):
     config_path = PROJECTS_DIR / project_id / "project.json"
     project_data.updated_at = datetime.datetime.utcnow().isoformat()
     config_path.write_text(project_data.model_dump_json(indent=2), encoding="utf-8")
-
-def read_templates() -> List[Template]:
-    if not TEMPLATES_FILE.exists(): return []
-    try:
-        raw_data = TEMPLATES_FILE.read_text(encoding="utf-8")
-        if not raw_data.strip(): return []
-        return [Template(**t) for t in json.loads(raw_data)]
-    except Exception as e:
-        print(f"Error reading templates: {e}")
-        return []
-
-def write_templates(templates: List[Template]):
-    with open(TEMPLATES_FILE, "w", encoding="utf-8") as f:
-        json.dump([t.model_dump() for t in templates], f, indent=2, ensure_ascii=False)
 
 def load_rules():
     RULE_REGISTRY.clear()
@@ -228,6 +205,7 @@ async def upload_file_to_project(project_id: str, file: UploadFile = File(...)):
     }
     project.files = [file_info]
     project.rules = {}
+    project.selected_sheet = None
     write_project(project_id, project)
     return file_info
 
@@ -239,11 +217,22 @@ async def select_project_sheet(project_id: str, request: SheetSelectRequest):
     file_info = next((f for f in project.files if f['id'] == request.fileId), None)
     if not file_info: raise HTTPException(status_code=404, detail="File ID not found in project")
 
+    if request.sheetName not in file_info['sheets']:
+        raise HTTPException(status_code=400, detail=f"Sheet '{request.sheetName}' not found in file.")
+
     file_path = PROJECTS_DIR / project_id / "files" / file_info['saved_name']
     if not file_path.exists(): raise HTTPException(status_code=404, detail="File data not found on disk")
 
+    # If the sheet is being changed, we must clear the old rules.
+    if project.selected_sheet != request.sheetName:
+        project.rules = {}
+
+    project.selected_sheet = request.sheetName
+    write_project(project_id, project)
+
     df = pd.read_excel(file_path, sheet_name=request.sheetName)
-    return {"columns": df.columns.tolist()}
+    # Return columns and the current rules for the frontend to render
+    return {"columns": df.columns.tolist(), "rules": project.rules}
 
 @app.post("/api/projects/{project_id}/validate")
 async def validate_project_data(project_id: str, request: ValidationRequest):
@@ -278,48 +267,10 @@ async def validate_project_data(project_id: str, request: ValidationRequest):
 
     return {"total_rows": len(df), "error_rows_count": len({e["row"] for e in errors}), "errors": errors}
 
-# --- Rule & Template Library ---
+# --- Rule Library ---
 @app.get("/api/rules")
 async def get_all_rules():
     return [{"id": data["id"], "name": data["name"], "description": data["description"], "is_configurable": data["is_configurable"]} for data in RULE_REGISTRY.values()]
-
-@app.get("/api/templates", response_model=List[Template])
-async def get_templates():
-    return read_templates()
-
-@app.post("/api/templates", response_model=Template, status_code=201)
-async def create_template(template: Template):
-    templates = read_templates()
-    if any(t.name.lower() == template.name.lower() for t in templates):
-        raise HTTPException(status_code=400, detail=f"Template name '{template.name}' already exists.")
-    templates.append(template)
-    write_templates(templates)
-    return template
-
-@app.put("/api/templates/{template_id}", response_model=Template)
-async def update_template(template_id: str, template_update: Template):
-    templates = read_templates()
-    template_index = next((i for i, t in enumerate(templates) if t.id == template_id), -1)
-    if template_index == -1: raise HTTPException(status_code=404, detail="Template not found.")
-    if any(t.name.lower() == template_update.name.lower() and t.id != template_id for t in templates):
-        raise HTTPException(status_code=400, detail=f"Template name '{template_update.name}' already exists.")
-    template_update.id = template_id
-    templates[template_index] = template_update
-    write_templates(templates)
-    return template_update
-
-@app.delete("/api/templates/{template_id}", status_code=204)
-async def delete_template(template_id: str):
-    templates = read_templates()
-    if not any(t.id == template_id for t in templates):
-        raise HTTPException(status_code=404, detail="Template not found.")
-    write_templates([t for t in templates if t.id != template_id])
-
-@app.post("/api/templates/find-matches", response_model=List[Template])
-async def find_matching_templates(request: MatchRequest):
-    templates = read_templates()
-    request_columns_set = set(request.columns)
-    return [t for t in templates if set(t.columns) == request_columns_set]
 
 # ==============================================================================
 # 5. Static Files & HTML Routes
@@ -339,14 +290,6 @@ async def read_project_page(project_id: str):
 @app.get("/rules")
 async def read_rules_page():
     return FileResponse(STATIC_DIR / "rules.html")
-
-@app.get("/templates")
-async def read_templates_page():
-    return FileResponse(STATIC_DIR / "templates.html")
-
-@app.get("/templates/edit/{template_id}")
-async def read_edit_template_page(template_id: str):
-    return FileResponse(STATIC_DIR / "edit_template.html")
 
 # ==============================================================================
 # 6. Startup Logic
@@ -370,8 +313,6 @@ async def startup_event():
     STATIC_DIR.mkdir(exist_ok=True)
     RULES_DIR.mkdir(exist_ok=True)
     PROJECTS_DIR.mkdir(exist_ok=True)
-    if not TEMPLATES_FILE.exists():
-        TEMPLATES_FILE.write_text("[]")
 
     setup_default_rule()
     load_rules()

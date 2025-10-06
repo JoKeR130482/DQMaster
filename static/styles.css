@@ -1,328 +1,389 @@
-/*
-    ARTEMY LEBEDEV'S "FUCK YOU" REDESIGN
-    NO ROUNDED CORNERS. NO SOFT SHADOWS. NO BULLSHIT.
-    ONLY FUNCTION, CONTRAST, AND POWER.
-*/
+/* --- MODERN DQMASTER REDESIGN --- */
+/* A clean, professional, and user-centric design system. */
 
 :root {
-    --black: #000000;
+    --blue-600: #2563eb;
+    --blue-500: #3b82f6;
+    --blue-100: #dbeafe;
+    --blue-50: #eff6ff;
+
+    --slate-900: #0f172a;
+    --slate-700: #334155;
+    --slate-500: #64748b;
+    --slate-300: #cbd5e1;
+    --slate-200: #e2e8f0;
+    --slate-100: #f1f5f9;
+
+    --green-500: #22c55e;
+    --red-500: #ef4444;
+
     --white: #ffffff;
-    --gray: #E5E5E5;
-    --accent: #0055FF; /* Electric Blue. The only color that matters. */
-    --danger: #FF0000;
+
+    --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    --radius-md: 0.375rem;
+    --radius-lg: 0.5rem;
 }
 
 /* --- 1. GLOBAL RESET & BASE --- */
-*,
-*::before,
-*::after {
+*, *::before, *::after {
     box-sizing: border-box;
     margin: 0;
     padding: 0;
 }
 
 body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-    background-color: var(--white);
-    color: var(--black);
+    font-family: var(--font-sans);
+    background-color: var(--slate-100);
+    color: var(--slate-900);
     -webkit-font-smoothing: antialiased;
 }
 
-/* --- 2. LAYOUT & STRUCTURE --- */
-.main-header {
-    width: 100%;
-    padding: 2rem 3rem;
-    border-bottom: 2px solid var(--black);
+.container {
+    max-width: 1200px;
+    margin: 2rem auto;
+    padding: 0 2rem;
 }
 
-.header-content {
+/* --- 2. HEADER --- */
+.page-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    width: 100%;
-    max-width: 1600px; /* Limit max width on huge screens */
-    margin: 0 auto;
+    padding: 1.5rem 2rem;
+    background-color: var(--white);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    margin-bottom: 2rem;
 }
 
-.content-wrapper {
-    width: 100%;
-    max-width: 1600px;
-    margin: 0 auto;
-    padding: 2rem 3rem;
+#project-name-header, .main-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--slate-900);
 }
 
-/* --- 3. TYPOGRAPHY --- */
-.main-title {
-    font-size: 2.5rem;
-    font-weight: 800; /* Bold as fuck */
-    letter-spacing: -1px;
-}
-
-/* --- 4. HEADER & NAVIGATION --- */
-.main-nav {
+.header-actions {
     display: flex;
-    gap: 2rem;
+    align-items: center;
+    gap: 1rem;
 }
 
 .nav-link {
-    font-size: 1rem;
-    font-weight: 600;
-    color: var(--black);
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--slate-500);
     text-decoration: none;
-    padding-bottom: 4px;
-    border-bottom: 2px solid transparent;
-    transition: none; /* Transitions are for pussies */
+    transition: color 0.2s ease;
 }
 
 .nav-link:hover {
-    border-bottom-color: var(--accent);
+    color: var(--blue-600);
 }
 
-/* --- 5. BUTTONS --- */
-.action-button,
-.secondary-button,
-.edit-project-btn,
-.delete-project-btn {
-    font-family: inherit;
-    font-size: 1rem;
-    font-weight: 700;
-    padding: 0.75rem 1.5rem;
-    border: 2px solid var(--black);
-    border-radius: 0; /* Corners are a sign of weakness */
+/* --- 3. BUTTONS --- */
+.action-button, .secondary-button {
+    font-family: var(--font-sans);
+    font-size: 0.9rem;
+    font-weight: 600;
+    padding: 0.6rem 1.2rem;
+    border: 1px solid transparent;
+    border-radius: var(--radius-md);
     cursor: pointer;
-    text-align: center;
-    transition: none;
+    transition: all 0.2s ease;
 }
 
 .action-button {
-    background-color: var(--accent);
+    background-color: var(--blue-600);
     color: var(--white);
-    border-color: var(--accent);
 }
 
 .action-button:hover {
-    background-color: var(--black);
-    color: var(--white);
-    border-color: var(--black);
+    background-color: var(--blue-500);
+    box-shadow: var(--shadow-md);
 }
 
-.secondary-button,
-.edit-project-btn {
+.secondary-button {
+    background-color: var(--slate-200);
+    color: var(--slate-700);
+}
+
+.secondary-button:hover {
+    background-color: var(--slate-300);
+}
+
+.secondary-button.danger {
     background-color: var(--white);
-    color: var(--black);
+    color: var(--red-500);
+    border-color: var(--slate-200);
 }
 
-.secondary-button:hover,
-.edit-project-btn:hover {
-    background-color: var(--black);
+.secondary-button.danger:hover {
+    background-color: var(--red-500);
     color: var(--white);
 }
 
-.delete-project-btn {
-    background-color: transparent;
-    color: var(--danger);
-    border-color: transparent;
-}
 
-.delete-project-btn:hover {
-    background-color: var(--danger);
-    color: var(--white);
-    border-color: var(--danger);
-}
-
-/* --- 6. PROJECT CARDS --- */
-#projects-tbody {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-    gap: 2rem;
-}
-
-.project-card {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-    border: 2px solid var(--black);
+/* --- 4. SECTIONS & CARDS --- */
+section {
     background-color: var(--white);
+    padding: 2rem;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    margin-bottom: 2rem;
 }
 
-.project-card:hover {
-    border-color: var(--accent);
-}
-
-.project-card-link {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    z-index: 1;
-}
-
-.project-card-header {
-    padding: 1.5rem;
-    border-bottom: 2px solid var(--black);
-}
-
-.project-card-name {
-    font-size: 1.5rem;
-    font-weight: 700;
-}
-
-.project-card-body {
-    padding: 1.5rem;
-    flex-grow: 1; /* Pushes footer down */
-}
-
-.project-card-description {
-    font-size: 1rem;
-    line-height: 1.5;
-    color: #333;
-}
-
-.project-card-footer {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 1rem 1.5rem;
-    border-top: 2px solid var(--black);
-    background-color: var(--gray);
-}
-
-.project-card-meta {
-    font-size: 0.875rem;
-    font-weight: 600;
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-}
-
-.project-card-actions {
-    display: flex;
-    gap: 0.5rem;
-    z-index: 2; /* Must be above the main link */
-    position: relative;
-}
-
-.project-card-actions button {
-    padding: 0.5rem 1rem;
-    font-size: 0.875rem;
-}
-
-#no-projects-message {
+section h3 {
     font-size: 1.25rem;
-    font-weight: 600;
-    padding: 4rem 0;
-    text-align: center;
-}
-
-/* --- 7. MODALS & TOASTS (Lebedev-approved) --- */
-.modal-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-color: rgba(0, 0, 0, 0.8);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 1000;
-}
-
-.modal-content {
-    background-color: var(--white);
-    padding: 2.5rem;
-    border: 2px solid var(--black);
-    border-radius: 0;
-    width: 90%;
-    max-width: 500px;
-    text-align: left;
-    box-shadow: none;
-}
-
-.modal-content h2 {
-    font-size: 1.8rem;
-    font-weight: 700;
-    margin-bottom: 1.5rem;
-}
-
-.form-group {
-    margin-bottom: 1.5rem;
-}
-
-.form-group label {
-    display: block;
     font-weight: 600;
     margin-bottom: 0.5rem;
 }
 
-.form-group input[type="text"],
-.form-group textarea {
-    width: 100%;
-    padding: 0.75rem;
-    border: 2px solid var(--black);
-    border-radius: 0;
-    font-family: inherit;
-    font-size: 1rem;
+section p {
+    color: var(--slate-500);
+    margin-bottom: 1.5rem;
+    max-width: 75ch;
 }
 
-.form-group input[type="text"]:focus,
-.form-group textarea:focus {
-    outline: none;
-    border-color: var(--accent);
-}
+/* --- 5. SPECIFIC COMPONENTS --- */
 
-.modal-actions {
+/* File Upload */
+#file-upload-box .upload-container {
+    border: 2px dashed var(--slate-300);
+    border-radius: var(--radius-md);
+    padding: 2rem;
+    text-align: center;
+    transition: border-color 0.2s ease;
+}
+#file-upload-box .upload-container:hover {
+    border-color: var(--blue-500);
+}
+.file-input { display: none; }
+.file-label {
+    background-color: var(--blue-600);
+    color: white;
+    padding: 0.75rem 1.5rem;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    font-weight: 600;
+    transition: background-color 0.2s ease;
+}
+.file-label:hover { background-color: var(--blue-500); }
+
+#file-display-container {
+    background-color: var(--blue-50);
+    border: 1px solid var(--blue-100);
+    padding: 1rem 1.5rem;
+    border-radius: var(--radius-md);
     display: flex;
-    justify-content: flex-end;
-    gap: 1rem;
-    margin-top: 2rem;
+    justify-content: space-between;
+    align-items: center;
 }
+#file-display-container p { margin: 0; color: var(--slate-700); }
+#file-display-container strong { color: var(--slate-900); }
+
+/* Sheet Selection */
+.sheet-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+.sheet-select-btn {
+    background-color: var(--white);
+    color: var(--blue-600);
+    border: 1px solid var(--blue-100);
+    font-weight: 600;
+}
+.sheet-select-btn:hover {
+    background-color: var(--blue-50);
+    border-color: var(--blue-500);
+}
+
+/* Columns Configuration */
+.column-config {
+    background-color: var(--slate-50);
+    padding: 1rem;
+    border-radius: var(--radius-md);
+    margin-bottom: 1rem;
+    border: 1px solid var(--slate-200);
+}
+.column-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+}
+.column-name { font-weight: 600; }
+.column-actions { display: flex; align-items: center; gap: 1rem; }
+.checkbox-container { display: flex; align-items: center; gap: 0.5rem; }
+.checkbox-container label { font-size: 0.9rem; color: var(--slate-700); cursor: pointer; }
+.rule-select {
+    padding: 0.4rem 0.8rem;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--slate-300);
+    background-color: var(--white);
+}
+
+.applied-rules-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 1rem;
+    min-height: 20px;
+}
+.rule-tag {
+    background-color: var(--blue-100);
+    color: var(--blue-600);
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+.remove-rule-btn {
+    background: none;
+    border: none;
+    color: var(--blue-600);
+    font-size: 1rem;
+    font-weight: bold;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+}
+
+/* Validation Results */
+.stats-summary {
+    display: flex;
+    gap: 2rem;
+    background-color: var(--slate-50);
+    padding: 1rem;
+    border-radius: var(--radius-md);
+    margin-bottom: 1.5rem;
+}
+.stats-summary span { color: var(--slate-500); }
+.stats-summary strong { color: var(--slate-900); font-size: 1.5rem; display: block; }
+.results-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 1rem;
+}
+.results-table th, .results-table td {
+    border-bottom: 1px solid var(--slate-200);
+    padding: 0.75rem 1rem;
+    text-align: left;
+}
+.results-table th {
+    background-color: var(--slate-100);
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--slate-500);
+    text-transform: uppercase;
+}
+.results-table tbody tr:hover { background-color: var(--blue-50); }
+.summary-table tbody tr { cursor: pointer; }
+.summary-table tbody tr.active { background-color: var(--blue-100); font-weight: 600; }
+.detail-table caption { font-size: 1.1em; font-weight: 600; margin-bottom: 1rem; color: var(--slate-700); text-align: left; }
+
+/* --- 6. MODALS & TOASTS --- */
+.modal-overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background-color: rgba(15, 23, 42, 0.7);
+    display: flex; justify-content: center; align-items: center; z-index: 1000;
+}
+.modal-content {
+    background-color: var(--white);
+    padding: 2rem;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-md);
+    width: 90%;
+    max-width: 500px;
+}
+.modal-content h2 { font-size: 1.25rem; font-weight: 600; margin-bottom: 1.5rem; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1.5rem; }
 
 .toast {
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    background-color: var(--black);
-    color: var(--white);
+    position: fixed; top: 20px; right: 20px;
     padding: 1rem 1.5rem;
-    border: 2px solid var(--black);
-    border-radius: 0;
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-md);
     z-index: 2000;
-    visibility: hidden;
-    opacity: 0;
+    color: var(--white);
+    font-weight: 600;
+    visibility: hidden; opacity: 0;
+    transition: all 0.3s ease;
     transform: translateY(-20px);
 }
+.toast.show { visibility: visible; opacity: 1; transform: translateY(0); }
+.toast.success { background-color: var(--green-500); }
+.toast.error { background-color: var(--red-500); }
 
-.toast.show {
-    visibility: visible;
-    opacity: 1;
-    transform: translateY(0);
-}
-
-.toast.success {
-    background-color: var(--accent);
-    border-color: var(--accent);
-}
-
-.toast.error {
-    background-color: var(--danger);
-    color: var(--white);
-    border-color: var(--danger);
-}
-
+/* --- 7. UTILITIES --- */
 .loading-spinner {
-    border: 4px solid var(--gray);
-    border-top: 4px solid var(--accent);
+    border: 4px solid var(--slate-200);
+    border-top: 4px solid var(--blue-600);
     border-radius: 50%;
     width: 40px;
     height: 40px;
     animation: spin 0.8s linear infinite;
     margin: 4rem auto;
 }
+@keyframes spin { 100% { transform: rotate(360deg); } }
 
-@keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
+.success-message {
+    background-color: #dcfce7;
+    color: #166534;
+    padding: 1rem;
+    border-radius: var(--radius-md);
+    text-align: center;
+    font-weight: 500;
+}
+
+/* Project List Page Specifics */
+#projects-list-container {
+    background-color: transparent;
+    box-shadow: none;
+    padding: 0;
+}
+.projects-table {
+    background-color: var(--white);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden; /* For rounded corners on table */
+}
+.projects-table a {
+    color: var(--blue-600);
+    text-decoration: none;
+    font-weight: 500;
+}
+.projects-table a:hover {
+    text-decoration: underline;
+}
+.project-actions button {
+    background-color: var(--white);
+    color: var(--slate-700);
+    border: 1px solid var(--slate-200);
+    padding: 0.4rem 0.8rem;
+    font-size: 0.85rem;
+}
+.project-actions button:hover {
+    background-color: var(--slate-100);
+    border-color: var(--slate-300);
+}
+.project-actions .delete-btn {
+    color: var(--red-500);
+}
+.project-actions .delete-btn:hover {
+    background-color: var(--red-500);
+    color: var(--white);
+    border-color: var(--red-500);
+}
+#no-projects-message {
+    text-align: center;
+    padding: 4rem;
+    background-color: var(--white);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
 }
