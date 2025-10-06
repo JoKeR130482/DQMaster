@@ -3,44 +3,35 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DQMaster - Мои проекты</title>
+    <title>DQMaster — Проекты</title>
     <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
-    <div class="container projects-container">
-        <header class="page-header">
-            <h1>📁 Мои проекты</h1>
-            <div class="header-actions">
-                <nav class="nav-links">
-                    <a href="/rules" class="nav-link">Библиотека правил</a>
-                    <a href="/templates" class="nav-link">Шаблоны</a>
-                </nav>
-                <button id="create-project-btn" class="action-button">Создать проект</button>
-            </div>
-        </header>
 
+    <header class="main-header">
+        <div class="header-content">
+            <h1 class="main-title">Мои проекты</h1>
+            <nav class="main-nav">
+                <a href="/rules" class="nav-link">Библиотека правил</a>
+                <a href="/templates" class="nav-link">Шаблоны</a>
+            </nav>
+            <button id="create-project-btn" class="action-button">Создать проект</button>
+        </div>
+    </header>
+
+    <main class="content-wrapper">
         <div id="loading" class="loading-spinner" style="display: none;"></div>
 
+        <!-- This container is now a grid for project cards, replacing the old table -->
         <div id="projects-list-container">
-            <table class="projects-table">
-                <thead>
-                    <tr>
-                        <th>Название</th>
-                        <th>Описание</th>
-                        <th>Размер</th>
-                        <th>Последнее изменение</th>
-                        <th>Действия</th>
-                    </tr>
-                </thead>
-                <tbody id="projects-tbody">
-                    <!-- Project rows will be injected here by JS -->
-                </tbody>
-            </table>
-            <p id="no-projects-message" style="display: none;">Проектов пока нет. Создайте первый!</p>
+            <div id="projects-tbody">
+                <!-- Project cards will be injected here by JS. The ID is kept for compatibility. -->
+            </div>
         </div>
-    </div>
+        <p id="no-projects-message" style="display: none;">Проектов пока нет. Создайте первый.</p>
+    </main>
 
-    <!-- Modal for creating a new project -->
+    <!-- Modals and Toasts remain unchanged as they are separate components -->
     <div id="create-project-modal" class="modal-overlay" style="display: none;">
         <div class="modal-content">
             <h2>Создать новый проект</h2>
@@ -59,7 +50,6 @@
         </div>
     </div>
 
-    <!-- Modal for editing a project -->
     <div id="edit-project-modal" class="modal-overlay" style="display: none;">
         <div class="modal-content">
             <h2>Редактировать проект</h2>
@@ -79,7 +69,6 @@
         </div>
     </div>
 
-    <!-- Notification Toast -->
     <div id="notification-toast" class="toast"></div>
 
     <script src="/static/script.js"></script>

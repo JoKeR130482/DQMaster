@@ -1,487 +1,229 @@
+/*
+    ARTEMY LEBEDEV'S "FUCK YOU" REDESIGN
+    NO ROUNDED CORNERS. NO SOFT SHADOWS. NO BULLSHIT.
+    ONLY FUNCTION, CONTRAST, AND POWER.
+*/
+
+:root {
+    --black: #000000;
+    --white: #ffffff;
+    --gray: #E5E5E5;
+    --accent: #0055FF; /* Electric Blue. The only color that matters. */
+    --danger: #FF0000;
+}
+
+/* --- 1. GLOBAL RESET & BASE --- */
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-    background-color: #f4f7f9;
-    color: #333;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    min-height: 100vh;
-    margin: 0;
+    background-color: var(--white);
+    color: var(--black);
+    -webkit-font-smoothing: antialiased;
 }
 
-.container {
-    background-color: #ffffff;
-    padding: 40px;
-    border-radius: 12px;
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
-    text-align: center;
-    max-width: 600px;
-    width: 90%;
+/* --- 2. LAYOUT & STRUCTURE --- */
+.main-header {
+    width: 100%;
+    padding: 2rem 3rem;
+    border-bottom: 2px solid var(--black);
 }
 
-h1 {
-    color: #2c3e50;
-    margin-bottom: 10px;
-}
-
-p {
-    color: #7f8c8d;
-    margin-bottom: 30px;
-}
-
-.upload-container {
-    margin-bottom: 20px;
-}
-
-.file-input {
-    width: 0.1px;
-    height: 0.1px;
-    opacity: 0;
-    overflow: hidden;
-    position: absolute;
-    z-index: -1;
-}
-
-.file-label {
-    background-color: #3498db;
-    color: white;
-    padding: 12px 25px;
-    border-radius: 8px;
-    cursor: pointer;
-    display: inline-block;
-    font-weight: bold;
-    transition: background-color 0.3s ease;
-}
-
-.file-label:hover {
-    background-color: #2980b9;
-}
-
-.loading-spinner {
-    border: 4px solid #f3f3f3;
-    border-top: 4px solid #3498db;
-    border-radius: 50%;
-    width: 40px;
-    height: 40px;
-    animation: spin 1s linear infinite;
-    margin: 20px auto;
-}
-
-@keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-}
-
-.result-container {
-    margin-top: 20px;
-    text-align: left;
-    display: none; /* Initially hidden */
-}
-
-.result-container h2 {
-    color: #2c3e50;
-    border-bottom: 2px solid #ecf0f1;
-    padding-bottom: 10px;
-    margin-bottom: 15px;
-}
-
-#columnsList {
-    list-style-type: none;
-    padding: 0;
-}
-
-#columnsList li {
-    background-color: #ecf0f1;
-    padding: 10px;
-    border-radius: 5px;
-    margin-bottom: 8px;
-    color: #34495e;
-}
-
-.error-container {
-    margin-top: 20px;
-    color: #e74c3c;
-    background-color: #fbe2e2;
-    padding: 10px;
-    border-radius: 5px;
-    display: none; /* Initially hidden */
-}
-
-/* --- Styles for Rules Page --- */
-
-.rules-header {
+.header-content {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 20px;
-    flex-wrap: wrap;
+    width: 100%;
+    max-width: 1600px; /* Limit max width on huge screens */
+    margin: 0 auto;
 }
 
-.rules-header h1 {
-    margin-bottom: 0;
+.content-wrapper {
+    width: 100%;
+    max-width: 1600px;
+    margin: 0 auto;
+    padding: 2rem 3rem;
 }
 
-.nav-links {
+/* --- 3. TYPOGRAPHY --- */
+.main-title {
+    font-size: 2.5rem;
+    font-weight: 800; /* Bold as fuck */
+    letter-spacing: -1px;
+}
+
+/* --- 4. HEADER & NAVIGATION --- */
+.main-nav {
     display: flex;
-    gap: 20px;
+    gap: 2rem;
 }
 
-.back-link {
-    color: #3498db;
+.nav-link {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--black);
     text-decoration: none;
-    font-weight: bold;
-    transition: color 0.3s ease;
+    padding-bottom: 4px;
+    border-bottom: 2px solid transparent;
+    transition: none; /* Transitions are for pussies */
 }
 
-.back-link:hover {
-    color: #2980b9;
+.nav-link:hover {
+    border-bottom-color: var(--accent);
 }
 
-.toolbar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 30px;
-    flex-wrap: wrap;
-    gap: 15px;
-}
-
-.search-input {
-    flex-grow: 1;
-    padding: 10px 15px;
-    border: 2px solid #ecf0f1;
-    border-radius: 8px;
-    font-size: 16px;
-    transition: border-color 0.3s ease;
-}
-
-.search-input:focus {
-    outline: none;
-    border-color: #3498db;
-}
-
-.sort-buttons {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.sort-btn {
-    background-color: #ecf0f1;
-    border: none;
-    padding: 8px 12px;
-    border-radius: 6px;
+/* --- 5. BUTTONS --- */
+.action-button,
+.secondary-button,
+.edit-project-btn,
+.delete-project-btn {
+    font-family: inherit;
+    font-size: 1rem;
+    font-weight: 700;
+    padding: 0.75rem 1.5rem;
+    border: 2px solid var(--black);
+    border-radius: 0; /* Corners are a sign of weakness */
     cursor: pointer;
-    transition: background-color 0.3s ease;
-}
-
-.sort-btn:hover {
-    background-color: #bdc3c7;
-}
-
-.rules-list {
-    display: grid;
-    gap: 20px;
-}
-
-.rule-card {
-    background-color: #f8f9fa;
-    padding: 20px;
-    border-radius: 8px;
-    border: 1px solid #ecf0f1;
-    text-align: left;
-}
-
-.rule-name {
-    margin-top: 0;
-    color: #2c3e50;
-}
-
-.rule-description {
-    color: #34495e;
-    margin-bottom: 15px;
-}
-
-.rule-id {
-    background-color: #e0e0e0;
-    color: #555;
-    padding: 3px 6px;
-    border-radius: 4px;
-    font-size: 12px;
-}
-
-/* --- Styles for Templates Page --- */
-
-.templates-list {
-    display: grid;
-    gap: 20px;
-}
-
-.template-card {
-    background-color: #fdfdfd;
-    padding: 20px;
-    border-radius: 8px;
-    border: 1px solid #e0e0e0;
-    text-align: left;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-}
-
-.template-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    border-bottom: 1px solid #eee;
-    padding-bottom: 10px;
-    margin-bottom: 15px;
-}
-
-.template-name {
-    margin: 0;
-    color: #2c3e50;
-}
-
-.template-actions {
-    display: flex;
-    gap: 10px;
-}
-
-.edit-template-btn, .delete-template-btn {
-    background-color: #ecf0f1;
-    border: none;
-    border-radius: 5px;
-    cursor: pointer;
-    font-weight: bold;
-    padding: 5px 10px;
-    transition: background-color 0.2s ease;
-}
-
-.edit-template-btn:hover {
-    background-color: #bdc3c7;
-}
-
-.delete-template-btn {
-    background-color: #e74c3c;
-    color: white;
-}
-
-.delete-template-btn:hover {
-    background-color: #c0392b;
-}
-
-.clickable-rule {
-    cursor: pointer;
-    text-decoration: underline;
-    text-decoration-style: dotted;
-}
-
-.clickable-rule:hover {
-    color: #2980b9;
-}
-
-.clickable-rule {
-    cursor: pointer;
-    text-decoration: underline;
-    text-decoration-style: dotted;
-}
-
-.clickable-rule:hover {
-    color: #2980b9;
-}
-
-.template-body p {
-    margin: 0 0 10px 0;
-}
-
-.template-rules ul {
-    list-style-type: none;
-    padding-left: 15px;
-    margin: 0;
-}
-
-.template-rules li {
-    margin-bottom: 5px;
-}
-
-/* --- Styles for Main Page Column Configuration --- */
-
-#columns-list {
-    margin-top: 20px;
-    text-align: left;
-}
-
-.column-config {
-    background-color: #f8f9fa;
-    padding: 15px;
-    border-radius: 8px;
-    margin-bottom: 15px;
-    border: 1px solid #ecf0f1;
-}
-
-.column-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 10px;
-}
-
-.column-name {
-    font-weight: bold;
-    font-size: 1.1em;
-    color: #2c3e50;
-}
-
-.column-actions {
-    display: flex;
-    align-items: center;
-    gap: 15px;
-}
-
-.required-field-container {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-}
-
-.required-field-container label {
-    font-weight: normal;
-    color: #34495e;
-    cursor: pointer;
-}
-
-.rule-select {
-    padding: 5px;
-    border-radius: 5px;
-    border: 1px solid #bdc3c7;
-    background-color: white;
-}
-
-.applied-rules-container {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    min-height: 20px; /* Ensure container has height even when empty */
-}
-
-.rule-tag {
-    background-color: #3498db;
-    color: white;
-    padding: 5px 10px;
-    border-radius: 15px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 14px;
-    cursor: default;
-}
-
-.rule-tag span {
-    white-space: nowrap;
-}
-
-.remove-rule-btn {
-    background: none;
-    border: none;
-    color: white;
-    font-size: 16px;
-    font-weight: bold;
-    cursor: pointer;
-    padding: 0;
-    line-height: 1;
+    text-align: center;
+    transition: none;
 }
 
 .action-button {
-    background-color: #27ae60;
-    color: white;
-    padding: 12px 25px;
-    border: none;
-    border-radius: 8px;
-    cursor: pointer;
-    font-weight: bold;
-    font-size: 16px;
-    margin-top: 20px;
-    transition: background-color 0.3s ease;
+    background-color: var(--accent);
+    color: var(--white);
+    border-color: var(--accent);
 }
 
 .action-button:hover {
-    background-color: #229954;
+    background-color: var(--black);
+    color: var(--white);
+    border-color: var(--black);
 }
 
-.secondary-button {
-    background-color: #95a5a6;
-    color: white;
-    padding: 8px 15px;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-    font-weight: bold;
-    transition: background-color 0.3s ease;
+.secondary-button,
+.edit-project-btn {
+    background-color: var(--white);
+    color: var(--black);
 }
 
-.secondary-button:hover {
-    background-color: #7f8c8d;
+.secondary-button:hover,
+.edit-project-btn:hover {
+    background-color: var(--black);
+    color: var(--white);
 }
 
-.config-header {
+.delete-project-btn {
+    background-color: transparent;
+    color: var(--danger);
+    border-color: transparent;
+}
+
+.delete-project-btn:hover {
+    background-color: var(--danger);
+    color: var(--white);
+    border-color: var(--danger);
+}
+
+/* --- 6. PROJECT CARDS --- */
+#projects-tbody {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+    gap: 2rem;
+}
+
+.project-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    border: 2px solid var(--black);
+    background-color: var(--white);
+}
+
+.project-card:hover {
+    border-color: var(--accent);
+}
+
+.project-card-link {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+}
+
+.project-card-header {
+    padding: 1.5rem;
+    border-bottom: 2px solid var(--black);
+}
+
+.project-card-name {
+    font-size: 1.5rem;
+    font-weight: 700;
+}
+
+.project-card-body {
+    padding: 1.5rem;
+    flex-grow: 1; /* Pushes footer down */
+}
+
+.project-card-description {
+    font-size: 1rem;
+    line-height: 1.5;
+    color: #333;
+}
+
+.project-card-footer {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 10px;
+    padding: 1rem 1.5rem;
+    border-top: 2px solid var(--black);
+    background-color: var(--gray);
 }
 
-.suggestion-container {
-    background-color: #eaf2f8;
-    border: 1px solid #aed6f1;
-    border-radius: 8px;
-    padding: 20px;
-    margin-bottom: 20px;
-    text-align: center;
-}
-
-#template-suggestions-list {
+.project-card-meta {
+    font-size: 0.875rem;
+    font-weight: 600;
     display: flex;
-    justify-content: center;
-    gap: 15px;
-    margin: 15px 0;
-    flex-wrap: wrap;
+    flex-direction: column;
+    gap: 0.25rem;
 }
 
-.template-suggestion {
-    border: 1px solid #aed6f1;
-    background-color: #f2f8fc;
-    padding: 15px 20px;
-    border-radius: 8px;
-    cursor: pointer;
-    transition: background-color 0.3s, box-shadow 0.3s;
+.project-card-actions {
+    display: flex;
+    gap: 0.5rem;
+    z-index: 2; /* Must be above the main link */
+    position: relative;
+}
+
+.project-card-actions button {
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+}
+
+#no-projects-message {
+    font-size: 1.25rem;
+    font-weight: 600;
+    padding: 4rem 0;
     text-align: center;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
 }
 
-.template-suggestion:hover {
-    background-color: #eaf2f8;
-    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-}
-
-.template-suggestion h4 {
-    margin: 0 0 5px 0;
-    color: #2980b9;
-}
-
-.template-suggestion p {
-    margin: 0;
-    font-size: 14px;
-    color: #34495e;
-}
-
-
-/* --- Styles for Modal --- */
-
+/* --- 7. MODALS & TOASTS (Lebedev-approved) --- */
 .modal-overlay {
     position: fixed;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    background-color: rgba(0, 0, 0, 0.6);
+    background-color: rgba(0, 0, 0, 0.8);
     display: flex;
     justify-content: center;
     align-items: center;
@@ -489,211 +231,67 @@ p {
 }
 
 .modal-content {
-    background-color: white;
-    padding: 30px;
-    border-radius: 12px;
-    box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+    background-color: var(--white);
+    padding: 2.5rem;
+    border: 2px solid var(--black);
+    border-radius: 0;
     width: 90%;
     max-width: 500px;
-    text-align: center;
+    text-align: left;
+    box-shadow: none;
 }
 
 .modal-content h2 {
-    margin-top: 0;
-    color: #2c3e50;
+    font-size: 1.8rem;
+    font-weight: 700;
+    margin-bottom: 1.5rem;
 }
 
-.modal-content p {
-    color: #7f8c8d;
-    margin-bottom: 20px;
+.form-group {
+    margin-bottom: 1.5rem;
 }
 
-#template-name-input {
+.form-group label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+}
+
+.form-group input[type="text"],
+.form-group textarea {
     width: 100%;
-    padding: 12px;
-    border: 2px solid #ecf0f1;
-    border-radius: 8px;
-    font-size: 16px;
-    margin-bottom: 20px;
-    box-sizing: border-box;
+    padding: 0.75rem;
+    border: 2px solid var(--black);
+    border-radius: 0;
+    font-family: inherit;
+    font-size: 1rem;
 }
 
-#template-name-input:focus {
+.form-group input[type="text"]:focus,
+.form-group textarea:focus {
     outline: none;
-    border-color: #3498db;
+    border-color: var(--accent);
 }
 
 .modal-actions {
     display: flex;
     justify-content: flex-end;
-    gap: 10px;
+    gap: 1rem;
+    margin-top: 2rem;
 }
 
-.sheet-list {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    margin-top: 20px;
-    max-height: 200px;
-    overflow-y: auto;
-}
-
-.sheet-list button {
-    width: 100%;
-}
-
-#rule-config-form {
-    display: flex;
-    flex-direction: column;
-    gap: 15px;
-    text-align: left;
-    margin-bottom: 20px;
-}
-
-#rule-config-form label {
-    font-weight: bold;
-    color: #34495e;
-}
-
-#rule-config-form select,
-#rule-config-form input[type="text"] {
-    width: 100%;
-    padding: 10px;
-    border: 1px solid #ccc;
-    border-radius: 5px;
-    box-sizing: border-box;
-}
-
-.checkbox-container {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.checkbox-container input[type="checkbox"] {
-    width: auto;
-}
-
-.checkbox-container label {
-    font-weight: normal;
-    margin-bottom: 0;
-}
-
-#validation-results-container {
-    margin-top: 30px;
-    text-align: left;
-}
-
-.results-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 15px;
-}
-
-.results-table th, .results-table td {
-    border: 1px solid #ddd;
-    padding: 12px;
-    text-align: left;
-}
-
-.results-table th {
-    background-color: #34495e;
-    color: white;
-    font-weight: bold;
-}
-
-.results-table tbody tr:nth-child(even) {
-    background-color: #f2f2f2;
-}
-
-.results-table tbody tr:hover {
-    background-color: #ddd;
-}
-
-.summary-table tbody tr {
-    cursor: pointer;
-}
-
-.summary-table tbody tr.active {
-    background-color: #aed6f1;
-    font-weight: bold;
-}
-
-.detail-table {
-    margin-top: 20px;
-}
-
-.detail-table caption {
-    font-size: 1.1em;
-    font-weight: bold;
-    margin-bottom: 10px;
-    color: #2c3e50;
-    text-align: left;
-}
-
-#golden-record-stats .stats-summary {
-    background-color: #f8f9fa;
-    border: 1px solid #dee2e6;
-    border-radius: 8px;
-    padding: 15px;
-    margin-bottom: 20px;
-    display: flex;
-    justify-content: space-around;
-    align-items: center;
-    text-align: center;
-    flex-wrap: wrap;
-    gap: 15px;
-}
-
-#golden-record-stats .stats-summary span {
-    font-size: 1.1em;
-    color: #495057;
-}
-
-#golden-record-stats .stats-summary strong {
-    display: block;
-    font-size: 1.5em;
-    color: #2c3e50;
-}
-
-/* --- Styles for Edit Template Page --- */
-
-.template-name-editor {
-    margin-bottom: 20px;
-    text-align: left;
-}
-
-.template-name-editor label {
-    display: block;
-    font-weight: bold;
-    margin-bottom: 5px;
-    color: #2c3e50;
-}
-
-.success-message {
-    background-color: #dff0d8;
-    color: #3c763d;
-    padding: 15px;
-    border-radius: 8px;
-    border: 1px solid #d6e9c6;
-    text-align: center;
-    font-weight: bold;
-}
-
-/* --- Styles for Notification Toast --- */
 .toast {
     position: fixed;
     top: 20px;
     right: 20px;
-    background-color: #2c3e50;
-    color: white;
-    padding: 15px 25px;
-    border-radius: 8px;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+    background-color: var(--black);
+    color: var(--white);
+    padding: 1rem 1.5rem;
+    border: 2px solid var(--black);
+    border-radius: 0;
     z-index: 2000;
     visibility: hidden;
     opacity: 0;
-    transition: opacity 0.3s, transform 0.3s, visibility 0.3s;
     transform: translateY(-20px);
 }
 
@@ -704,134 +302,27 @@ p {
 }
 
 .toast.success {
-    background-color: #27ae60;
+    background-color: var(--accent);
+    border-color: var(--accent);
 }
 
 .toast.error {
-    background-color: #e74c3c;
+    background-color: var(--danger);
+    color: var(--white);
+    border-color: var(--danger);
 }
 
-/* --- Styles for Project List Page --- */
-
-.projects-container {
-    max-width: 1100px; /* Make container wider */
-    text-align: left; /* Align content to the left */
+.loading-spinner {
+    border: 4px solid var(--gray);
+    border-top: 4px solid var(--accent);
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    animation: spin 0.8s linear infinite;
+    margin: 4rem auto;
 }
 
-.page-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 30px;
-    flex-wrap: wrap; /* Responsive wrapping */
-    gap: 20px;
-}
-
-.page-header h1 {
-    margin: 0;
-}
-
-.header-actions {
-    display: flex;
-    align-items: center;
-    gap: 25px;
-}
-
-.header-actions .nav-links {
-    display: flex;
-    gap: 20px;
-}
-
-.header-actions .nav-link {
-    text-decoration: none;
-    color: #566573;
-    font-weight: 500;
-    padding-bottom: 5px;
-    border-bottom: 2px solid transparent;
-    transition: color 0.3s, border-bottom-color 0.3s;
-}
-
-.header-actions .nav-link:hover {
-    color: #2c3e50;
-    border-bottom-color: #27ae60;
-}
-
-.header-actions .action-button {
-    margin-top: 0; /* Override default margin */
-}
-
-#projects-list-container {
-    background-color: #fff;
-    /* The container already has a shadow, so we might not need another one here,
-       but if we remove the padding from .container, we'd add it here with a border-radius */
-}
-
-.projects-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 20px;
-}
-
-.projects-table th,
-.projects-table td {
-    padding: 15px 20px;
-    text-align: left;
-    border-bottom: 1px solid #e7eaec;
-}
-
-.projects-table thead th {
-    background-color: #f8f9fa;
-    color: #566573;
-    font-weight: 600;
-    font-size: 14px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-.projects-table tbody tr {
-    transition: background-color 0.2s ease-in-out;
-}
-
-.projects-table tbody tr:hover {
-    background-color: #f9fafb;
-}
-
-.projects-table .project-name {
-    font-weight: 600;
-    color: #2c3e50;
-}
-
-.projects-table .project-description {
-    color: #7f8c8d;
-    max-width: 300px; /* Prevent long descriptions from breaking layout */
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.projects-table .project-actions button {
-    background-color: #f0f2f5;
-    color: #566573;
-    border: none;
-    padding: 8px 12px;
-    border-radius: 6px;
-    cursor: pointer;
-    font-weight: 500;
-    font-size: 14px;
-    transition: background-color 0.2s, color 0.2s;
-    margin-right: 5px;
-}
-
-.projects-table .project-actions button:hover {
-    background-color: #e4e6e9;
-    color: #2c3e50;
-}
-
-.projects-table .project-actions .delete-btn {
-    background-color: transparent;
-}
-
-.projects-table .project-actions .delete-btn:hover {
-    background-color: #fbe2e2;
-    color: #c0392b;
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
 }
