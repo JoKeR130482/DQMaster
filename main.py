@@ -10,7 +10,7 @@ import pandas as pd
 import io
 import json
 
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, APIRouter, File, UploadFile, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 # 1. Globals & App Initialization
 # ==============================================================================
 app = FastAPI()
+api_router = APIRouter()
 
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
@@ -131,11 +132,11 @@ def load_rules():
                 print(f"Error loading rule from {filename}: {e}")
 
 # ==============================================================================
-# 4. API Endpoints
+# 4. API Endpoints (Registered with api_router)
 # ==============================================================================
 
 # --- Project Management ---
-@app.get("/api/projects", response_model=List[ProjectInfo])
+@api_router.get("/projects", response_model=List[ProjectInfo])
 async def get_projects():
     projects = []
     for project_dir in PROJECTS_DIR.iterdir():
@@ -151,22 +152,23 @@ async def get_projects():
     projects.sort(key=lambda p: p.updated_at, reverse=True)
     return projects
 
-@app.post("/api/projects", status_code=201, response_model=Project)
+@api_router.post("/projects", status_code=201, response_model=Project)
 async def create_project(project_data: ProjectCreateRequest):
     project_id = str(uuid.uuid4())
     (PROJECTS_DIR / project_id).mkdir(exist_ok=True)
+    (PROJECTS_DIR / project_id / "files").mkdir(exist_ok=True)
     now = datetime.datetime.utcnow().isoformat()
     project = Project(id=project_id, name=project_data.name, description=project_data.description, created_at=now, updated_at=now)
     write_project(project_id, project)
     return project
 
-@app.get("/api/projects/{project_id}", response_model=Project)
+@api_router.get("/projects/{project_id}", response_model=Project)
 async def get_project_details(project_id: str):
     project = read_project(project_id)
     if not project: raise HTTPException(status_code=404, detail="Project not found")
     return project
 
-@app.put("/api/projects/{project_id}", response_model=Project)
+@api_router.put("/projects/{project_id}", response_model=Project)
 async def update_project(project_id: str, project_update: ProjectUpdateRequest):
     project = read_project(project_id)
     if not project: raise HTTPException(status_code=404, detail="Project not found")
@@ -175,13 +177,13 @@ async def update_project(project_id: str, project_update: ProjectUpdateRequest):
     write_project(project_id, project)
     return project
 
-@app.delete("/api/projects/{project_id}", status_code=204)
+@api_router.delete("/projects/{project_id}", status_code=204)
 async def delete_project(project_id: str):
     project_dir = PROJECTS_DIR / project_id
     if not project_dir.is_dir(): raise HTTPException(status_code=404, detail="Project not found")
     shutil.rmtree(project_dir)
 
-@app.delete("/api/projects/{project_id}/file", response_model=Project)
+@api_router.delete("/projects/{project_id}/file", response_model=Project)
 async def delete_project_file(project_id: str):
     project = read_project(project_id)
     if not project: raise HTTPException(status_code=404, detail="Project not found")
@@ -200,7 +202,7 @@ async def delete_project_file(project_id: str):
     return project
 
 # --- Project File & Validation Operations ---
-@app.post("/api/projects/{project_id}/upload")
+@api_router.post("/projects/{project_id}/upload")
 async def upload_file_to_project(project_id: str, file: UploadFile = File(...)):
     project = read_project(project_id)
     if not project: raise HTTPException(status_code=404, detail="Project not found")
@@ -229,7 +231,7 @@ async def upload_file_to_project(project_id: str, file: UploadFile = File(...)):
     write_project(project_id, project)
     return file_info
 
-@app.post("/api/projects/{project_id}/select-sheet")
+@api_router.post("/projects/{project_id}/select-sheet")
 async def select_project_sheet(project_id: str, request: SheetSelectRequest):
     project = read_project(project_id)
     if not project or not project.files: raise HTTPException(status_code=404, detail="Project or file not found")
@@ -243,7 +245,7 @@ async def select_project_sheet(project_id: str, request: SheetSelectRequest):
     df = pd.read_excel(file_path, sheet_name=request.sheetName)
     return {"columns": df.columns.tolist()}
 
-@app.post("/api/projects/{project_id}/validate")
+@api_router.post("/projects/{project_id}/validate")
 async def validate_project_data(project_id: str, request: ValidationRequest):
     project = read_project(project_id)
     if not project or not project.files: raise HTTPException(status_code=404, detail="Project or file not found")
@@ -277,15 +279,15 @@ async def validate_project_data(project_id: str, request: ValidationRequest):
     return {"total_rows": len(df), "error_rows_count": len({e["row"] for e in errors}), "errors": errors}
 
 # --- Rule & Template Library ---
-@app.get("/api/rules")
+@api_router.get("/rules")
 async def get_all_rules():
     return [{"id": data["id"], "name": data["name"], "description": data["description"], "is_configurable": data["is_configurable"]} for data in RULE_REGISTRY.values()]
 
-@app.get("/api/templates", response_model=List[Template])
+@api_router.get("/templates", response_model=List[Template])
 async def get_templates():
     return read_templates()
 
-@app.post("/api/templates", response_model=Template, status_code=201)
+@api_router.post("/templates", response_model=Template, status_code=201)
 async def create_template(template: Template):
     templates = read_templates()
     if any(t.name.lower() == template.name.lower() for t in templates):
@@ -294,7 +296,7 @@ async def create_template(template: Template):
     write_templates(templates)
     return template
 
-@app.put("/api/templates/{template_id}", response_model=Template)
+@api_router.put("/templates/{template_id}", response_model=Template)
 async def update_template(template_id: str, template_update: Template):
     templates = read_templates()
     template_index = next((i for i, t in enumerate(templates) if t.id == template_id), -1)
@@ -306,45 +308,46 @@ async def update_template(template_id: str, template_update: Template):
     write_templates(templates)
     return template_update
 
-@app.delete("/api/templates/{template_id}", status_code=204)
+@api_router.delete("/templates/{template_id}", status_code=204)
 async def delete_template(template_id: str):
     templates = read_templates()
     if not any(t.id == template_id for t in templates):
         raise HTTPException(status_code=404, detail="Template not found.")
     write_templates([t for t in templates if t.id != template_id])
 
-@app.post("/api/templates/find-matches", response_model=List[Template])
+@api_router.post("/templates/find-matches", response_model=List[Template])
 async def find_matching_templates(request: MatchRequest):
     templates = read_templates()
     request_columns_set = set(request.columns)
     return [t for t in templates if set(t.columns) == request_columns_set]
 
 # ==============================================================================
-# 5. Static Files & HTML Routes
+# 5. App Setup (Main, Static, HTML)
 # ==============================================================================
+app.include_router(api_router, prefix="/api") # This is the correct way
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
-@app.get("/")
+@app.get("/", response_class=FileResponse)
 async def read_root():
-    return FileResponse(STATIC_DIR / "index.html")
+    return STATIC_DIR / "index.html"
 
-@app.get("/projects/{project_id}")
+@app.get("/projects/{project_id}", response_class=FileResponse)
 async def read_project_page(project_id: str):
     if not (PROJECTS_DIR / project_id).is_dir():
         raise HTTPException(status_code=404, detail="Project not found")
-    return FileResponse(STATIC_DIR / "project.html")
+    return STATIC_DIR / "project.html"
 
-@app.get("/rules")
+@app.get("/rules", response_class=FileResponse)
 async def read_rules_page():
-    return FileResponse(STATIC_DIR / "rules.html")
+    return STATIC_DIR / "rules.html"
 
-@app.get("/templates")
+@app.get("/templates", response_class=FileResponse)
 async def read_templates_page():
-    return FileResponse(STATIC_DIR / "templates.html")
+    return STATIC_DIR / "templates.html"
 
-@app.get("/templates/edit/{template_id}")
+@app.get("/templates/edit/{template_id}", response_class=FileResponse)
 async def read_edit_template_page(template_id: str):
-    return FileResponse(STATIC_DIR / "edit_template.html")
+    return STATIC_DIR / "edit_template.html"
 
 # ==============================================================================
 # 6. Startup Logic
