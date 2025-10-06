@@ -1,8 +1,3 @@
-import sys
-# This is a diagnostic "bomb". If the server starts normally,
-# it means this file is NOT the one being executed.
-sys.exit("--- SUCCESS: The correct main.py is being executed. The problem is deeper. ---")
-
 import os
 import importlib.util
 from pathlib import Path
@@ -185,6 +180,24 @@ async def delete_project(project_id: str):
     project_dir = PROJECTS_DIR / project_id
     if not project_dir.is_dir(): raise HTTPException(status_code=404, detail="Project not found")
     shutil.rmtree(project_dir)
+
+@app.delete("/api/projects/{project_id}/file", response_model=Project)
+async def delete_project_file(project_id: str):
+    project = read_project(project_id)
+    if not project: raise HTTPException(status_code=404, detail="Project not found")
+    if not project.files: raise HTTPException(status_code=400, detail="No file to delete")
+
+    file_info = project.files[0]
+    project_files_dir = PROJECTS_DIR / project_id / "files"
+    file_path = project_files_dir / file_info['saved_name']
+
+    if file_path.exists():
+        file_path.unlink()
+
+    project.files = []
+    project.rules = {}
+    write_project(project_id, project)
+    return project
 
 # --- Project File & Validation Operations ---
 @app.post("/api/projects/{project_id}/upload")
