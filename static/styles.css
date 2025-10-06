@@ -710,3 +710,128 @@ p {
 .toast.error {
     background-color: #e74c3c;
 }
+
+/* --- Styles for Project List Page --- */
+
+.projects-container {
+    max-width: 1100px; /* Make container wider */
+    text-align: left; /* Align content to the left */
+}
+
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 30px;
+    flex-wrap: wrap; /* Responsive wrapping */
+    gap: 20px;
+}
+
+.page-header h1 {
+    margin: 0;
+}
+
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 25px;
+}
+
+.header-actions .nav-links {
+    display: flex;
+    gap: 20px;
+}
+
+.header-actions .nav-link {
+    text-decoration: none;
+    color: #566573;
+    font-weight: 500;
+    padding-bottom: 5px;
+    border-bottom: 2px solid transparent;
+    transition: color 0.3s, border-bottom-color 0.3s;
+}
+
+.header-actions .nav-link:hover {
+    color: #2c3e50;
+    border-bottom-color: #27ae60;
+}
+
+.header-actions .action-button {
+    margin-top: 0; /* Override default margin */
+}
+
+#projects-list-container {
+    background-color: #fff;
+    /* The container already has a shadow, so we might not need another one here,
+       but if we remove the padding from .container, we'd add it here with a border-radius */
+}
+
+.projects-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+}
+
+.projects-table th,
+.projects-table td {
+    padding: 15px 20px;
+    text-align: left;
+    border-bottom: 1px solid #e7eaec;
+}
+
+.projects-table thead th {
+    background-color: #f8f9fa;
+    color: #566573;
+    font-weight: 600;
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.projects-table tbody tr {
+    transition: background-color 0.2s ease-in-out;
+}
+
+.projects-table tbody tr:hover {
+    background-color: #f9fafb;
+}
+
+.projects-table .project-name {
+    font-weight: 600;
+    color: #2c3e50;
+}
+
+.projects-table .project-description {
+    color: #7f8c8d;
+    max-width: 300px; /* Prevent long descriptions from breaking layout */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.projects-table .project-actions button {
+    background-color: #f0f2f5;
+    color: #566573;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 500;
+    font-size: 14px;
+    transition: background-color 0.2s, color 0.2s;
+    margin-right: 5px;
+}
+
+.projects-table .project-actions button:hover {
+    background-color: #e4e6e9;
+    color: #2c3e50;
+}
+
+.projects-table .project-actions .delete-btn {
+    background-color: transparent;
+}
+
+.projects-table .project-actions .delete-btn:hover {
+    background-color: #fbe2e2;
+    color: #c0392b;
+}
