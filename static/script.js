@@ -123,16 +123,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: JSON.stringify(payload),
             });
 
+            const result = await response.json();
+
             if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.detail || 'Не удалось создать проект');
+                // Display server error directly
+                throw new Error(result.detail || 'Неизвестная ошибка сервера');
             }
 
-            const newProject = await response.json();
-            showNotification('Проект успешно создан! Перенаправление...', 'success');
-
-            // Redirect to the new project's page
-            window.location.href = `/projects/${newProject.id}`;
+            // On success, show the success message from the server
+            showNotification(result.message, 'success');
+            closeCreateProjectModal();
+            // We do NOT refresh the project list for this atomic test.
+            // await fetchAndRenderProjects();
 
         } catch (error) {
             showNotification(error.message, 'error');
