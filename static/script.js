@@ -77,13 +77,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const row = document.createElement('tr');
             row.dataset.projectId = project.id;
             row.innerHTML = `
-                <td><a href="/projects/${project.id}" class="project-link">${project.name}</a></td>
-                <td>${project.description || '---'}</td>
+                <td class="project-name"><a href="/projects/${project.id}" class="project-link">${project.name}</a></td>
+                <td class="project-description">${project.description || '---'}</td>
                 <td>${project.size_kb} KB</td>
                 <td>${formatDate(project.updated_at)}</td>
                 <td class="project-actions">
                     <button class="edit-project-btn" data-project-id="${project.id}" data-project-name="${project.name}" data-project-description="${project.description || ''}">Редактировать</button>
-                    <button class="delete-project-btn" data-project-id="${project.id}" data-project-name="${project.name}">Удалить</button>
+                    <button class="delete-project-btn delete-btn" data-project-id="${project.id}" data-project-name="${project.name}">Удалить</button>
                 </td>
             `;
             projectsTbody.appendChild(row);
