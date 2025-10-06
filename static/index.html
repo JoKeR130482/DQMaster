@@ -3,83 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DQMaster - Мои проекты</title>
-    <link rel="stylesheet" href="/static/styles.css">
+    <title>Тест "Чистый лист"</title>
+    <style>
+        body { font-family: sans-serif; display: grid; place-content: center; text-align: center; min-height: 100vh; }
+        button { font-size: 1.2rem; padding: 10px 20px; }
+        .toast { position: fixed; top: 20px; right: 20px; padding: 15px; border-radius: 5px; color: white; transition: opacity 0.3s; }
+        .toast.success { background-color: #27ae60; }
+        .toast.error { background-color: #e74c3c; }
+    </style>
 </head>
 <body>
-    <div class="container">
-        <header class="page-header">
-            <h1>📁 Мои проекты</h1>
-            <div class="header-actions">
-                <a href="/rules" class="nav-link">Библиотека правил</a>
-                <a href="/templates" class="nav-link">Шаблоны</a>
-                <button id="create-project-btn" class="action-button">Создать проект</button>
-            </div>
-        </header>
-
-        <div id="loading" class="loading-spinner" style="display: none;"></div>
-
-        <div id="projects-list-container">
-            <table class="projects-table">
-                <thead>
-                    <tr>
-                        <th>Название</th>
-                        <th>Описание</th>
-                        <th>Размер</th>
-                        <th>Последнее изменение</th>
-                        <th>Действия</th>
-                    </tr>
-                </thead>
-                <tbody id="projects-tbody">
-                    <!-- Project rows will be injected here by JS -->
-                </tbody>
-            </table>
-            <p id="no-projects-message" style="display: none;">Проектов пока нет. Создайте первый!</p>
-        </div>
-    </div>
-
-    <!-- Modal for creating a new project -->
-    <div id="create-project-modal" class="modal-overlay" style="display: none;">
-        <div class="modal-content">
-            <h2>Создать новый проект</h2>
-            <div class="form-group">
-                <label for="project-name-input">Название проекта</label>
-                <input type="text" id="project-name-input" placeholder="Например, 'Анализ клиентов Q3'">
-            </div>
-            <div class="form-group">
-                <label for="project-description-input">Описание (необязательно)</label>
-                <textarea id="project-description-input" rows="3" placeholder="Краткое описание целей проекта"></textarea>
-            </div>
-            <div class="modal-actions">
-                <button id="cancel-create-project-btn" class="secondary-button">Отмена</button>
-                <button id="confirm-create-project-btn" class="action-button">Создать</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Modal for editing a project -->
-    <div id="edit-project-modal" class="modal-overlay" style="display: none;">
-        <div class="modal-content">
-            <h2>Редактировать проект</h2>
-            <input type="hidden" id="edit-project-id">
-            <div class="form-group">
-                <label for="edit-project-name-input">Название проекта</label>
-                <input type="text" id="edit-project-name-input">
-            </div>
-            <div class="form-group">
-                <label for="edit-project-description-input">Описание (необязательно)</label>
-                <textarea id="edit-project-description-input" rows="3"></textarea>
-            </div>
-            <div class="modal-actions">
-                <button id="cancel-edit-project-btn" class="secondary-button">Отмена</button>
-                <button id="confirm-edit-project-btn" class="action-button">Сохранить</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Notification Toast -->
-    <div id="notification-toast" class="toast"></div>
-
+    <h1>Тест "Чистый лист"</h1>
+    <p>Нажмите кнопку, чтобы проверить базовую работу сервера.</p>
+    <button id="create-test-folder-btn">Создать папку TEST</button>
+    <div id="notification-toast" class="toast" style="opacity: 0;"></div>
     <script src="/static/script.js"></script>
 </body>
 </html>
