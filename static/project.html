@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Проект - DQMaster</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div class="container">
+        <header class="page-header">
+            <h1 id="project-name-header">Загрузка проекта...</h1>
+            <div class="header-actions">
+                 <a href="/" class="nav-link">← К списку проектов</a>
+            </div>
+        </header>
+
+        <div id="project-content">
+            <div id="file-display-container" style="display: none;">
+                <p>Загруженный файл: <strong id="file-name-display"></strong></p>
+                <button id="delete-file-btn" class="secondary-button danger">Удалить файл</button>
+            </div>
+
+            <div id="upload-section">
+                <p>Выберите файл для анализа.</p>
+                <div class="upload-container">
+                    <input type="file" id="fileInput" accept=".xlsx, .xls" class="file-input">
+                    <label for="fileInput" class="file-label">Выберите файл...</label>
+                </div>
+            </div>
+
+            <div id="loading" class="loading-spinner" style="display: none;"></div>
+
+            <!-- Container for template suggestions -->
+            <div id="template-suggestion-container" class="suggestion-container" style="display: none;">
+                <h3>Найдены подходящие шаблоны!</h3>
+                <p>Хотите применить один из них?</p>
+                <div id="template-suggestions-list"></div>
+                <button id="skip-templates-btn" class="secondary-button">Нет, настроить вручную</button>
+            </div>
+
+            <!-- Container for column configuration -->
+            <div id="columns-config-container" class="result-container" style="display: none;">
+                <div class="config-header">
+                    <h2>Настройте правила для колонок:</h2>
+                    <button id="save-template-btn" class="secondary-button">Сохранить как шаблон</button>
+                </div>
+                <div id="columns-list">
+                    <!-- Column configurations will be injected here by JS -->
+                </div>
+                <button id="validateButton" class="action-button">Запустить проверку</button>
+            </div>
+
+            <!-- Container for displaying validation results -->
+            <div id="validation-results-container" style="display: none;">
+                <h3>Результаты проверки:</h3>
+                <div id="golden-record-stats"></div>
+                <div id="summary-results"></div>
+                <div id="detailed-results"></div>
+            </div>
+
+            <div id="error-container" class="error-container"></div>
+        </div>
+    </div>
+
+    <!-- All modals from the original implementation -->
+    <div id="save-template-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <h2>Сохранить шаблон</h2>
+            <p>Введите имя для вашего нового шаблона.</p>
+            <input type="text" id="template-name-input" placeholder="Например, 'Ежемесячный отчет'">
+            <div class="modal-actions">
+                <button id="cancel-save-btn" class="secondary-button">Отмена</button>
+                <button id="confirm-save-btn" class="action-button">Сохранить</button>
+            </div>
+        </div>
+    </div>
+    <div id="sheet-select-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <h2>Выберите лист для проверки</h2>
+            <p>Ваш файл содержит несколько листов. Пожалуйста, выберите, какой из них вы хотите проверить.</p>
+            <div id="sheet-list" class="sheet-list"></div>
+        </div>
+    </div>
+    <div id="rule-config-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <h2 id="rule-config-title">Настроить правило</h2>
+            <div id="rule-config-form"></div>
+            <div class="modal-actions">
+                <button id="cancel-rule-config-btn" class="secondary-button">Отмена</button>
+                <button id="confirm-rule-config-btn" class="action-button">Применить</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification Toast -->
+    <div id="notification-toast" class="toast"></div>
+
+    <script src="/static/js/project.js"></script>
+</body>
+</html>
