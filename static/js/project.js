@@ -99,10 +99,7 @@ document.addEventListener('DOMContentLoaded', () => {
         sheetItem.className = 'sheet-item';
         sheetItem.dataset.sheetId = sheet.id;
         sheetItem.innerHTML = `
-            <label>
-                <input type="checkbox" class="toggle-sheet-active" ${sheet.is_active ? 'checked' : ''}>
-                <span class="sheet-name">${sheet.name}</span>
-            </label>
+            <label><input type="checkbox" class="toggle-sheet-active" ${sheet.is_active ? 'checked' : ''}><span class="sheet-name">${sheet.name}</span></label>
             <button class="configure-sheet-btn">${state.selectedSheetId === sheet.id ? 'Скрыть настройки' : 'Настроить поля'}</button>
         `;
         if (state.selectedSheetId === sheet.id) {
@@ -146,11 +143,11 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>`;
         const rulesList = fieldCard.querySelector('.rules-list');
         const sortedRules = [...field.rules].sort((a, b) => a.order - b.order);
-        sortedRules.forEach(rule => rulesList.appendChild(renderRule(fileId, sheetId, field.id, rule)));
+        sortedRules.forEach(rule => rulesList.appendChild(renderRule(rule)));
         return fieldCard;
     }
 
-    function renderRule(fileId, sheetId, fieldId, rule) {
+    function renderRule(rule) {
         const ruleItem = document.createElement('div');
         ruleItem.className = 'rule-item';
         ruleItem.dataset.ruleId = rule.id;
@@ -186,7 +183,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- 6. EVENT HANDLERS & LOGIC ---
-    function findElement(path) {
+    function findElements(path) {
         const [fileId, sheetId, fieldId, ruleId] = path;
         const file = state.project.files.find(f => f.id === fileId);
         if (!file || !sheetId) return { file };
@@ -216,7 +213,7 @@ document.addEventListener('DOMContentLoaded', () => {
             state.project.files = state.project.files.filter(f => f.id !== fileId);
             modified = true;
         } else if (target.closest('.toggle-sheet-active')) {
-            const { sheet } = findElement([fileId, sheetId]);
+            const { sheet } = findElements([fileId, sheetId]);
             if(sheet) { sheet.is_active = !sheet.is_active; modified = true; }
         } else if (target.closest('.configure-sheet-btn')) {
             state.selectedSheetId = state.selectedSheetId === sheetId ? null : sheetId;
@@ -224,28 +221,28 @@ document.addEventListener('DOMContentLoaded', () => {
             const input = target.previousElementSibling;
             const name = input.value.trim();
             if (name) {
-                const { sheet } = findElement([fileId, target.closest('.sheet-item').dataset.sheetId]);
+                const { sheet } = findElements([fileId, target.closest('.sheet-item').dataset.sheetId]);
                 if(sheet) { sheet.fields.push({ id: newId(), name, is_required: false, rules: [] }); input.value = ''; modified = true; }
             }
         } else if (target.closest('.remove-field-btn')) {
-            const { sheet } = findElement([fileId, sheetId, fieldId]);
+            const { sheet } = findElements([fileId, sheetId, fieldId]);
             if(sheet) { sheet.fields = sheet.fields.filter(f => f.id !== fieldId); modified = true; }
         } else if (target.closest('.toggle-field-required')) {
-            const { field } = findElement([fileId, sheetId, fieldId]);
+            const { field } = findElements([fileId, sheetId, fieldId]);
             if(field) { field.is_required = !field.is_required; modified = true; }
         } else if (target.closest('.add-rule-btn')) {
             const form = target.closest('.add-rule-form');
             const type = form.querySelector('.add-rule-type').value;
             const value = form.querySelector('.add-rule-value').value.trim();
             if (type) {
-                const { field } = findElement([fileId, sheetId, fieldId]);
+                const { field } = findElements([fileId, sheetId, fieldId]);
                 if(field) { field.rules.push({ id: newId(), type, value: value || null, order: field.rules.length + 1 }); modified = true; }
             }
         } else if (target.closest('.remove-rule-btn')) {
-            const { field } = findElement([fileId, sheetId, fieldId, ruleId]);
+            const { field } = findElements([fileId, sheetId, fieldId, ruleId]);
             if(field) { field.rules = field.rules.filter(r => r.id !== ruleId); modified = true; }
         } else if (target.closest('.move-rule-up-btn') || target.closest('.move-rule-down-btn')) {
-            const { field } = findElement([fileId, sheetId, fieldId, ruleId]);
+            const { field } = findElements([fileId, sheetId, fieldId, ruleId]);
             if(field) {
                 const rules = field.rules;
                 const index = rules.findIndex(r => r.id === ruleId);
