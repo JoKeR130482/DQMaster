@@ -387,3 +387,105 @@ section p {
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-sm);
 }
+
+/* --- Rules Page --- */
+.toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    padding: 1.5rem;
+    background-color: var(--white);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+}
+
+.search-input {
+    flex-grow: 1;
+    padding: 0.6rem 1rem;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--slate-300);
+    background-color: var(--white);
+    font-size: 0.9rem;
+    min-width: 250px;
+}
+.search-input:focus {
+    outline: 2px solid var(--blue-500);
+    border-color: var(--blue-500);
+}
+
+.sort-buttons {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+.sort-buttons span {
+    font-size: 0.9rem;
+    color: var(--slate-500);
+    font-weight: 500;
+}
+.sort-btn {
+    font-size: 0.85rem;
+    font-weight: 600;
+    padding: 0.5rem 1rem;
+    border: 1px solid var(--slate-200);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    background-color: var(--white);
+    color: var(--slate-700);
+}
+.sort-btn:hover {
+    background-color: var(--slate-100);
+    border-color: var(--slate-300);
+}
+
+
+.rules-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1.5rem;
+}
+
+.rule-card {
+    background-color: var(--white);
+    border: 1px solid var(--slate-200);
+    border-radius: var(--radius-lg);
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    box-shadow: var(--shadow-sm);
+    transition: all 0.2s ease-in-out;
+}
+
+.rule-card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-md);
+    border-color: var(--slate-300);
+}
+
+.rule-name {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--slate-900);
+}
+
+.rule-description {
+    font-size: 0.9rem;
+    color: var(--slate-500);
+    line-height: 1.5;
+    flex-grow: 1; /* Pushes the ID to the bottom */
+}
+
+.rule-id {
+    font-family: monospace;
+    font-size: 0.8rem;
+    background-color: var(--slate-100);
+    color: var(--slate-500);
+    padding: 0.25rem 0.5rem;
+    border-radius: var(--radius-md);
+    align-self: flex-start; /* Aligns the badge to the left */
+}
