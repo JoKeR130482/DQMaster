@@ -114,10 +114,7 @@ document.addEventListener('DOMContentLoaded', () => {
         configContainer.innerHTML = `
             <h5>Поля листа "${sheet.name}"</h5>
             <div class="fields-list"></div>
-            <div class="add-field-form">
-                <input type="text" class="add-field-input" placeholder="Имя нового поля...">
-                <button class="add-field-btn add-btn"><i data-lucide="plus"></i></button>
-            </div>`;
+            `;
         const fieldsList = configContainer.querySelector('.fields-list');
         sheet.fields.forEach(field => fieldsList.appendChild(renderField(fileId, sheet.id, field)));
         return configContainer;
@@ -217,13 +214,6 @@ document.addEventListener('DOMContentLoaded', () => {
             if(sheet) { sheet.is_active = !sheet.is_active; modified = true; }
         } else if (target.closest('.configure-sheet-btn')) {
             state.selectedSheetId = state.selectedSheetId === sheetId ? null : sheetId;
-        } else if (target.closest('.add-field-btn')) {
-            const input = target.previousElementSibling;
-            const name = input.value.trim();
-            if (name) {
-                const { sheet } = findElements([fileId, target.closest('.sheet-item').dataset.sheetId]);
-                if(sheet) { sheet.fields.push({ id: newId(), name, is_required: false, rules: [] }); input.value = ''; modified = true; }
-            }
         } else if (target.closest('.remove-field-btn')) {
             const { sheet } = findElements([fileId, sheetId, fieldId]);
             if(sheet) { sheet.fields = sheet.fields.filter(f => f.id !== fieldId); modified = true; }
@@ -236,7 +226,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const value = form.querySelector('.add-rule-value').value.trim();
             if (type) {
                 const { field } = findElements([fileId, sheetId, fieldId]);
-                if(field) { field.rules.push({ id: newId(), type, value: value || null, order: field.rules.length + 1 }); modified = true; }
+                if(field) {
+                    field.rules.push({ id: newId(), type, value: value || null, order: field.rules.length + 1 });
+                    // Reset the form for better UX
+                    form.querySelector('.add-rule-type').value = "";
+                    form.querySelector('.add-rule-value').value = "";
+                    modified = true;
+                }
             }
         } else if (target.closest('.remove-rule-btn')) {
             const { field } = findElements([fileId, sheetId, fieldId, ruleId]);
