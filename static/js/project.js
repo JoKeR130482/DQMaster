@@ -83,7 +83,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div class="file-header">
                     <h3 class="file-name">${file.name}</h3>
                     <div class="file-actions">
-                        <button class="remove-file-btn" title="Удалить файл"><i data-lucide="trash-2"></i></button>
+                    <button class="btn btn-icon danger remove-file-btn" title="Удалить файл"><i data-lucide="trash-2"></i></button>
                     </div>
                 </div>
                 <div class="sheets-list"></div>
@@ -129,14 +129,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 <span class="field-name">${field.name}</span>
                 <div class="field-actions">
                     <label><input type="checkbox" class="toggle-field-required" ${field.is_required ? 'checked' : ''}><span class="text-sm">Обязательное</span></label>
-                    <button class="remove-field-btn"><i data-lucide="trash-2"></i></button>
+                    <button class="btn btn-icon danger remove-field-btn" title="Удалить поле"><i data-lucide="trash-2"></i></button>
                 </div>
             </div>
             <div class="rules-list"></div>
             <div class="add-rule-form">
                 <select class="add-rule-type"><option value="">-- Выбрать правило --</option>${state.availableRules.map(r => `<option value="${r.id}">${r.name}</option>`).join('')}</select>
                 <input type="text" class="add-rule-value" placeholder="Параметр (если нужно)">
-                <button class="add-rule-btn add-btn"><i data-lucide="plus"></i></button>
+                <button class="btn btn-primary add-rule-btn" title="Добавить правило"><i data-lucide="plus"></i></button>
             </div>`;
         const rulesList = fieldCard.querySelector('.rules-list');
         const sortedRules = [...field.rules].sort((a, b) => a.order - b.order);
@@ -155,9 +155,9 @@ document.addEventListener('DOMContentLoaded', () => {
         ruleItem.innerHTML = `
             <span class="rule-name">${ruleName}${ruleValue}</span>
             <div class="rule-actions">
-                <button class="move-rule-up-btn"><i data-lucide="arrow-up"></i></button>
-                <button class="move-rule-down-btn"><i data-lucide="arrow-down"></i></button>
-                <button class="remove-rule-btn"><i data-lucide="trash-2"></i></button>
+                <button class="btn btn-icon move-rule-up-btn" title="Переместить вверх"><i data-lucide="arrow-up"></i></button>
+                <button class="btn btn-icon move-rule-down-btn" title="Переместить вниз"><i data-lucide="arrow-down"></i></button>
+                <button class="btn btn-icon danger remove-rule-btn" title="Удалить правило"><i data-lucide="trash-2"></i></button>
             </div>`;
         return ruleItem;
     }

@@ -153,22 +153,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div class="form-group"><input type="text" value="${escapeHTML(project.name)}" class="card-title-input" name="name"></div>
                 <div class="form-group"><textarea class="card-description-input" name="description" rows="3">${escapeHTML(project.description)}</textarea></div>
                 <div class="card-footer"><div class="card-actions">
-                    <button class="save-btn" title="Сохранить"><i data-lucide="save"></i></button>
-                    <button class="cancel-btn" title="Отмена"><i data-lucide="x"></i></button>
+                    <button class="btn btn-icon save-btn" title="Сохранить"><i data-lucide="save"></i></button>
+                    <button class="btn btn-icon cancel-btn" title="Отмена"><i data-lucide="x"></i></button>
                 </div></div>
             </div>` : `
             <div class="card-content">
                 <div class="card-header">
                     <h3 class="card-title">${escapeHTML(project.name)}</h3>
                     <div class="card-actions">
-                        <button class="edit-btn" title="Редактировать"><i data-lucide="edit"></i></button>
-                        <button class="delete-btn" title="Удалить"><i data-lucide="trash-2"></i></button>
+                        <button class="btn btn-icon edit-btn" title="Редактировать"><i data-lucide="edit"></i></button>
+                        <button class="btn btn-icon danger delete-btn" title="Удалить"><i data-lucide="trash-2"></i></button>
                     </div>
                 </div>
                 <p class="card-description">${escapeHTML(project.description || 'Нет описания.')}</p>
                 <div class="card-footer">
                     <span class="card-size-badge">${project.size_kb.toFixed(2)} KB</span>
-                    <button class="card-run-btn"><i data-lucide="play"></i><span>Запустить</span></button>
+                    <button class="btn btn-success card-run-btn"><i data-lucide="play"></i><span>Запустить</span></button>
                 </div>
             </div>`;
         return card;
@@ -187,17 +187,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
             </td>
             <td class="table-actions">
-                <button class="save-btn" title="Сохранить"><i data-lucide="save"></i></button>
-                <button class="cancel-btn" title="Отмена"><i data-lucide="x"></i></button>
+                <button class="btn btn-icon save-btn" title="Сохранить"><i data-lucide="save"></i></button>
+                <button class="btn btn-icon cancel-btn" title="Отмена"><i data-lucide="x"></i></button>
             </td>` : `
             <td class="project-name">${escapeHTML(project.name)}</td>
             <td><div class="description-cell">${escapeHTML(project.description || '---')}</div></td>
             <td>${project.size_kb.toFixed(2)} KB</td>
             <td>${formatDate(project.updated_at)}</td>
             <td class="table-actions">
-                <button class="edit-btn" title="Редактировать"><i data-lucide="edit"></i></button>
-                <button class="delete-btn" title="Удалить"><i data-lucide="trash-2"></i></button>
-                <button class="run-btn" title="Запустить"><i data-lucide="play"></i></button>
+                <button class="btn btn-icon edit-btn" title="Редактировать"><i data-lucide="edit"></i></button>
+                <button class="btn btn-icon danger delete-btn" title="Удалить"><i data-lucide="trash-2"></i></button>
+                <button class="btn btn-icon run-btn" title="Запустить"><i data-lucide="play"></i></button>
             </td>`;
         return row;
     }
