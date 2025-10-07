@@ -214,6 +214,9 @@ document.addEventListener('DOMContentLoaded', () => {
             if(sheet) { sheet.is_active = !sheet.is_active; modified = true; }
         } else if (target.closest('.configure-sheet-btn')) {
             state.selectedSheetId = state.selectedSheetId === sheetId ? null : sheetId;
+            // This is a UI-only change, so render and return immediately.
+            render();
+            return;
         } else if (target.closest('.remove-field-btn')) {
             const { sheet } = findElements([fileId, sheetId, fieldId]);
             if(sheet) { sheet.fields = sheet.fields.filter(f => f.id !== fieldId); modified = true; }
