@@ -1,6 +1,6 @@
 document.addEventListener('DOMContentLoaded', () => {
 
-    // --- STATE MANAGEMENT ---
+    // --- 1. STATE MANAGEMENT ---
     const state = {
         projects: [],
         isLoading: true,
@@ -11,7 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
         showAddForm: false,
     };
 
-    // --- DOM ELEMENTS ---
+    // --- 2. DOM ELEMENTS ---
     const dom = {
         loadingSpinner: document.getElementById('loading'),
         errorContainer: document.getElementById('error-container'),
@@ -29,7 +29,7 @@ document.addEventListener('DOMContentLoaded', () => {
         notificationToast: document.getElementById('notification-toast'),
     };
 
-    // --- API HELPERS ---
+    // --- 3. API HELPERS ---
     const api = {
         getProjects: () => fetch('/api/projects'),
         createProject: (data) => fetch('/api/projects', {
@@ -45,28 +45,29 @@ document.addEventListener('DOMContentLoaded', () => {
         deleteProject: (id) => fetch(`/api/projects/${id}`, { method: 'DELETE' }),
     };
 
-    // --- UTILS ---
+    // --- 4. UTILS ---
     const formatDate = (dateString) => new Date(dateString).toLocaleDateString('ru-RU');
-    const escapeHTML = (str) => str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+    const escapeHTML = (str) => {
+        if (typeof str !== 'string') return '';
+        return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+    }
     const showNotification = (message, type = 'success') => {
         dom.notificationToast.textContent = message;
         dom.notificationToast.className = `toast ${type} show`;
         setTimeout(() => { dom.notificationToast.className = dom.notificationToast.className.replace('show', ''); }, 3000);
     };
 
-    // --- RENDER FUNCTIONS ---
+    // --- 5. RENDER FUNCTIONS ---
 
     function render() {
         dom.loadingSpinner.style.display = state.isLoading ? 'block' : 'none';
 
-        // Update view mode buttons
         dom.viewGridBtn.classList.toggle('active', state.viewMode === 'grid');
         dom.viewTableBtn.classList.toggle('active', state.viewMode === 'table');
 
-        // Filter and sort projects
         const filteredAndSortedProjects = getFilteredAndSortedProjects();
 
-        dom.projectsContainer.innerHTML = ''; // Clear previous content
+        dom.projectsContainer.innerHTML = '';
         if (filteredAndSortedProjects.length > 0) {
             dom.emptyState.style.display = 'none';
             if (state.viewMode === 'grid') {
@@ -77,8 +78,6 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             dom.emptyState.style.display = 'block';
         }
-
-        // Must re-initialize icons after every render
         lucide.createIcons();
     }
 
@@ -96,20 +95,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 const aValue = a[key];
                 const bValue = b[key];
 
-                // Handle different data types for sorting
                 if (key === 'name' || key === 'description') {
                     return (aValue || '').localeCompare(bValue || '', 'ru', { sensitivity: 'base' }) * dir;
                 }
-
                 if (key === 'created_at' || key === 'updated_at') {
                     return (new Date(aValue) - new Date(bValue)) * dir;
                 }
-
                 if (key === 'size_kb') {
-                    return (aValue - bValue) * dir;
+                    return (a.size_kb - b.size_kb) * dir;
                 }
-
-                // Fallback for any other type
                 if (aValue < bValue) return -1 * dir;
                 if (aValue > bValue) return 1 * dir;
                 return 0;
@@ -121,9 +115,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderGridView(projects) {
         const grid = document.createElement('div');
         grid.className = 'projects-grid';
-        projects.forEach(project => {
-            grid.appendChild(createProjectCard(project));
-        });
+        projects.forEach(project => grid.appendChild(createProjectCard(project)));
         dom.projectsContainer.appendChild(grid);
     }
 
@@ -145,9 +137,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <tbody></tbody>
         `;
         const tbody = table.querySelector('tbody');
-        projects.forEach(project => {
-            tbody.appendChild(createProjectRow(project));
-        });
+        projects.forEach(project => tbody.appendChild(createProjectRow(project)));
         tableWrapper.appendChild(table);
         dom.projectsContainer.appendChild(tableWrapper);
     }
@@ -156,26 +146,17 @@ document.addEventListener('DOMContentLoaded', () => {
         const card = document.createElement('div');
         card.className = 'project-card';
         card.dataset.id = project.id;
-
         const isEditing = state.editingId === project.id;
 
         card.innerHTML = isEditing ? `
             <div class="card-content">
-                <div class="form-group">
-                    <input type="text" value="${escapeHTML(project.name)}" class="card-title-input" name="name">
-                </div>
-                 <div class="form-group">
-                    <textarea class="card-description-input" name="description" rows="3">${escapeHTML(project.description || '')}</textarea>
-                </div>
-                <div class="card-footer">
-                    <div></div>
-                    <div class="card-actions">
-                        <button class="save-btn" title="Сохранить"><i data-lucide="save"></i></button>
-                        <button class="cancel-btn" title="Отмена"><i data-lucide="x"></i></button>
-                    </div>
-                </div>
-            </div>
-        ` : `
+                <div class="form-group"><input type="text" value="${escapeHTML(project.name)}" class="card-title-input" name="name"></div>
+                <div class="form-group"><textarea class="card-description-input" name="description" rows="3">${escapeHTML(project.description)}</textarea></div>
+                <div class="card-footer"><div class="card-actions">
+                    <button class="save-btn" title="Сохранить"><i data-lucide="save"></i></button>
+                    <button class="cancel-btn" title="Отмена"><i data-lucide="x"></i></button>
+                </div></div>
+            </div>` : `
             <div class="card-content">
                 <div class="card-header">
                     <h3 class="card-title">${escapeHTML(project.name)}</h3>
@@ -189,8 +170,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <span class="card-size-badge">${project.size_kb.toFixed(2)} KB</span>
                     <button class="card-run-btn"><i data-lucide="play"></i><span>Запустить</span></button>
                 </div>
-            </div>
-        `;
+            </div>`;
         return card;
     }
 
@@ -202,21 +182,14 @@ document.addEventListener('DOMContentLoaded', () => {
         row.innerHTML = isEditing ? `
             <td colspan="4">
                 <div class="form-grid" style="grid-template-columns: 1fr 2fr; gap: 1rem;">
-                    <div class="form-group">
-                       <label>Название</label>
-                       <input type="text" value="${escapeHTML(project.name)}" class="table-edit-input" name="name">
-                    </div>
-                    <div class="form-group">
-                        <label>Описание</label>
-                        <input type="text" value="${escapeHTML(project.description || '')}" class="table-edit-input" name="description">
-                    </div>
+                    <div class="form-group"><label>Название</label><input type="text" value="${escapeHTML(project.name)}" class="table-edit-input" name="name"></div>
+                    <div class="form-group"><label>Описание</label><input type="text" value="${escapeHTML(project.description)}" class="table-edit-input" name="description"></div>
                 </div>
             </td>
             <td class="table-actions">
                 <button class="save-btn" title="Сохранить"><i data-lucide="save"></i></button>
                 <button class="cancel-btn" title="Отмена"><i data-lucide="x"></i></button>
-            </td>
-        ` : `
+            </td>` : `
             <td class="project-name">${escapeHTML(project.name)}</td>
             <td><div class="description-cell">${escapeHTML(project.description || '---')}</div></td>
             <td>${project.size_kb.toFixed(2)} KB</td>
@@ -225,13 +198,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 <button class="edit-btn" title="Редактировать"><i data-lucide="edit"></i></button>
                 <button class="delete-btn" title="Удалить"><i data-lucide="trash-2"></i></button>
                 <button class="run-btn" title="Запустить"><i data-lucide="play"></i></button>
-            </td>
-        `;
+            </td>`;
         return row;
     }
 
-
-    // --- EVENT HANDLERS ---
+    // --- 6. EVENT HANDLERS & LOGIC ---
 
     function handleSort(header) {
         const key = header.dataset.sortKey;
@@ -244,22 +215,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function handleSaveEdit(id, projectItem) {
-        const nameInput = projectItem.querySelector('[name="name"]');
-        const descriptionInput = projectItem.querySelector('[name="description"]');
-        const name = nameInput.value;
-        const description = descriptionInput.value;
+        const name = projectItem.querySelector('[name="name"]').value;
+        const description = projectItem.querySelector('[name="description"]').value;
 
         try {
             const response = await api.updateProject(id, { name, description });
             if (!response.ok) throw new Error('Failed to save');
             const updatedProject = await response.json();
 
-            state.projects = state.projects.map(p => {
-                if (p.id === id) {
-                    return { ...p, ...updatedProject };
-                }
-                return p;
-            });
+            state.projects = state.projects.map(p => p.id === id ? { ...p, ...updatedProject } : p);
             state.editingId = null;
             showNotification("Проект успешно обновлен.");
             render();
@@ -273,7 +237,6 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const response = await api.deleteProject(id);
             if (!response.ok) throw new Error('Failed to delete');
-
             state.projects = state.projects.filter(p => p.id !== id);
             showNotification("Проект удален.");
             render();
@@ -285,22 +248,14 @@ document.addEventListener('DOMContentLoaded', () => {
     async function handleAddProject() {
         const name = dom.addNameInput.value.trim();
         const description = dom.addDescriptionInput.value.trim();
-        if (!name) {
-            showNotification("Название проекта не может быть пустым.", 'error');
-            return;
-        }
+        if (!name) return showNotification("Название проекта не может быть пустым.", 'error');
 
         try {
             const response = await api.createProject({ name, description });
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.detail || 'Failed to create project');
-            }
+            if (!response.ok) throw new Error((await response.json()).detail || 'Failed to create');
             const newProject = await response.json();
 
-            // The API doesn't return size_kb on creation, so we default it to 0.
-            newProject.size_kb = 0;
-
+            newProject.size_kb = 0; // Default size_kb as API doesn't return it
             state.projects.unshift(newProject);
 
             state.showAddForm = false;
@@ -311,35 +266,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
             showNotification("Проект успешно создан.");
             render();
-
         } catch (error) {
             showNotification(`Ошибка создания проекта: ${error.message}`, 'error');
         }
     }
 
-    // --- EVENT LISTENER (DISPATCHER) ---
     function setupEventListeners() {
         dom.searchInput.addEventListener('input', (e) => {
             state.searchTerm = e.target.value;
             render();
         });
-
-        dom.viewGridBtn.addEventListener('click', () => {
-            state.viewMode = 'grid';
-            render();
-        });
-
-        dom.viewTableBtn.addEventListener('click', () => {
-            state.viewMode = 'table';
-            render();
-        });
-
+        dom.viewGridBtn.addEventListener('click', () => { state.viewMode = 'grid'; render(); });
+        dom.viewTableBtn.addEventListener('click', () => { state.viewMode = 'table'; render(); });
         dom.showAddFormBtn.addEventListener('click', () => {
             state.showAddForm = true;
             dom.addProjectFormContainer.style.display = 'block';
             dom.showAddFormBtn.style.display = 'none';
         });
-
         dom.cancelAddProjectBtn.addEventListener('click', () => {
             state.showAddForm = false;
             dom.addProjectFormContainer.style.display = 'none';
@@ -347,42 +290,26 @@ document.addEventListener('DOMContentLoaded', () => {
             dom.addNameInput.value = '';
             dom.addDescriptionInput.value = '';
         });
-
         dom.addProjectBtn.addEventListener('click', handleAddProject);
 
         dom.projectsContainer.addEventListener('click', (e) => {
             const target = e.target;
-
-            // Handle sorting
             const sortHeader = target.closest('th > div[data-sort-key]');
-            if (sortHeader) {
-                handleSort(sortHeader);
-                return;
-            }
+            if (sortHeader) return handleSort(sortHeader);
 
-            // Handle actions on a project item
             const projectItem = target.closest('.project-card, tr[data-id]');
             if (!projectItem) return;
 
             const id = projectItem.dataset.id;
-
-            if (target.closest('.edit-btn')) {
-                state.editingId = id;
-                render();
-            } else if (target.closest('.cancel-btn')) {
-                state.editingId = null;
-                render();
-            } else if (target.closest('.save-btn')) {
-                handleSaveEdit(id, projectItem);
-            } else if (target.closest('.delete-btn')) {
-                handleDelete(id);
-            } else if (target.closest('.run-btn, .card-run-btn, .card-title, .project-name')) {
-                window.location.href = `/projects/${id}`;
-            }
+            if (target.closest('.edit-btn')) { state.editingId = id; render(); }
+            else if (target.closest('.cancel-btn')) { state.editingId = null; render(); }
+            else if (target.closest('.save-btn')) handleSaveEdit(id, projectItem);
+            else if (target.closest('.delete-btn')) handleDelete(id);
+            else if (target.closest('.run-btn, .card-run-btn, .card-title, .project-name')) window.location.href = `/projects/${id}`;
         });
     }
 
-    // --- INITIALIZATION ---
+    // --- 7. INITIALIZATION ---
     async function init() {
         try {
             const response = await api.getProjects();
@@ -397,7 +324,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- START ---
     setupEventListeners();
     init();
 });
