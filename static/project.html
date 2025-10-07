@@ -11,11 +11,20 @@
 <body>
     <div class="main-container">
         <!-- Project Header -->
-        <header class="page-header">
-            <h1 id="project-name-header">Загрузка...</h1>
-            <div class="header-actions">
-                <a href="/rules" class="nav-link">Библиотека правил</a>
-                <a href="/" class="nav-link">&larr; К списку проектов</a>
+        <header class="project-header">
+            <div class="project-header-title">
+                <a href="/" class="back-link" title="К списку проектов"><i data-lucide="arrow-left"></i></a>
+                <h1 id="project-name-header">Загрузка...</h1>
+            </div>
+            <div class="project-header-actions">
+                <button id="validate-btn" class="action-btn-validate">
+                    <i data-lucide="play"></i>
+                    <span>Запустить проверку</span>
+                </button>
+                <button id="save-project-btn" class="action-btn-save">
+                    <i data-lucide="save"></i>
+                    <span>Сохранить проект</span>
+                </button>
             </div>
         </header>
 
