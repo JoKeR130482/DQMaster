@@ -1,6 +1,6 @@
 /*
-  DQMaster - Project List Page Redesign
-  Replicating the look and feel of the provided React/TailwindCSS template.
+  DQMaster - Project Page Redesign
+  Styles for the new hierarchical project editor.
 */
 
 /* --- 1. Root Variables & Globals --- */
@@ -12,7 +12,9 @@
     --slate-400: #94a3b8;
     --slate-500: #64748b;
     --slate-600: #475569;
+    --slate-700: #334155;
     --slate-800: #1e293b;
+    --slate-900: #0f172a;
 
     --blue-50: #eff6ff;
     --blue-100: #dbeafe;
@@ -22,13 +24,16 @@
     --green-600: #16a34a;
     --green-700: #15803d;
 
+    --red-500: #ef4444;
     --red-600: #dc2626;
+    --red-800: #991b1b;
 
     --white: #ffffff;
 
     --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
     --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+    --radius-md: 0.375rem; /* 6px */
     --radius-lg: 0.5rem; /* 8px */
     --radius-xl: 0.75rem; /* 12px */
 }
@@ -47,573 +52,308 @@ body {
     min-height: 100vh;
 }
 
-/* --- 2. Layout & Containers --- */
+/* --- 2. Main Layout & Project Header --- */
 .main-container {
-    max-width: 1400px;
+    max-width: 1200px;
     margin: 0 auto;
     padding: 2rem;
 }
 
-.page-title-header {
+.project-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
     margin-bottom: 2rem;
 }
 
-.main-h1 {
-    font-size: 2.25rem; /* 36px */
-    font-weight: 700;
-    color: var(--slate-800);
-    margin-bottom: 0.5rem;
-}
-
-.main-p {
-    color: var(--slate-600);
-    font-size: 1rem;
-}
-
-/* --- 3. Controls Bar --- */
-.controls-bar {
-    background-color: var(--white);
-    border-radius: var(--radius-xl);
-    box-shadow: var(--shadow-lg);
-    padding: 1.5rem;
-    margin-bottom: 1.5rem;
-    border: 1px solid var(--slate-200);
+.project-header-title {
     display: flex;
-    flex-wrap: wrap;
-    gap: 1rem;
     align-items: center;
-    justify-content: space-between;
+    gap: 1rem;
 }
 
-.search-wrapper {
-    position: relative;
-    flex-grow: 1;
-    max-width: 450px;
-}
-
-.search-icon {
-    position: absolute;
-    left: 0.75rem;
-    top: 50%;
-    transform: translateY(-50%);
-    color: var(--slate-400);
-    pointer-events: none;
-}
-
-.search-input {
-    width: 100%;
-    padding: 0.5rem 1rem 0.5rem 2.5rem; /* left padding for icon */
-    border: 1px solid var(--slate-300);
-    border-radius: var(--radius-lg);
-    transition: all 0.2s ease;
-}
-.search-input:focus {
-    outline: none;
-    border-color: var(--blue-600);
-    box-shadow: 0 0 0 2px var(--blue-100);
-}
-
-.view-mode-toggle {
-    display: flex;
-    gap: 0.5rem;
-}
-
-.view-mode-btn {
-    padding: 0.5rem;
-    border-radius: var(--radius-lg);
-    border: none;
-    cursor: pointer;
-    transition: all 0.2s ease;
+.back-link {
     display: flex;
     align-items: center;
     justify-content: center;
-}
-.view-mode-btn.active {
-    background-color: var(--blue-600);
-    color: var(--white);
-}
-.view-mode-btn:not(.active) {
-    background-color: var(--slate-200);
-    color: var(--slate-600);
-}
-.view-mode-btn:not(.active):hover {
-    background-color: var(--slate-300);
-}
-
-.add-project-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    background-color: var(--blue-600);
-    color: var(--white);
-    padding: 0.5rem 1.5rem;
+    padding: 0.5rem;
+    color: var(--slate-500);
+    background-color: var(--white);
     border-radius: var(--radius-lg);
-    border: none;
-    font-weight: 500;
-    cursor: pointer;
+    box-shadow: var(--shadow-sm);
     transition: all 0.2s ease;
 }
-.add-project-btn:hover {
-    background-color: var(--blue-700);
-    box-shadow: var(--shadow-lg);
+.back-link:hover {
+    background-color: var(--slate-100);
+    color: var(--slate-800);
 }
 
-/* --- 4. Add/Edit Forms --- */
-.add-form-container {
-    background-color: var(--white);
-    border-radius: var(--radius-xl);
-    box-shadow: var(--shadow-lg);
-    padding: 1.5rem;
-    margin-bottom: 1.5rem;
-    border: 1px solid var(--slate-200);
+#project-name-header {
+    font-size: 1.875rem; /* 30px */
+    font-weight: 700;
 }
 
-.add-form-h2 {
-    font-size: 1.25rem;
-    font-weight: 600;
-    margin-bottom: 1rem;
-}
-
-.form-grid {
-    display: grid;
+.project-header-actions {
+    display: flex;
     gap: 1rem;
 }
 
-.form-group label {
-    display: block;
-    font-size: 0.875rem;
-    font-weight: 500;
-    margin-bottom: 0.25rem;
-    color: var(--slate-600);
-}
-
-.form-group input, .form-group textarea {
-    width: 100%;
-    padding: 0.5rem 1rem;
-    border: 1px solid var(--slate-300);
-    border-radius: var(--radius-lg);
-    transition: all 0.2s ease;
-}
-.form-group input:focus, .form-group textarea:focus {
-    outline: none;
-    border-color: var(--blue-600);
-    box-shadow: 0 0 0 2px var(--blue-100);
-}
-
-.form-actions {
-    margin-top: 1rem;
-    display: flex;
-    gap: 0.75rem;
-}
-
-.form-btn-save, .form-btn-cancel {
+.action-btn-validate, .action-btn-save {
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    border-radius: var(--radius-lg);
+    border: none;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: var(--shadow-lg);
+}
+.action-btn-validate {
+    background-color: var(--green-600);
+    color: var(--white);
+}
+.action-btn-validate:hover { background-color: var(--green-700); }
+
+.action-btn-save {
+    background-color: var(--blue-600);
+    color: var(--white);
+}
+.action-btn-save:hover { background-color: var(--blue-700); }
+
+/* --- 3. Sections & General Controls --- */
+.files-section, .results-section {
+    background-color: var(--white);
+    border: 1px solid var(--slate-200);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-lg);
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+}
+.section-header h2 {
+    font-size: 1.25rem;
+    font-weight: 600;
+}
+
+.add-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    background-color: var(--blue-600);
+    color: var(--white);
     padding: 0.5rem 1rem;
     border-radius: var(--radius-lg);
     border: none;
     font-weight: 500;
     cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+.add-btn:hover { background-color: var(--blue-700); }
+
+/* --- 4. File Management --- */
+.upload-form-container {
+    background-color: var(--blue-50);
+    border-radius: var(--radius-lg);
+    padding: 1rem;
+    margin-bottom: 1.5rem;
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+}
+.file-input { display: none; }
+.file-label {
+    flex-grow: 1;
+    text-align: center;
+    padding: 0.75rem;
+    border: 2px dashed var(--slate-300);
+    border-radius: var(--radius-md);
+    cursor: pointer;
     transition: all 0.2s ease;
 }
-
-.form-btn-save {
-    background-color: var(--green-600);
-    color: var(--white);
+.file-label:hover {
+    border-color: var(--blue-600);
+    background-color: var(--white);
 }
-.form-btn-save:hover { background-color: var(--green-700); }
-
-.form-btn-cancel {
+.cancel-btn {
     background-color: var(--slate-500);
     color: var(--white);
-}
-.form-btn-cancel:hover { background-color: var(--slate-600); }
-
-/* --- 5. Project Grid View --- */
-.projects-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-    gap: 1.5rem;
+    padding: 0.5rem 1rem;
+    border: none;
+    border-radius: var(--radius-lg);
+    cursor: pointer;
 }
 
-.project-card {
-    background-color: var(--white);
-    border-radius: var(--radius-xl);
-    box-shadow: var(--shadow-lg);
+.files-list-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.file-card {
     border: 1px solid var(--slate-200);
-    overflow: hidden;
-    transition: all 0.3s ease;
-    display: flex;
-    flex-direction: column;
+    border-radius: var(--radius-lg);
+    padding: 1rem;
 }
-.project-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
-}
-
-.project-card .card-content {
-    padding: 1.5rem;
-    flex-grow: 1;
-    display: flex;
-    flex-direction: column;
-}
-
-.card-header {
+.file-header {
     display: flex;
     justify-content: space-between;
-    align-items: flex-start;
+    align-items: center;
     margin-bottom: 0.75rem;
 }
-
-.card-title {
+.file-name {
     font-size: 1.125rem;
     font-weight: 600;
-    color: var(--slate-800);
-    flex-grow: 1;
-    padding-right: 1rem;
-    cursor: pointer;
 }
-
-.card-actions {
-    display: flex;
-    gap: 0.5rem;
-    flex-shrink: 0;
-}
-.card-actions button {
+.file-actions button {
     padding: 0.5rem;
-    border-radius: var(--radius-lg);
-    border: none;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    color: var(--slate-500);
-    background: none;
-}
-.card-actions button:hover {
-    color: var(--blue-600);
-    background-color: var(--blue-50);
-}
-.card-actions .delete-btn:hover {
     color: var(--red-600);
-    background-color: #fee2e2;
-}
-
-.card-description {
-    color: var(--slate-600);
-    line-height: 1.6;
-    margin-bottom: 1rem;
-    flex-grow: 1;
-}
-
-.card-footer {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-top: auto;
-}
-
-.card-size-badge {
-    display: inline-flex;
-    align-items: center;
-    padding: 0.25rem 0.75rem;
-    border-radius: 9999px;
-    font-size: 0.875rem;
-    font-weight: 500;
-    background-color: var(--blue-100);
-    color: var(--blue-700);
-}
-
-.card-run-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem 1rem;
-    border-radius: var(--radius-lg);
-    border: none;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    background-color: var(--green-600);
-    color: var(--white);
-    font-size: 0.875rem;
-}
-.card-run-btn:hover { background-color: var(--green-700); }
-
-/* Card Editing State */
-.card-content .form-group input,
-.card-content .form-group textarea {
-    font-size: 1rem;
-}
-.card-content .card-title-input {
-    font-size: 1.125rem;
-    font-weight: 600;
-}
-.card-content .card-description-input {
-    line-height: 1.6;
-}
-
-/* --- 6. Project Table View --- */
-.projects-table-wrapper {
-    background-color: var(--white);
-    border-radius: var(--radius-xl);
-    box-shadow: var(--shadow-lg);
-    border: 1px solid var(--slate-200);
-    overflow: hidden;
-}
-
-.projects-table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-.projects-table th {
-    background-color: var(--slate-50);
-    padding: 0.75rem 1.5rem;
-    text-align: left;
-    font-size: 0.75rem;
-    font-weight: 600;
-    color: var(--slate-500);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-}
-.projects-table th > div {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    cursor: pointer;
-}
-
-.projects-table td {
-    padding: 1rem 1.5rem;
-    border-bottom: 1px solid var(--slate-200);
-    font-size: 0.875rem;
-    color: var(--slate-600);
-}
-.projects-table tbody tr:last-child td {
-    border-bottom: none;
-}
-.projects-table tbody tr:hover {
-    background-color: var(--slate-50);
-}
-
-.projects-table .project-name {
-    font-weight: 500;
-    color: var(--slate-800);
-    cursor: pointer;
-}
-
-.projects-table .table-actions {
-    display: flex;
-    gap: 0.75rem;
-}
-.projects-table .table-actions button {
-    padding: 0.25rem;
-    border: none;
     background: none;
-    cursor: pointer;
-    color: var(--slate-500);
-    transition: color 0.2s ease;
-}
-.projects-table .table-actions .edit-btn:hover { color: var(--blue-600); }
-.projects-table .table-actions .delete-btn:hover { color: var(--red-600); }
-.projects-table .table-actions .run-btn:hover { color: var(--green-600); }
-.projects-table .table-actions .save-btn:hover { color: var(--green-600); }
-.projects-table .table-actions .cancel-btn:hover { color: var(--slate-800); }
-
-
-/* Table Editing State */
-.projects-table .table-edit-input {
-    width: 100%;
-    padding: 0.25rem 0.5rem;
-    border: 1px solid var(--slate-300);
-    border-radius: var(--radius-lg);
-}
-
-
-/* --- 7. Empty State --- */
-#empty-state {
-    text-align: center;
-    padding: 3rem 0;
-}
-.empty-state-icon-box {
-    width: 4rem;
-    height: 4rem;
-    background-color: var(--slate-200);
-    border: 2px dashed var(--slate-300);
-    border-radius: var(--radius-xl);
-    margin: 0 auto 1rem auto;
-}
-.empty-state-h3 {
-    font-size: 1.25rem;
-    font-weight: 600;
-    margin-bottom: 0.5rem;
-}
-.empty-state-p {
-    color: var(--slate-600);
-}
-
-/* --- 8. Utilities (Loading, Toast) --- */
-.loading-spinner {
-    border: 4px solid var(--slate-200);
-    border-top: 4px solid var(--blue-600);
-    border-radius: 50%;
-    width: 40px;
-    height: 40px;
-    animation: spin 0.8s linear infinite;
-    margin: 4rem auto;
-}
-@keyframes spin { 100% { transform: rotate(360deg); } }
-
-.toast {
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    padding: 1rem 1.5rem;
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-lg);
-    z-index: 2000;
-    color: var(--white);
-    background-color: var(--slate-800);
-    font-weight: 500;
-    visibility: hidden;
-    opacity: 0;
-    transition: all 0.3s ease;
-    transform: translateY(20px);
-}
-.toast.show {
-    visibility: visible;
-    opacity: 1;
-    transform: translateY(0);
-}
-.toast.success { background-color: var(--green-600); }
-.toast.error { background-color: var(--red-600); }
-
-/* --- Styles for other pages --- */
-.page-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 1.5rem 2rem;
-    background-color: var(--white);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-sm);
-    margin-bottom: 2rem;
-}
-.page-header h1 {
-    font-size: 1.5rem;
-    font-weight: 600;
-    color: var(--slate-900);
-}
-.header-actions .nav-link {
-    font-size: 0.9rem;
-    font-weight: 500;
-    color: var(--slate-500);
-    text-decoration: none;
-    transition: color 0.2s ease;
-}
-.header-actions .nav-link:hover {
-    color: var(--blue-600);
-}
-
-.toolbar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 1rem;
-    padding: 1.5rem;
-    background-color: var(--white);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-sm);
-    margin-bottom: 2rem;
-    flex-wrap: wrap;
-}
-
-.sort-buttons {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-}
-.sort-buttons span {
-    font-size: 0.9rem;
-    color: var(--slate-500);
-    font-weight: 500;
-}
-.sort-btn {
-    font-size: 0.85rem;
-    font-weight: 600;
-    padding: 0.5rem 1rem;
-    border: 1px solid var(--slate-200);
+    border: none;
     border-radius: var(--radius-md);
     cursor: pointer;
-    transition: all 0.2s ease;
-    background-color: var(--white);
+    transition: background-color 0.2s ease;
+}
+.file-actions button:hover { background-color: #fee2e2; }
+
+/* --- 5. Sheet & Field Configuration --- */
+.sheets-list {
+    margin-left: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    border-left: 2px solid var(--slate-200);
+    padding-left: 1rem;
+}
+.sheet-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+.sheet-item label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+}
+.sheet-item input[type="checkbox"] {
+    width: 1rem;
+    height: 1rem;
+    border-radius: var(--radius-md);
+    border-color: var(--slate-300);
+    color: var(--blue-600);
+    cursor: pointer;
+}
+.sheet-item .sheet-name {
+    font-size: 0.9rem;
     color: var(--slate-700);
 }
-.sort-btn:hover {
-    background-color: var(--slate-100);
-    border-color: var(--slate-300);
+.configure-sheet-btn {
+    font-size: 0.8rem;
+    color: var(--blue-600);
+    background: none;
+    border: none;
+    cursor: pointer;
 }
+.configure-sheet-btn:hover { text-decoration: underline; }
 
-
-.rules-list {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: 1.5rem;
-}
-
-.rule-card {
-    background-color: var(--white);
-    border: 1px solid var(--slate-200);
+.fields-config-container {
+    margin-top: 1rem;
+    margin-left: 1rem;
+    padding: 1rem;
+    background-color: var(--slate-50);
     border-radius: var(--radius-lg);
-    padding: 1.5rem;
+}
+.fields-config-container h5 {
+    font-weight: 600;
+    margin-bottom: 1rem;
+}
+.fields-list {
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
-    box-shadow: var(--shadow-sm);
-    transition: all 0.2s ease-in-out;
 }
-
-.rule-card:hover {
-    transform: translateY(-4px);
-    box-shadow: var(--shadow-lg);
-    border-color: var(--slate-300);
+.field-card {
+    background-color: var(--white);
+    border: 1px solid var(--slate-200);
+    border-radius: var(--radius-md);
+    padding: 0.75rem;
 }
-
-.rule-name {
-    font-size: 1.1rem;
-    font-weight: 600;
-    color: var(--slate-900);
+.field-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
 }
+.field-header .field-name { font-weight: 600; }
+.field-header label { font-size: 0.8rem; cursor: pointer;}
+.field-header button { color: var(--red-600); }
 
-.rule-description {
-    font-size: 0.9rem;
-    color: var(--slate-500);
-    line-height: 1.5;
-    flex-grow: 1; /* Pushes the ID to the bottom */
+.rules-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
 }
-
-.rule-id {
-    font-family: monospace;
-    font-size: 0.8rem;
+.rule-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
     background-color: var(--slate-100);
+    padding: 0.5rem;
+    border-radius: var(--radius-md);
+    font-size: 0.8rem;
+}
+.rule-item .rule-name { flex-grow: 1; }
+.rule-item .rule-actions { display:flex; gap: 0.25rem; }
+.rule-item .rule-actions button {
     color: var(--slate-500);
-    padding: 0.25rem 0.5rem;
+    padding: 0.25rem;
+}
+.rule-item .rule-actions button:hover { color: var(--slate-800); }
+
+.add-rule-form, .add-field-form {
+    margin-top: 1rem;
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+.add-rule-form select, .add-rule-form input, .add-field-form input {
+    padding: 0.4rem;
+    border: 1px solid var(--slate-300);
     border-radius: var(--radius-md);
-    align-self: flex-start; /* Aligns the badge to the left */
+    font-size: 0.8rem;
+}
+.add-rule-form .add-btn, .add-field-form .add-btn {
+    padding: 0.4rem;
 }
 
-.error-container {
-    background-color: #fee2e2;
-    color: var(--red-800);
-    padding: 1rem;
-    border-radius: var(--radius-lg);
-}
-
-.success-message {
-    background-color: #dcfce7;
-    color: #166534;
-    padding: 1rem;
-    border-radius: var(--radius-md);
-    text-align: center;
-    font-weight: 500;
-}
+/* --- 6. Results & Utilities --- */
+.results-section { background-color: var(--white); }
+.stats-summary { display: flex; gap: 2rem; background-color: var(--slate-50); padding: 1rem; border-radius: var(--radius-md); margin-bottom: 1.5rem; }
+.stats-summary span { color: var(--slate-500); }
+.stats-summary strong { color: var(--slate-900); font-size: 1.5rem; display: block; }
+.results-table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+.results-table th, .results-table td { border-bottom: 1px solid var(--slate-200); padding: 0.75rem 1rem; text-align: left; }
+.results-table th { background-color: var(--slate-100); font-size: 0.8rem; font-weight: 600; color: var(--slate-500); text-transform: uppercase; }
+.results-table tbody tr:hover { background-color: var(--blue-50); }
+.summary-table tbody tr { cursor: pointer; }
+.summary-table tbody tr.active { background-color: var(--blue-100); font-weight: 600; }
+.detail-table caption { font-size: 1.1em; font-weight: 600; margin-bottom: 1rem; color: var(--slate-700); text-align: left; }
+.toast { position: fixed; bottom: 20px; right: 20px; padding: 1rem 1.5rem; border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); z-index: 2000; color: var(--white); background-color: var(--slate-800); font-weight: 500; visibility: hidden; opacity: 0; transition: all 0.3s ease; transform: translateY(20px); }
+.toast.show { visibility: visible; opacity: 1; transform: translateY(0); }
+.toast.success { background-color: var(--green-600); }
+.toast.error { background-color: var(--red-600); }
+.loading-spinner { border: 4px solid var(--slate-200); border-top: 4px solid var(--blue-600); border-radius: 50%; width: 40px; height: 40px; animation: spin 0.8s linear infinite; margin: 4rem auto; }
+@keyframes spin { 100% { transform: rotate(360deg); } }
+.success-message { background-color: #dcfce7; color: #166534; padding: 1rem; border-radius: var(--radius-md); text-align: center; font-weight: 500; }
+.error-container { background-color: #fee2e2; color: var(--red-800); padding: 1rem; border-radius: var(--radius-lg); }
