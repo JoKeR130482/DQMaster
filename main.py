@@ -88,12 +88,9 @@ def read_project(project_id: str) -> Optional[Project]:
     if not config_path.exists():
         return None
     try:
-        # This will raise ValidationError or json.JSONDecodeError if the file is corrupted
         return Project(**json.loads(config_path.read_text(encoding="utf-8")))
     except (ValidationError, json.JSONDecodeError) as e:
         print(f"WARNING: Corrupted project file for '{project_id}'. Creating a stub. Reason: {e}")
-        # Return a valid, but minimal, Project object indicating corruption
-        # This makes the app resilient to old, malformed project files.
         now = datetime.datetime.utcnow().isoformat()
         return Project(
             id=project_id,
@@ -177,7 +174,6 @@ async def get_project_details(project_id: str):
 
 @app.put("/api/projects/{project_id}", response_model=Project)
 async def update_full_project(project_id: str, project_update: FullProjectUpdateRequest):
-    # Check if project exists before trying to update
     project_dir = PROJECTS_DIR / project_id
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail="Project not found")
@@ -219,6 +215,7 @@ async def upload_file_to_project(project_id: str, file: UploadFile = File(...)):
 
         write_project(project_id, project)
 
+        # Save the actual file with a unique name
         (project_files_dir / saved_filename).write_bytes(contents)
 
         return project
@@ -255,6 +252,7 @@ async def validate_project_data(project_id: str):
                     if field_schema.is_required and (pd.isna(value) or str(value).strip() == ""):
                         errors.append({"row": index + 2, "column": field_schema.name, "value": "ПУСТО", "rule_name": "Обязательное поле", "error": "Поле не должно быть пустым"})
 
+                    # Sort rules by order before applying
                     sorted_rules = sorted(field_schema.rules, key=lambda r: r.order)
 
                     for rule_config in sorted_rules:

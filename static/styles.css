@@ -338,7 +338,7 @@ body {
 }
 
 /* --- 6. Results & Utilities --- */
-.results-section { background-color: var(--white); }
+.results-section { background-color: var(--white); margin-top: 2rem; }
 .stats-summary { display: flex; gap: 2rem; background-color: var(--slate-50); padding: 1rem; border-radius: var(--radius-md); margin-bottom: 1.5rem; }
 .stats-summary span { color: var(--slate-500); }
 .stats-summary strong { color: var(--slate-900); font-size: 1.5rem; display: block; }
