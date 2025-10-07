@@ -1,0 +1,68 @@
+{
+  "id": "4ef49179-d5c5-4b25-9e61-c7074f1cdec7",
+  "name": "Проект для проверки дропдауна",
+  "description": "",
+  "created_at": "2025-10-07T14:02:21.433131",
+  "updated_at": "2025-10-07T14:02:23.040894",
+  "files": [
+    {
+      "id": "32ee4584-d285-488a-aede-0ccdedb4821d",
+      "name": "test_data.xlsx",
+      "saved_name": "b7cf8165-57ae-4176-b30b-b409d72b5a0e.xlsx",
+      "sheets": [
+        {
+          "id": "2c83ba17-a07d-4027-83a6-f6b2453c4831",
+          "name": "Ежемесячные продажи",
+          "is_active": true,
+          "fields": [
+            {
+              "id": "4d1b0c25-eed9-4de1-8a26-ac83b12bb59b",
+              "name": "Дата",
+              "is_required": false,
+              "rules": []
+            },
+            {
+              "id": "10b6fe84-0c23-4265-ab30-051fbe3c5800",
+              "name": "Сумма продажи",
+              "is_required": false,
+              "rules": [
+                {
+                  "id": "id_1759845743034_w6whyg504",
+                  "type": "is_empty",
+                  "value": null,
+                  "params": null,
+                  "order": 1
+                }
+              ]
+            },
+            {
+              "id": "3aa7d1cc-84ac-42bd-95ba-2d5f24fd4500",
+              "name": "Менеджер",
+              "is_required": false,
+              "rules": []
+            }
+          ]
+        },
+        {
+          "id": "fb4afe99-9b2a-4e47-98f8-0fd573362b89",
+          "name": "Список клиентов",
+          "is_active": true,
+          "fields": [
+            {
+              "id": "6316c085-a063-4b82-96a9-64107a2cbed6",
+              "name": "Имя клиента",
+              "is_required": false,
+              "rules": []
+            },
+            {
+              "id": "ae503adf-4fde-406c-8937-5cfe3cace201",
+              "name": "Email",
+              "is_required": false,
+              "rules": []
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
