@@ -16,57 +16,72 @@
         </header>
 
         <div id="project-content">
+            <div id="file-display-container" style="display: none;">
+                <p>Загруженный файл: <strong id="file-name-display"></strong></p>
+                <button id="delete-file-btn" class="secondary-button danger">Удалить файл</button>
+            </div>
+
+            <div id="upload-section">
+                <p>Выберите файл для анализа.</p>
+                <div class="upload-container">
+                    <input type="file" id="fileInput" accept=".xlsx, .xls" class="file-input">
+                    <label for="fileInput" class="file-label">Выберите файл...</label>
+                </div>
+            </div>
+
             <div id="loading" class="loading-spinner" style="display: none;"></div>
-            <div id="error-container" class="error-container" style="display: none;"></div>
 
-            <!-- Step 1: File Upload -->
-            <section id="upload-section">
-                <div id="file-upload-box">
-                    <h3>Шаг 1: Загрузите файл</h3>
-                    <p>Выберите .xlsx или .xls файл для анализа.</p>
-                    <div class="upload-container">
-                        <input type="file" id="fileInput" accept=".xlsx, .xls" class="file-input">
-                        <label for="fileInput" class="file-label">Выберите файл...</label>
-                    </div>
-                </div>
-                <div id="file-display-container" style="display: none;">
-                     <h3>Загруженный файл</h3>
-                    <p>Файл: <strong id="file-name-display"></strong></p>
-                    <button id="delete-file-btn" class="secondary-button danger">Загрузить другой файл</button>
-                </div>
-            </section>
+            <!-- Container for template suggestions -->
+            <div id="template-suggestion-container" class="suggestion-container" style="display: none;">
+                <h3>Найдены подходящие шаблоны!</h3>
+                <p>Хотите применить один из них?</p>
+                <div id="template-suggestions-list"></div>
+                <button id="skip-templates-btn" class="secondary-button">Нет, настроить вручную</button>
+            </div>
 
-            <!-- Step 2: Sheet Selection -->
-            <section id="sheet-selection-container" style="display: none;">
-                <h3>Шаг 2: Выберите лист</h3>
-                <p>Ваш файл содержит несколько листов. Выберите тот, который нужно проверить.</p>
-                <div id="sheet-list" class="sheet-list">
-                    <!-- Sheet buttons will be injected here by JS -->
+            <!-- Container for column configuration -->
+            <div id="columns-config-container" class="result-container" style="display: none;">
+                <div class="config-header">
+                    <h2>Настройте правила для колонок:</h2>
+                    <button id="save-template-btn" class="secondary-button">Сохранить как шаблон</button>
                 </div>
-            </section>
-
-            <!-- Step 3: Column Configuration and Validation -->
-            <section id="rules-and-validation-container" style="display: none;">
-                <h3>Шаг 3: Настройте правила и запустите проверку</h3>
-                <p>Выбран лист: <strong id="selected-sheet-display"></strong></p>
                 <div id="columns-list">
                     <!-- Column configurations will be injected here by JS -->
                 </div>
                 <button id="validateButton" class="action-button">Запустить проверку</button>
-            </section>
+            </div>
 
-            <!-- Step 4: Validation Results -->
-            <section id="validation-results-container" style="display: none;">
+            <!-- Container for displaying validation results -->
+            <div id="validation-results-container" style="display: none;">
                 <h3>Результаты проверки:</h3>
                 <div id="golden-record-stats"></div>
                 <div id="summary-results"></div>
                 <div id="detailed-results"></div>
-                 <button id="run-another-validation-btn" class="action-button">Вернуться к настройке правил</button>
-            </section>
+            </div>
+
+            <div id="error-container" class="error-container"></div>
         </div>
     </div>
 
-    <!-- Rule Configuration Modal (retained) -->
+    <!-- All modals from the original implementation -->
+    <div id="save-template-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <h2>Сохранить шаблон</h2>
+            <p>Введите имя для вашего нового шаблона.</p>
+            <input type="text" id="template-name-input" placeholder="Например, 'Ежемесячный отчет'">
+            <div class="modal-actions">
+                <button id="cancel-save-btn" class="secondary-button">Отмена</button>
+                <button id="confirm-save-btn" class="action-button">Сохранить</button>
+            </div>
+        </div>
+    </div>
+    <div id="sheet-select-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <h2>Выберите лист для проверки</h2>
+            <p>Ваш файл содержит несколько листов. Пожалуйста, выберите, какой из них вы хотите проверить.</p>
+            <div id="sheet-list" class="sheet-list"></div>
+        </div>
+    </div>
     <div id="rule-config-modal" class="modal-overlay" style="display: none;">
         <div class="modal-content">
             <h2 id="rule-config-title">Настроить правило</h2>

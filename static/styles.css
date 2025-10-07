@@ -1,5 +1,5 @@
 /*
-  DQMaster - Project Page Redesign
+  DQMaster - Project List Page Redesign
   Replicating the look and feel of the provided React/TailwindCSS template.
 */
 
@@ -487,3 +487,133 @@ body {
 }
 .toast.success { background-color: var(--green-600); }
 .toast.error { background-color: var(--red-600); }
+
+/* --- Styles for other pages --- */
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem 2rem;
+    background-color: var(--white);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    margin-bottom: 2rem;
+}
+.page-header h1 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--slate-900);
+}
+.header-actions .nav-link {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--slate-500);
+    text-decoration: none;
+    transition: color 0.2s ease;
+}
+.header-actions .nav-link:hover {
+    color: var(--blue-600);
+}
+
+.toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    padding: 1.5rem;
+    background-color: var(--white);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+}
+
+.sort-buttons {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+.sort-buttons span {
+    font-size: 0.9rem;
+    color: var(--slate-500);
+    font-weight: 500;
+}
+.sort-btn {
+    font-size: 0.85rem;
+    font-weight: 600;
+    padding: 0.5rem 1rem;
+    border: 1px solid var(--slate-200);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    background-color: var(--white);
+    color: var(--slate-700);
+}
+.sort-btn:hover {
+    background-color: var(--slate-100);
+    border-color: var(--slate-300);
+}
+
+
+.rules-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1.5rem;
+}
+
+.rule-card {
+    background-color: var(--white);
+    border: 1px solid var(--slate-200);
+    border-radius: var(--radius-lg);
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    box-shadow: var(--shadow-sm);
+    transition: all 0.2s ease-in-out;
+}
+
+.rule-card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-lg);
+    border-color: var(--slate-300);
+}
+
+.rule-name {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--slate-900);
+}
+
+.rule-description {
+    font-size: 0.9rem;
+    color: var(--slate-500);
+    line-height: 1.5;
+    flex-grow: 1; /* Pushes the ID to the bottom */
+}
+
+.rule-id {
+    font-family: monospace;
+    font-size: 0.8rem;
+    background-color: var(--slate-100);
+    color: var(--slate-500);
+    padding: 0.25rem 0.5rem;
+    border-radius: var(--radius-md);
+    align-self: flex-start; /* Aligns the badge to the left */
+}
+
+.error-container {
+    background-color: #fee2e2;
+    color: var(--red-800);
+    padding: 1rem;
+    border-radius: var(--radius-lg);
+}
+
+.success-message {
+    background-color: #dcfce7;
+    color: #166534;
+    padding: 1rem;
+    border-radius: var(--radius-md);
+    text-align: center;
+    font-weight: 500;
+}
