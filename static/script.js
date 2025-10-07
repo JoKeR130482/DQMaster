@@ -1,250 +1,403 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // --- 1. DOM Elements ---
-    const loadingSpinner = document.getElementById('loading');
-    const createProjectBtn = document.getElementById('create-project-btn');
-    const projectsTbody = document.getElementById('projects-tbody');
-    const noProjectsMessage = document.getElementById('no-projects-message');
 
-    // Create Project Modal Elements
-    const createProjectModal = document.getElementById('create-project-modal');
-    const projectNameInput = document.getElementById('project-name-input');
-    const projectDescriptionInput = document.getElementById('project-description-input');
-    const confirmCreateProjectBtn = document.getElementById('confirm-create-project-btn');
-    const cancelCreateProjectBtn = document.getElementById('cancel-create-project-btn');
+    // --- STATE MANAGEMENT ---
+    const state = {
+        projects: [],
+        isLoading: true,
+        viewMode: 'grid', // 'grid' or 'table'
+        searchTerm: '',
+        sortConfig: { key: 'name', direction: 'asc' },
+        editingId: null,
+        showAddForm: false,
+    };
 
-    // Edit Project Modal Elements
-    const editProjectModal = document.getElementById('edit-project-modal');
-    const editProjectIdInput = document.getElementById('edit-project-id');
-    const editProjectNameInput = document.getElementById('edit-project-name-input');
-    const editProjectDescriptionInput = document.getElementById('edit-project-description-input');
-    const confirmEditProjectBtn = document.getElementById('confirm-edit-project-btn');
-    const cancelEditProjectBtn = document.getElementById('cancel-edit-project-btn');
+    // --- DOM ELEMENTS ---
+    const dom = {
+        loadingSpinner: document.getElementById('loading'),
+        errorContainer: document.getElementById('error-container'),
+        projectsContainer: document.getElementById('projects-container'),
+        searchInput: document.getElementById('search-input'),
+        viewGridBtn: document.getElementById('view-grid-btn'),
+        viewTableBtn: document.getElementById('view-table-btn'),
+        showAddFormBtn: document.getElementById('show-add-form-btn'),
+        addProjectFormContainer: document.getElementById('add-project-form-container'),
+        addNameInput: document.getElementById('add-name'),
+        addDescriptionInput: document.getElementById('add-description'),
+        addProjectBtn: document.getElementById('add-project-btn'),
+        cancelAddProjectBtn: document.getElementById('cancel-add-project-btn'),
+        emptyState: document.getElementById('empty-state'),
+        notificationToast: document.getElementById('notification-toast'),
+    };
 
-    // Notification Toast
-    const notificationToast = document.getElementById('notification-toast');
+    // --- API HELPERS ---
+    const api = {
+        getProjects: () => fetch('/api/projects'),
+        createProject: (data) => fetch('/api/projects', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        }),
+        updateProject: (id, data) => fetch(`/api/projects/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        }),
+        deleteProject: (id) => fetch(`/api/projects/${id}`, { method: 'DELETE' }),
+    };
 
-    // --- 2. Helper Functions ---
+    // --- UTILS ---
+    const formatDate = (dateString) => new Date(dateString).toLocaleDateString('ru-RU');
+    const escapeHTML = (str) => str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
     const showNotification = (message, type = 'success') => {
-        notificationToast.textContent = message;
-        notificationToast.className = `toast show ${type}`;
-        setTimeout(() => {
-            notificationToast.className = notificationToast.className.replace('show', '');
-        }, 3000);
+        dom.notificationToast.textContent = message;
+        dom.notificationToast.className = `toast ${type} show`;
+        setTimeout(() => { dom.notificationToast.className = dom.notificationToast.className.replace('show', ''); }, 3000);
     };
 
-    const formatDate = (isoString) => {
-        if (!isoString) return 'N/A';
-        const date = new Date(isoString);
-        return date.toLocaleString('ru-RU', {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit'
-        });
-    };
+    // --- RENDER FUNCTIONS ---
 
-    // --- 3. Core Functions ---
+    function render() {
+        dom.loadingSpinner.style.display = state.isLoading ? 'block' : 'none';
 
-    const fetchAndRenderProjects = async () => {
-        loadingSpinner.style.display = 'block';
-        projectsTbody.innerHTML = '';
-        noProjectsMessage.style.display = 'none';
+        // Update view mode buttons
+        dom.viewGridBtn.classList.toggle('active', state.viewMode === 'grid');
+        dom.viewTableBtn.classList.toggle('active', state.viewMode === 'table');
 
-        try {
-            const response = await fetch('/api/projects');
-            if (!response.ok) {
-                throw new Error('Не удалось загрузить проекты');
-            }
-            const projects = await response.json();
+        // Filter and sort projects
+        const filteredAndSortedProjects = getFilteredAndSortedProjects();
 
-            if (projects.length === 0) {
-                noProjectsMessage.style.display = 'block';
+        dom.projectsContainer.innerHTML = ''; // Clear previous content
+        if (filteredAndSortedProjects.length > 0) {
+            dom.emptyState.style.display = 'none';
+            if (state.viewMode === 'grid') {
+                renderGridView(filteredAndSortedProjects);
             } else {
-                renderProjects(projects);
+                renderTableView(filteredAndSortedProjects);
             }
-        } catch (error) {
-            showNotification(error.message, 'error');
-        } finally {
-            loadingSpinner.style.display = 'none';
+        } else {
+            dom.emptyState.style.display = 'block';
         }
-    };
 
-    const renderProjects = (projects) => {
-        projectsTbody.innerHTML = ''; // Clear previous entries
+        // Must re-initialize icons after every render
+        lucide.createIcons();
+    }
+
+    function getFilteredAndSortedProjects() {
+        let filtered = state.projects.filter(project =>
+            project.name.toLowerCase().includes(state.searchTerm.toLowerCase()) ||
+            (project.description && project.description.toLowerCase().includes(state.searchTerm.toLowerCase()))
+        );
+
+        if (state.sortConfig.key) {
+            const { key, direction } = state.sortConfig;
+            const dir = direction === 'asc' ? 1 : -1;
+
+            filtered.sort((a, b) => {
+                const aValue = a[key];
+                const bValue = b[key];
+
+                // Handle different data types for sorting
+                if (key === 'name' || key === 'description') {
+                    return (aValue || '').localeCompare(bValue || '', 'ru', { sensitivity: 'base' }) * dir;
+                }
+
+                if (key === 'created_at' || key === 'updated_at') {
+                    return (new Date(aValue) - new Date(bValue)) * dir;
+                }
+
+                if (key === 'size_kb') {
+                    return (aValue - bValue) * dir;
+                }
+
+                // Fallback for any other type
+                if (aValue < bValue) return -1 * dir;
+                if (aValue > bValue) return 1 * dir;
+                return 0;
+            });
+        }
+        return filtered;
+    }
+
+    function renderGridView(projects) {
+        const grid = document.createElement('div');
+        grid.className = 'projects-grid';
         projects.forEach(project => {
-            const row = document.createElement('tr');
-            row.dataset.projectId = project.id;
-            row.innerHTML = `
-                <td><a href="/projects/${project.id}" class="project-link">${project.name}</a></td>
-                <td>${project.description || '---'}</td>
-                <td>${project.size_kb} KB</td>
-                <td>${formatDate(project.updated_at)}</td>
-                <td class="project-actions">
-                    <button class="edit-project-btn" data-project-id="${project.id}" data-project-name="${project.name}" data-project-description="${project.description || ''}">Редактировать</button>
-                    <button class="delete-project-btn" data-project-id="${project.id}" data-project-name="${project.name}">Удалить</button>
-                </td>
-            `;
-            projectsTbody.appendChild(row);
+            grid.appendChild(createProjectCard(project));
         });
-    };
+        dom.projectsContainer.appendChild(grid);
+    }
 
-    const openCreateProjectModal = () => {
-        projectNameInput.value = '';
-        projectDescriptionInput.value = '';
-        createProjectModal.style.display = 'flex';
-        projectNameInput.focus();
-    };
+    function renderTableView(projects) {
+        const tableWrapper = document.createElement('div');
+        tableWrapper.className = 'projects-table-wrapper';
+        const table = document.createElement('table');
+        table.className = 'projects-table';
+        table.innerHTML = `
+            <thead>
+                <tr>
+                    <th><div data-sort-key="name">Название <i data-lucide="arrow-up-down" class="sort-icon"></i></div></th>
+                    <th><div>Описание</div></th>
+                    <th><div data-sort-key="size_kb">Размер <i data-lucide="arrow-up-down" class="sort-icon"></i></div></th>
+                    <th><div data-sort-key="updated_at">Изменен <i data-lucide="arrow-up-down" class="sort-icon"></i></div></th>
+                    <th><div>Действия</div></th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        `;
+        const tbody = table.querySelector('tbody');
+        projects.forEach(project => {
+            tbody.appendChild(createProjectRow(project));
+        });
+        tableWrapper.appendChild(table);
+        dom.projectsContainer.appendChild(tableWrapper);
+    }
 
-    const closeCreateProjectModal = () => {
-        createProjectModal.style.display = 'none';
-    };
+    function createProjectCard(project) {
+        const card = document.createElement('div');
+        card.className = 'project-card';
+        card.dataset.id = project.id;
 
-    const handleCreateProject = async () => {
-        const name = projectNameInput.value.trim();
-        const description = projectDescriptionInput.value.trim();
+        const isEditing = state.editingId === project.id;
 
-        if (!name) {
-            showNotification('Название проекта не может быть пустым.', 'error');
-            return;
+        card.innerHTML = isEditing ? `
+            <div class="card-content">
+                <div class="form-group">
+                    <input type="text" value="${escapeHTML(project.name)}" class="card-title-input" name="name">
+                </div>
+                 <div class="form-group">
+                    <textarea class="card-description-input" name="description" rows="3">${escapeHTML(project.description || '')}</textarea>
+                </div>
+                <div class="card-footer">
+                    <div></div>
+                    <div class="card-actions">
+                        <button class="save-btn" title="Сохранить"><i data-lucide="save"></i></button>
+                        <button class="cancel-btn" title="Отмена"><i data-lucide="x"></i></button>
+                    </div>
+                </div>
+            </div>
+        ` : `
+            <div class="card-content">
+                <div class="card-header">
+                    <h3 class="card-title">${escapeHTML(project.name)}</h3>
+                    <div class="card-actions">
+                        <button class="edit-btn" title="Редактировать"><i data-lucide="edit"></i></button>
+                        <button class="delete-btn" title="Удалить"><i data-lucide="trash-2"></i></button>
+                    </div>
+                </div>
+                <p class="card-description">${escapeHTML(project.description || 'Нет описания.')}</p>
+                <div class="card-footer">
+                    <span class="card-size-badge">${project.size_kb.toFixed(2)} KB</span>
+                    <button class="card-run-btn"><i data-lucide="play"></i><span>Запустить</span></button>
+                </div>
+            </div>
+        `;
+        return card;
+    }
+
+    function createProjectRow(project) {
+        const row = document.createElement('tr');
+        row.dataset.id = project.id;
+        const isEditing = state.editingId === project.id;
+
+        row.innerHTML = isEditing ? `
+            <td colspan="4">
+                <div class="form-grid" style="grid-template-columns: 1fr 2fr; gap: 1rem;">
+                    <div class="form-group">
+                       <label>Название</label>
+                       <input type="text" value="${escapeHTML(project.name)}" class="table-edit-input" name="name">
+                    </div>
+                    <div class="form-group">
+                        <label>Описание</label>
+                        <input type="text" value="${escapeHTML(project.description || '')}" class="table-edit-input" name="description">
+                    </div>
+                </div>
+            </td>
+            <td class="table-actions">
+                <button class="save-btn" title="Сохранить"><i data-lucide="save"></i></button>
+                <button class="cancel-btn" title="Отмена"><i data-lucide="x"></i></button>
+            </td>
+        ` : `
+            <td class="project-name">${escapeHTML(project.name)}</td>
+            <td><div class="description-cell">${escapeHTML(project.description || '---')}</div></td>
+            <td>${project.size_kb.toFixed(2)} KB</td>
+            <td>${formatDate(project.updated_at)}</td>
+            <td class="table-actions">
+                <button class="edit-btn" title="Редактировать"><i data-lucide="edit"></i></button>
+                <button class="delete-btn" title="Удалить"><i data-lucide="trash-2"></i></button>
+                <button class="run-btn" title="Запустить"><i data-lucide="play"></i></button>
+            </td>
+        `;
+        return row;
+    }
+
+
+    // --- EVENT HANDLERS ---
+
+    function handleSort(header) {
+        const key = header.dataset.sortKey;
+        let direction = 'asc';
+        if (state.sortConfig.key === key && state.sortConfig.direction === 'asc') {
+            direction = 'desc';
         }
+        state.sortConfig = { key, direction };
+        render();
+    }
 
-        confirmCreateProjectBtn.disabled = true;
+    async function handleSaveEdit(id, projectItem) {
+        const nameInput = projectItem.querySelector('[name="name"]');
+        const descriptionInput = projectItem.querySelector('[name="description"]');
+        const name = nameInput.value;
+        const description = descriptionInput.value;
 
         try {
-            const response = await fetch('/api/projects', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, description }),
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.detail || 'Не удалось создать проект');
-            }
-
-            const newProject = await response.json();
-            showNotification('Проект успешно создан! Перенаправление...', 'success');
-
-            // Redirect to the new project's page
-            window.location.href = `/projects/${newProject.id}`;
-
-        } catch (error) {
-            showNotification(error.message, 'error');
-        } finally {
-            confirmCreateProjectBtn.disabled = false;
-        }
-    };
-
-    const handleDeleteProject = async (projectId, projectName) => {
-        if (!confirm(`Вы уверены, что хотите удалить проект "${projectName}"? Это действие необратимо.`)) {
-            return;
-        }
-
-        try {
-            const response = await fetch(`/api/projects/${projectId}`, {
-                method: 'DELETE',
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.detail || 'Не удалось удалить проект');
-            }
-
-            showNotification(`Проект "${projectName}" успешно удален.`, 'success');
-            await fetchAndRenderProjects();
-
-        } catch (error) {
-            showNotification(error.message, 'error');
-        }
-    };
-
-
-    const openEditProjectModal = (id, name, description) => {
-        editProjectIdInput.value = id;
-        editProjectNameInput.value = name;
-        editProjectDescriptionInput.value = description;
-        editProjectModal.style.display = 'flex';
-        editProjectNameInput.focus();
-    };
-
-    const closeEditProjectModal = () => {
-        editProjectModal.style.display = 'none';
-    };
-
-    const handleEditProject = async () => {
-        const id = editProjectIdInput.value;
-        const name = editProjectNameInput.value.trim();
-        const description = editProjectDescriptionInput.value.trim();
-
-        if (!name) {
-            showNotification('Название проекта не может быть пустым.', 'error');
-            return;
-        }
-
-        confirmEditProjectBtn.disabled = true;
-
-        try {
-            const response = await fetch(`/api/projects/${id}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, description }),
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.detail || 'Не удалось обновить проект');
-            }
-
+            const response = await api.updateProject(id, { name, description });
+            if (!response.ok) throw new Error('Failed to save');
             const updatedProject = await response.json();
 
-            showNotification('Проект успешно обновлен!', 'success');
-            closeEditProjectModal();
+            state.projects = state.projects.map(p => {
+                if (p.id === id) {
+                    return { ...p, ...updatedProject };
+                }
+                return p;
+            });
+            state.editingId = null;
+            showNotification("Проект успешно обновлен.");
+            render();
+        } catch (error) {
+            showNotification("Ошибка сохранения.", 'error');
+        }
+    }
 
-            // Update the row in the table
-            const rowToUpdate = projectsTbody.querySelector(`tr[data-project-id="${id}"]`);
-            if (rowToUpdate) {
-                rowToUpdate.querySelector('a.project-link').textContent = updatedProject.name;
-                const cells = rowToUpdate.getElementsByTagName('td');
-                cells[1].textContent = updatedProject.description || '---';
-                cells[3].textContent = formatDate(updatedProject.updated_at);
-                // Also update the dataset for the edit button
-                const editButton = rowToUpdate.querySelector('.edit-project-btn');
-                editButton.dataset.projectName = updatedProject.name;
-                editButton.dataset.projectDescription = updatedProject.description || '';
+    async function handleDelete(id) {
+        if (!confirm("Вы уверены, что хотите удалить этот проект?")) return;
+        try {
+            const response = await api.deleteProject(id);
+            if (!response.ok) throw new Error('Failed to delete');
+
+            state.projects = state.projects.filter(p => p.id !== id);
+            showNotification("Проект удален.");
+            render();
+        } catch(error) {
+            showNotification("Ошибка удаления.", 'error');
+        }
+    }
+
+    async function handleAddProject() {
+        const name = dom.addNameInput.value.trim();
+        const description = dom.addDescriptionInput.value.trim();
+        if (!name) {
+            showNotification("Название проекта не может быть пустым.", 'error');
+            return;
+        }
+
+        try {
+            const response = await api.createProject({ name, description });
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.detail || 'Failed to create project');
             }
+            const newProject = await response.json();
+
+            // The API doesn't return size_kb on creation, so we default it to 0.
+            newProject.size_kb = 0;
+
+            state.projects.unshift(newProject);
+
+            state.showAddForm = false;
+            dom.addProjectFormContainer.style.display = 'none';
+            dom.showAddFormBtn.style.display = 'inline-flex';
+            dom.addNameInput.value = '';
+            dom.addDescriptionInput.value = '';
+
+            showNotification("Проект успешно создан.");
+            render();
 
         } catch (error) {
-            showNotification(error.message, 'error');
+            showNotification(`Ошибка создания проекта: ${error.message}`, 'error');
+        }
+    }
+
+    // --- EVENT LISTENER (DISPATCHER) ---
+    function setupEventListeners() {
+        dom.searchInput.addEventListener('input', (e) => {
+            state.searchTerm = e.target.value;
+            render();
+        });
+
+        dom.viewGridBtn.addEventListener('click', () => {
+            state.viewMode = 'grid';
+            render();
+        });
+
+        dom.viewTableBtn.addEventListener('click', () => {
+            state.viewMode = 'table';
+            render();
+        });
+
+        dom.showAddFormBtn.addEventListener('click', () => {
+            state.showAddForm = true;
+            dom.addProjectFormContainer.style.display = 'block';
+            dom.showAddFormBtn.style.display = 'none';
+        });
+
+        dom.cancelAddProjectBtn.addEventListener('click', () => {
+            state.showAddForm = false;
+            dom.addProjectFormContainer.style.display = 'none';
+            dom.showAddFormBtn.style.display = 'inline-flex';
+            dom.addNameInput.value = '';
+            dom.addDescriptionInput.value = '';
+        });
+
+        dom.addProjectBtn.addEventListener('click', handleAddProject);
+
+        dom.projectsContainer.addEventListener('click', (e) => {
+            const target = e.target;
+
+            // Handle sorting
+            const sortHeader = target.closest('th > div[data-sort-key]');
+            if (sortHeader) {
+                handleSort(sortHeader);
+                return;
+            }
+
+            // Handle actions on a project item
+            const projectItem = target.closest('.project-card, tr[data-id]');
+            if (!projectItem) return;
+
+            const id = projectItem.dataset.id;
+
+            if (target.closest('.edit-btn')) {
+                state.editingId = id;
+                render();
+            } else if (target.closest('.cancel-btn')) {
+                state.editingId = null;
+                render();
+            } else if (target.closest('.save-btn')) {
+                handleSaveEdit(id, projectItem);
+            } else if (target.closest('.delete-btn')) {
+                handleDelete(id);
+            } else if (target.closest('.run-btn, .card-run-btn, .card-title, .project-name')) {
+                window.location.href = `/projects/${id}`;
+            }
+        });
+    }
+
+    // --- INITIALIZATION ---
+    async function init() {
+        try {
+            const response = await api.getProjects();
+            if (!response.ok) throw new Error('Failed to fetch projects');
+            state.projects = await response.json();
+        } catch (error) {
+            dom.errorContainer.textContent = "Не удалось загрузить проекты.";
+            dom.errorContainer.style.display = "block";
         } finally {
-            confirmEditProjectBtn.disabled = false;
+            state.isLoading = false;
+            render();
         }
-    };
+    }
 
-
-    // --- 4. Event Listeners ---
-    createProjectBtn.addEventListener('click', openCreateProjectModal);
-    cancelCreateProjectBtn.addEventListener('click', closeCreateProjectModal);
-    confirmCreateProjectBtn.addEventListener('click', handleCreateProject);
-
-    cancelEditProjectBtn.addEventListener('click', closeEditProjectModal);
-    confirmEditProjectBtn.addEventListener('click', handleEditProject);
-
-    projectsTbody.addEventListener('click', (event) => {
-        const button = event.target;
-        if (button.classList.contains('delete-project-btn')) {
-            const projectId = button.dataset.projectId;
-            const projectName = button.dataset.projectName;
-            handleDeleteProject(projectId, projectName);
-        } else if (button.classList.contains('edit-project-btn')) {
-            const projectId = button.dataset.projectId;
-            const projectName = button.dataset.projectName;
-            const projectDescription = button.dataset.projectDescription;
-            openEditProjectModal(projectId, projectName, projectDescription);
-        }
-    });
-
-    // --- 5. Initial Load ---
-    fetchAndRenderProjects();
+    // --- START ---
+    setupEventListeners();
+    init();
 });
