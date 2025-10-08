@@ -37,8 +37,8 @@ document.addEventListener('DOMContentLoaded', () => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data),
         }),
-        updateProject: (id, data) => fetch(`/api/projects/${id}`, {
-            method: 'PUT',
+        updateProjectPartial: (id, data) => fetch(`/api/projects/${id}`, {
+            method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data),
         }),
@@ -219,7 +219,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const description = projectItem.querySelector('[name="description"]').value;
 
         try {
-            const response = await api.updateProject(id, { name, description });
+            const response = await api.updateProjectPartial(id, { name, description });
             if (!response.ok) throw new Error('Failed to save');
             const updatedProject = await response.json();
 
