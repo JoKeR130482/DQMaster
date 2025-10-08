@@ -261,8 +261,11 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        render();
-        if (modified) handleSaveProject();
+        // Only render and save if a data-modifying action occurred.
+        if (modified) {
+            render();
+            handleSaveProject();
+        }
     }
 
     async function handleSaveProject() {
