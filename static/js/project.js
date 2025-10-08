@@ -194,6 +194,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function handleWorkspaceClick(e) {
         const target = e.target;
+
+        // If the click is on a form element that manages its own state, do nothing.
+        // This allows the <select> dropdown to open without an immediate re-render.
+        if (target.matches('.add-rule-type, .add-rule-value')) {
+            return;
+        }
+
         const fileCard = target.closest('.file-card');
         const sheetItem = target.closest('.sheet-item');
         const fieldCard = target.closest('.field-card');

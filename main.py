@@ -76,6 +76,10 @@ class ProjectCreateRequest(BaseModel):
     name: str
     description: Optional[str] = ""
 
+class ProjectPartialUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+
 class FullProjectUpdateRequest(Project):
     pass
 
@@ -181,6 +185,20 @@ async def update_full_project(project_id: str, project_update: FullProjectUpdate
     project_update.id = project_id
     write_project(project_id, project_update)
     return project_update
+
+@app.patch("/api/projects/{project_id}", response_model=Project)
+async def partial_update_project(project_id: str, project_update: ProjectPartialUpdateRequest):
+    project = read_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    update_data = project_update.model_dump(exclude_unset=True)
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No fields to update")
+
+    updated_project = project.model_copy(update=update_data)
+    write_project(project_id, updated_project)
+    return updated_project
 
 @app.delete("/api/projects/{project_id}", status_code=204)
 async def delete_project(project_id: str):
