@@ -164,7 +164,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function renderValidationResults(results) {
         dom.resultsContainer.style.display = 'block';
-        dom.goldenRecordStats.innerHTML = `<div class="stats-summary"><span>Всего строк: <strong>${results.total_rows}</strong></span><span>Строк с ошибками: <strong>${results.error_rows_count}</strong></span></div>`;
+        const errorPercentage = results.total_rows > 0 ? ((results.error_rows_count / results.total_rows) * 100).toFixed(2) : 0;
+        dom.goldenRecordStats.innerHTML = `
+            <div class="stats-summary">
+                <span>Всего строк: <strong>${results.total_rows}</strong></span>
+                <span>Строк с ошибками: <strong>${results.error_rows_count}</strong></span>
+                <span>Процент ошибочных строк: <strong>${errorPercentage}%</strong></span>
+            </div>`;
         if (results.errors.length === 0) {
             dom.summaryResults.innerHTML = '<div class="success-message">Проверка успешно завершена. Ошибок не найдено!</div>';
             dom.detailedResults.innerHTML = '';
