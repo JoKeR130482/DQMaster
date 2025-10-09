@@ -420,7 +420,7 @@ body > .main-container > .page-header { padding: 0; box-shadow: none; background
 /* Specific styling for checkbox groups */
 #rule-editor-form .form-group-checkbox {
     display: flex;
-    align-items: center;
+    align-items: center; /* This is the key fix */
     gap: 0.75rem;
     margin-bottom: 1.25rem;
 }
