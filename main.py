@@ -163,7 +163,8 @@ async def get_projects():
 async def create_project(project_data: ProjectCreateRequest):
     project_id = str(uuid.uuid4())
     project_dir = PROJECTS_DIR / project_id
-    project_dir.mkdir(exist_ok=True)
+    # Ensure the base projects directory and the new project directory are created.
+    project_dir.mkdir(parents=True, exist_ok=True)
     (project_dir / "files").mkdir(exist_ok=True)
     now = datetime.datetime.utcnow().isoformat()
     project = Project(id=project_id, name=project_data.name, description=project_data.description, created_at=now, updated_at=now)
