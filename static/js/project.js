@@ -8,6 +8,9 @@ document.addEventListener('DOMContentLoaded', () => {
         error: null,
         showUploadForm: false,
         selectedSheetId: null,
+        validationResults: null,
+        isRuleModalOpen: false,
+        editingRuleContext: null, // { fileId, sheetId, fieldId, ruleId? }
     };
 
     // --- 2. DOM ELEMENTS ---
@@ -27,6 +30,13 @@ document.addEventListener('DOMContentLoaded', () => {
         summaryResults: document.getElementById('summary-results'),
         detailedResults: document.getElementById('detailed-results'),
         notificationToast: document.getElementById('notification-toast'),
+        // Rule Editor Modal
+        ruleEditorModal: document.getElementById('rule-editor-modal'),
+        ruleModalTitle: document.getElementById('rule-modal-title'),
+        closeRuleModalBtn: document.getElementById('close-rule-modal-btn'),
+        ruleEditorForm: document.getElementById('rule-editor-form'),
+        cancelRuleModalBtn: document.getElementById('cancel-rule-modal-btn'),
+        saveRuleBtn: document.getElementById('save-rule-btn'),
     };
 
     // --- 3. API HELPERS ---
@@ -62,6 +72,12 @@ document.addEventListener('DOMContentLoaded', () => {
         dom.loading.style.display = state.isLoading ? 'block' : 'none';
         dom.errorContainer.style.display = state.error ? 'block' : 'none';
         if (state.error) dom.errorContainer.textContent = state.error;
+
+        // Render modal based on state
+        dom.ruleEditorModal.style.display = state.isRuleModalOpen ? 'flex' : 'none';
+        if (state.isRuleModalOpen) {
+            renderRuleEditor();
+        }
 
         if (!state.project) return;
 
@@ -129,14 +145,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 <span class="field-name">${field.name}</span>
                 <div class="field-actions">
                     <label><input type="checkbox" class="toggle-field-required" ${field.is_required ? 'checked' : ''}><span class="text-sm">Обязательное</span></label>
-                    <button class="btn btn-icon danger remove-field-btn" title="Удалить поле"><i data-lucide="trash-2"></i></button>
                 </div>
             </div>
             <div class="rules-list"></div>
-            <div class="add-rule-form">
-                <select class="add-rule-type"><option value="">-- Выбрать правило --</option>${state.availableRules.map(r => `<option value="${r.id}">${r.name}</option>`).join('')}</select>
-                <input type="text" class="add-rule-value" placeholder="Параметр (если нужно)">
-                <button class="btn btn-primary add-rule-btn" title="Добавить правило"><i data-lucide="plus"></i></button>
+            <div class="add-rule-container">
+                <button class="btn btn-secondary add-rule-btn"><i data-lucide="plus"></i> Добавить правило</button>
             </div>`;
         const rulesList = fieldCard.querySelector('.rules-list');
         const sortedRules = [...field.rules].sort((a, b) => a.order - b.order);
@@ -148,13 +161,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const ruleItem = document.createElement('div');
         ruleItem.className = 'rule-item';
         ruleItem.dataset.ruleId = rule.id;
-        const ruleDef = state.availableRules.find(r => r.id === rule.type);
-        const ruleName = ruleDef ? ruleDef.name : rule.type;
-        const ruleValue = rule.value ? `: ${rule.value}` : '';
+
+        const displayName = formatRuleName(rule);
 
         ruleItem.innerHTML = `
-            <span class="rule-name">${ruleName}${ruleValue}</span>
+            <span class="rule-name">${displayName}</span>
             <div class="rule-actions">
+                <button class="btn btn-icon edit-rule-btn" title="Изменить правило"><i data-lucide="settings-2"></i></button>
                 <button class="btn btn-icon move-rule-up-btn" title="Переместить вверх"><i data-lucide="arrow-up"></i></button>
                 <button class="btn btn-icon move-rule-down-btn" title="Переместить вниз"><i data-lucide="arrow-down"></i></button>
                 <button class="btn btn-icon danger remove-rule-btn" title="Удалить правило"><i data-lucide="trash-2"></i></button>
@@ -162,30 +175,276 @@ document.addEventListener('DOMContentLoaded', () => {
         return ruleItem;
     }
 
-    function renderValidationResults(results) {
-        dom.resultsContainer.style.display = 'block';
-        const errorPercentage = results.total_rows > 0 ? ((results.error_rows_count / results.total_rows) * 100).toFixed(2) : 0;
-        dom.goldenRecordStats.innerHTML = `
-            <div class="stats-summary">
-                <span>Всего строк: <strong>${results.total_rows}</strong></span>
-                <span>Строк с ошибками: <strong>${results.error_rows_count}</strong></span>
-                <span>Процент ошибочных строк: <strong>${errorPercentage}%</strong></span>
-            </div>`;
-        if (results.errors.length === 0) {
-            dom.summaryResults.innerHTML = '<div class="success-message">Проверка успешно завершена. Ошибок не найдено!</div>';
-            dom.detailedResults.innerHTML = '';
+    function formatRuleName(rule) {
+        const ruleDef = state.availableRules.find(r => r.id === rule.type);
+        if (!ruleDef) return rule.type;
+
+        // Specific formatter for substring_check
+        if (rule.type === 'substring_check' && rule.params) {
+            const { value, mode = 'contains', case_sensitive = false } = rule.params;
+            if (!value) return ruleDef.name;
+            const mode_text = mode === 'not_contains' ? 'не содержит' : 'содержит';
+            const case_text = case_sensitive ? " (регистр важен)" : "";
+            return `Подстрока '${value}' (${mode_text}${case_text})`;
+        }
+
+        // Generic fallback for other rules that might have been configured
+        if (rule.params && rule.params.value) {
+             return `${ruleDef.name}: ${rule.params.value}`;
+        }
+
+        // Backward compatibility for old format
+        if (rule.value) {
+            return `${ruleDef.name}: ${rule.value}`;
+        }
+
+        return ruleDef.name;
+    }
+
+    function renderRuleEditor() {
+        const { ruleId, type: selectedRuleType } = state.editingRuleContext;
+        const form = dom.ruleEditorForm;
+        form.innerHTML = '';
+
+        const rule = ruleId ? findElements(Object.values(state.editingRuleContext)).rule : null;
+        dom.ruleModalTitle.textContent = ruleId ? 'Настроить правило' : 'Добавить новое правило';
+
+        let schema = null;
+
+        const ruleTypeSelectHtml = `
+            <div class="form-group">
+                <label for="rule-type-select">Тип правила</label>
+                <select id="rule-type-select" name="type" ${rule ? 'disabled' : ''}>
+                    <option value="">-- Выберите правило --</option>
+                    ${state.availableRules.map(r => `<option value="${r.id}" ${r.id === selectedRuleType ? 'selected' : ''}>${r.name}</option>`).join('')}
+                </select>
+            </div>
+        `;
+        form.insertAdjacentHTML('beforeend', ruleTypeSelectHtml);
+
+        if (selectedRuleType) {
+            const ruleDef = state.availableRules.find(r => r.id === selectedRuleType);
+            schema = ruleDef ? ruleDef.params_schema : null;
+        }
+
+        if (schema) {
+            const currentParams = rule ? rule.params : {};
+            schema.forEach(param => {
+                const value = currentParams[param.name] ?? param.default;
+                let fieldHtml = `<div class="form-group">`;
+                fieldHtml += `<label for="param-${param.name}">${param.label}</label>`;
+                switch (param.type) {
+                    case 'checkbox':
+                        fieldHtml += `<input type="checkbox" id="param-${param.name}" name="${param.name}" ${value ? 'checked' : ''}>`;
+                        break;
+                    case 'select':
+                        fieldHtml += `<select id="param-${param.name}" name="${param.name}">`;
+                        param.options.forEach(opt => {
+                            fieldHtml += `<option value="${opt.value}" ${opt.value === value ? 'selected' : ''}>${opt.label}</option>`;
+                        });
+                        fieldHtml += `</select>`;
+                        break;
+                    default: // text
+                        fieldHtml += `<input type="text" id="param-${param.name}" name="${param.name}" value="${value || ''}">`;
+                }
+                fieldHtml += `</div>`;
+                form.insertAdjacentHTML('beforeend', fieldHtml);
+            });
+        }
+
+        const ruleTypeSelect = form.querySelector('#rule-type-select');
+        if (!rule) { // Only allow changing type for new rules
+            ruleTypeSelect.addEventListener('change', () => {
+                state.editingRuleContext.type = ruleTypeSelect.value;
+                renderRuleEditor(); // Re-render modal with new schema
+            });
+        }
+    }
+
+    function openRuleModal(context) { // context = { fileId, sheetId, fieldId, ruleId? }
+        const { ruleId } = context;
+        // For new rules, initialize a 'type' property to be managed during modal interaction
+        if (!ruleId) {
+            context.type = '';
+        } else {
+            // For existing rules, get the type from the rule object
+            const { rule } = findElements(Object.values(context));
+            context.type = rule.type;
+        }
+        state.editingRuleContext = context;
+        state.isRuleModalOpen = true;
+        render();
+    }
+
+    function closeRuleModal() {
+        state.isRuleModalOpen = false;
+        state.editingRuleContext = null;
+        render();
+    }
+
+    async function handleSaveRule(e) {
+        e.preventDefault();
+        const formData = new FormData(dom.ruleEditorForm);
+        const { fileId, sheetId, fieldId, ruleId } = state.editingRuleContext;
+        const { field } = findElements([fileId, sheetId, fieldId]);
+
+        const type = formData.get('type');
+        if (!type) {
+            showNotification('Необходимо выбрать тип правила.', 'error');
             return;
         }
-        const errorsByRule = results.errors.reduce((acc, error) => {
-            if (!acc[error.rule_name]) acc[error.rule_name] = [];
-            acc[error.rule_name].push(error);
-            return acc;
-        }, {});
-        dom.summaryResults.innerHTML = `<table class="results-table summary-table"><thead><tr><th>Правило</th><th>Количество ошибок</th></tr></thead><tbody>${Object.entries(errorsByRule).map(([name, errs]) => `<tr class="summary-row" data-rule-name="${name}"><td>${name}</td><td>${errs.length}</td></tr>`).join('')}</tbody></table>`;
+
+        const ruleDef = state.availableRules.find(r => r.id === type);
+        const params = {};
+        if (ruleDef && ruleDef.params_schema) {
+            ruleDef.params_schema.forEach(p => {
+                if (p.type === 'checkbox') {
+                    params[p.name] = formData.has(p.name);
+                } else {
+                    params[p.name] = formData.get(p.name);
+                }
+            });
+        }
+
+        if (ruleId) { // Editing existing rule
+            const rule = field.rules.find(r => r.id === ruleId);
+            rule.params = params;
+        } else { // Adding new rule
+            field.rules.push({
+                id: newId(),
+                type: type,
+                params: params,
+                value: null, // Deprecate 'value'
+                order: field.rules.length + 1
+            });
+        }
+        closeRuleModal();
+        await handleSaveProject();
+        render(); // Re-render main UI
+    }
+
+    function renderValidationResults() {
+        const resultsData = state.validationResults;
+        dom.resultsContainer.style.display = 'block';
+        dom.goldenRecordStats.innerHTML = ''; // Clear old stats
+        dom.summaryResults.innerHTML = '';
         dom.detailedResults.innerHTML = '';
+
+        if (!resultsData || !resultsData.results || resultsData.results.length === 0) {
+            dom.summaryResults.innerHTML = '<div class="success-message">Проверка не выявила данных для анализа.</div>';
+            return;
+        }
+
+        const allSheets = resultsData.results.flatMap(f => f.sheets);
+        const overallTotalRows = allSheets.reduce((sum, s) => sum + s.total_rows, 0);
+        const overallTotalErrors = allSheets.reduce((sum, s) => sum + s.total_errors, 0);
+
+        if (overallTotalRows === 0) {
+             dom.summaryResults.innerHTML = '<div class="success-message">Проверка успешно завершена. Ошибок не найдено (файлы пусты).</div>';
+             dom.goldenRecordStats.innerHTML = '';
+             return;
+        }
+
+        const errorPercentage = ((overallTotalErrors / overallTotalRows) * 100).toFixed(2);
+
+        dom.goldenRecordStats.innerHTML = `
+            <div class="stats-summary">
+                <span>Всего строк обработано: <strong>${overallTotalRows}</strong></span>
+                <span>Всего ошибок найдено: <strong>${overallTotalErrors}</strong></span>
+                <span>Общий процент ошибочных строк: <strong>${errorPercentage}%</strong></span>
+            </div>`;
+
+        if (overallTotalErrors === 0) {
+            dom.summaryResults.innerHTML = '<div class="success-message">Проверка успешно завершена. Ошибок не найдено!</div>';
+            return;
+        }
+
+        resultsData.results.forEach((fileResult, fileIdx) => {
+            fileResult.sheets.forEach((sheetResult, sheetIdx) => {
+                const summaryHtml = `
+                    <div class="result-sheet-container">
+                        <h4>Отчет по листу: ${sheetResult.sheet_name} (Файл: ${fileResult.file_name})</h4>
+                        <p>Всего строк: ${sheetResult.total_rows} | Всего ошибок на листе: ${sheetResult.total_errors}</p>
+                        <table class="results-table summary-table">
+                            <thead>
+                                <tr>
+                                    <th>Правило</th>
+                                    <th>Кол-во ошибок</th>
+                                    <th>% от строк листа</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${sheetResult.rule_summaries.map((summary, ruleIndex) => `
+                                    <tr class="summary-row ${summary.error_count > 0 ? 'clickable' : ''}"
+                                        data-file-idx="${fileIdx}"
+                                        data-sheet-idx="${sheetIdx}"
+                                        data-rule-idx="${ruleIndex}"
+                                        ${summary.error_count === 0 ? 'style="color: #888;"' : ''}>
+                                        <td>${summary.rule_name}</td>
+                                        <td>${summary.error_count}</td>
+                                        <td>${summary.error_percentage}%</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+                dom.summaryResults.innerHTML += summaryHtml;
+            });
+        });
     }
 
     // --- 6. EVENT HANDLERS & LOGIC ---
+    function handleResultsClick(e) {
+        const row = e.target.closest('.summary-row.clickable');
+        if (!row) return;
+
+        const isActive = row.classList.contains('selected');
+
+        // Deselect all rows and clear details
+        document.querySelectorAll('.summary-row.selected').forEach(r => r.classList.remove('selected'));
+        dom.detailedResults.innerHTML = '';
+
+        if (isActive) {
+            // If it was already active, just close it and we're done.
+            return;
+        }
+
+        // Otherwise, open the new one
+        row.classList.add('selected');
+
+        const { fileIdx, sheetIdx, ruleIdx } = row.dataset;
+        const ruleSummary = state.validationResults.results[fileIdx].sheets[sheetIdx].rule_summaries[ruleIdx];
+
+        if (!ruleSummary || ruleSummary.error_count === 0) return;
+
+        const detailsHtml = `
+            <div class="detailed-results-container">
+                <h5>Детализация ошибок для правила: "${ruleSummary.rule_name}"</h5>
+                <table class="results-table detailed-table">
+                    <thead>
+                        <tr>
+                            <th>Строка</th>
+                            <th>Колонка</th>
+                            <th>Значение с ошибкой</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${ruleSummary.detailed_errors.map(err => `
+                            <tr>
+                                <td>${err.row}</td>
+                                <td>${err.column}</td>
+                                <td>${err.value}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+        dom.detailedResults.innerHTML = detailsHtml;
+        dom.detailedResults.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
     function findElements(path) {
         const [fileId, sheetId, fieldId, ruleId] = path;
         const file = state.project.files.find(f => f.id === fileId);
@@ -200,13 +459,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function handleWorkspaceClick(e) {
         const target = e.target;
-
-        // If the click is on a form element that manages its own state, do nothing.
-        // This allows the <select> dropdown to open without an immediate re-render.
-        if (target.matches('.add-rule-type, .add-rule-value')) {
-            return;
-        }
-
         const fileCard = target.closest('.file-card');
         const sheetItem = target.closest('.sheet-item');
         const fieldCard = target.closest('.field-card');
@@ -227,29 +479,14 @@ document.addEventListener('DOMContentLoaded', () => {
             if(sheet) { sheet.is_active = !sheet.is_active; modified = true; }
         } else if (target.closest('.configure-sheet-btn')) {
             state.selectedSheetId = state.selectedSheetId === sheetId ? null : sheetId;
-            // This is a UI-only change, so render and return immediately.
-            render();
-            return;
-        } else if (target.closest('.remove-field-btn')) {
-            const { sheet } = findElements([fileId, sheetId, fieldId]);
-            if(sheet) { sheet.fields = sheet.fields.filter(f => f.id !== fieldId); modified = true; }
+            render(); return;
         } else if (target.closest('.toggle-field-required')) {
             const { field } = findElements([fileId, sheetId, fieldId]);
             if(field) { field.is_required = !field.is_required; modified = true; }
         } else if (target.closest('.add-rule-btn')) {
-            const form = target.closest('.add-rule-form');
-            const type = form.querySelector('.add-rule-type').value;
-            const value = form.querySelector('.add-rule-value').value.trim();
-            if (type) {
-                const { field } = findElements([fileId, sheetId, fieldId]);
-                if(field) {
-                    field.rules.push({ id: newId(), type, value: value || null, order: field.rules.length + 1 });
-                    // Reset the form for better UX
-                    form.querySelector('.add-rule-type').value = "";
-                    form.querySelector('.add-rule-value').value = "";
-                    modified = true;
-                }
-            }
+            openRuleModal({ fileId, sheetId, fieldId });
+        } else if (target.closest('.edit-rule-btn')) {
+            openRuleModal({ fileId, sheetId, fieldId, ruleId });
         } else if (target.closest('.remove-rule-btn')) {
             const { field } = findElements([fileId, sheetId, fieldId, ruleId]);
             if(field) { field.rules = field.rules.filter(r => r.id !== ruleId); modified = true; }
@@ -267,7 +504,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        // Only render and save if a data-modifying action occurred.
         if (modified) {
             render();
             handleSaveProject();
@@ -285,15 +521,20 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function handleValidate() {
-        await handleSaveProject();
+        await handleSaveProject(); // Ensure latest config is saved before validation
         dom.resultsContainer.style.display = 'block';
+        dom.summaryResults.innerHTML = '<div class="loading-spinner"></div>'; // Show loading indicator
+        dom.detailedResults.innerHTML = '';
+        state.validationResults = null;
+
         try {
             const response = await api.validate();
             if (!response.ok) throw new Error((await response.json()).detail);
-            const results = await response.json();
-            renderValidationResults(results);
+            state.validationResults = await response.json();
+            renderValidationResults();
         } catch (error) {
             showError(`Ошибка валидации: ${error.message}`);
+            dom.summaryResults.innerHTML = ''; // Clear loading indicator on error
         }
     }
 
@@ -341,6 +582,11 @@ document.addEventListener('DOMContentLoaded', () => {
     dom.cancelUploadBtn.addEventListener('click', () => { state.showUploadForm = false; render(); });
     dom.fileInput.addEventListener('change', handleFileUpload);
     dom.filesListContainer.addEventListener('click', handleWorkspaceClick);
+    dom.resultsContainer.addEventListener('click', handleResultsClick);
+    // Modal listeners
+    dom.ruleEditorForm.addEventListener('submit', handleSaveRule);
+    dom.closeRuleModalBtn.addEventListener('click', closeRuleModal);
+    dom.cancelRuleModalBtn.addEventListener('click', closeRuleModal);
 
     init();
 });
