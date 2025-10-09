@@ -127,7 +127,8 @@ def load_rules():
                             "description": getattr(module, "RULE_DESC", ""),
                             "validator": module.validate,
                             "is_configurable": getattr(module, "IS_CONFIGURABLE", False),
-                            "formatter": getattr(module, "format_name", None)
+                            "formatter": getattr(module, "format_name", None),
+                            "params_schema": getattr(module, "PARAMS_SCHEMA", None)
                         }
             except Exception as e:
                 print(f"Error loading rule from {filename}: {e}")
@@ -245,30 +246,38 @@ async def upload_file_to_project(project_id: str, file: UploadFile = File(...)):
 @app.post("/api/projects/{project_id}/validate")
 async def validate_project_data(project_id: str):
     project = read_project(project_id)
-    if not project: raise HTTPException(status_code=404, detail="Project not found")
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
 
     project_files_dir = PROJECTS_DIR / project_id / "files"
-    errors = []
-    total_rows = 0
+    results = []
 
     for file_schema in project.files:
         file_path = project_files_dir / file_schema.saved_name
         if not file_path.exists():
             continue
 
+        file_result = {
+            "file_name": file_schema.name,
+            "sheets": []
+        }
+
         for sheet_schema in file_schema.sheets:
             if not sheet_schema.is_active:
                 continue
 
-            df = pd.read_excel(file_path, sheet_name=sheet_schema.name)
-            total_rows += len(df)
+            try:
+                df = pd.read_excel(file_path, sheet_name=sheet_schema.name)
+                total_rows = len(df)
+                if total_rows == 0: continue
 
-            for field_schema in sheet_schema.fields:
-                if field_schema.name not in df.columns: continue
+                # { "rule_name": { "errors": [], "details": {} } }
+                errors_by_rule = {}
 
-                for index, value in df[field_schema.name].items():
-                    if field_schema.is_required and (pd.isna(value) or str(value).strip() == ""):
-                        errors.append({"row": index + 2, "column": field_schema.name, "value": "ПУСТО", "rule_name": "Обязательное поле", "error": "Поле не должно быть пустым"})
+                # 1. Gather all errors
+                for field_schema in sheet_schema.fields:
+                    if field_schema.name not in df.columns:
+                        continue
 
                     # Sort rules by order before applying
                     sorted_rules = sorted(field_schema.rules, key=lambda r: r.order)
@@ -277,22 +286,69 @@ async def validate_project_data(project_id: str):
                         rule_def = RULE_REGISTRY.get(rule_config.type)
                         if not rule_def: continue
 
+                        formatter = rule_def.get("formatter")
+                        rule_name_for_error = formatter(rule_config.params) if formatter and rule_config.params else rule_def["name"]
+
+                        if rule_name_for_error not in errors_by_rule:
+                            errors_by_rule[rule_name_for_error] = []
+
                         validator = rule_def["validator"]
                         params = rule_config.params or {}
 
-                        is_valid = validator(value, params=params) if 'params' in inspect.signature(validator).parameters else validator(value)
+                        for index, value in df[field_schema.name].items():
+                            is_valid = validator(value, params=params) if 'params' in inspect.signature(validator).parameters else validator(value)
+                            if not is_valid:
+                                errors_by_rule[rule_name_for_error].append({
+                                    "row": index + 2,
+                                    "column": field_schema.name,
+                                    "value": str(value) if pd.notna(value) else "ПУСТО"
+                                })
 
-                        if not is_valid:
-                            formatter = rule_def.get("formatter")
-                            rule_name_for_error = formatter(params) if formatter and params else rule_def["name"]
-                            errors.append({"row": index + 2, "column": field_schema.name, "value": str(value), "rule_name": rule_name_for_error, "error": f"Validation failed"})
+                # 2. Format the output
+                rule_summaries = []
+                for rule_name, errors_list in errors_by_rule.items():
+                    error_count = len(errors_list)
+                    # We report all applied rules, even if they have 0 errors
+                    rule_summaries.append({
+                        "rule_name": rule_name,
+                        "error_count": error_count,
+                        "error_percentage": round((error_count / total_rows) * 100, 2) if total_rows > 0 else 0,
+                        "detailed_errors": errors_list
+                    })
 
-    return {"total_rows": total_rows, "error_rows_count": len({e["row"] for e in errors}), "errors": errors}
+                # Sort by error count descending
+                rule_summaries.sort(key=lambda x: x["error_count"], reverse=True)
+
+                file_result["sheets"].append({
+                    "sheet_name": sheet_schema.name,
+                    "total_rows": total_rows,
+                    "total_errors": sum(s['error_count'] for s in rule_summaries),
+                    "rule_summaries": rule_summaries
+                })
+
+            except Exception as e:
+                # Handle cases where a sheet might be unreadable
+                print(f"Error processing sheet {sheet_schema.name} in file {file_schema.name}: {e}")
+                continue
+
+        if file_result["sheets"]:
+            results.append(file_result)
+
+    return {"results": results}
 
 # --- Rule Library ---
 @app.get("/api/rules")
 async def get_all_rules():
-    return [{"id": data["id"], "name": data["name"], "description": data["description"], "is_configurable": data["is_configurable"]} for data in RULE_REGISTRY.values()]
+    rules_list = []
+    for data in RULE_REGISTRY.values():
+        rules_list.append({
+            "id": data["id"],
+            "name": data["name"],
+            "description": data["description"],
+            "is_configurable": data["is_configurable"],
+            "params_schema": data.get("params_schema") # Use .get for safety, might be None
+        })
+    return rules_list
 
 # ==============================================================================
 # 5. Static Files & HTML Routes

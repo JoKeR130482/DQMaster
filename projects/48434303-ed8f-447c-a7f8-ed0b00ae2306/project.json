@@ -1,0 +1,41 @@
+{
+  "id": "48434303-ed8f-447c-a7f8-ed0b00ae2306",
+  "name": "Тестовый проект 1759993683",
+  "description": "",
+  "created_at": "2025-10-09T07:08:03.383915",
+  "updated_at": "2025-10-09T07:08:03.981674",
+  "files": [
+    {
+      "id": "e63bedc5-f3c1-497f-8a8d-e318508b5631",
+      "name": "test_data.xlsx",
+      "saved_name": "2176af10-6e5a-4c96-b756-ba737ecd69b0.xlsx",
+      "sheets": [
+        {
+          "id": "64795e31-9bd1-493b-a181-3345fd3c8be0",
+          "name": "Лист1",
+          "is_active": true,
+          "fields": [
+            {
+              "id": "1c87cad0-7bc4-4404-b78a-b0b109f6b61c",
+              "name": "Название",
+              "is_required": false,
+              "rules": [
+                {
+                  "id": "id_1759993683913_8hho5dvus",
+                  "type": "substring_check",
+                  "value": null,
+                  "params": {
+                    "value": "СТОП_СЛОВО",
+                    "mode": "contains",
+                    "case_sensitive": false
+                  },
+                  "order": 1
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
