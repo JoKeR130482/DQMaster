@@ -228,8 +228,14 @@ body {
 .results-table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
 .results-table th, .results-table td { border-bottom: 1px solid var(--slate-200); padding: 0.75rem 1rem; text-align: left; }
 .results-table th { background-color: var(--slate-100); }
-.summary-table tbody tr { cursor: pointer; }
-.summary-table tbody tr.active { background-color: var(--blue-100); }
+.summary-table tbody tr.clickable:hover { background-color: var(--slate-50); }
+.summary-table tbody tr.selected { background-color: var(--blue-100) !important; }
+.details-row > td { padding: 0; }
+.details-row .detailed-results-container { padding: 1rem 1.5rem; background-color: var(--slate-50); border-top: 2px solid var(--blue-200); }
+.details-row .detailed-results-container .results-table { margin-top: 0; }
+.result-sheet-container { margin-top: 2rem; }
+.result-sheet-container:first-child { margin-top: 0; }
+.result-sheet-container h4 { font-size: 1.1rem; font-weight: 600; margin-bottom: 0.5rem; }
 .detail-table caption { font-size: 1.1em; font-weight: 600; margin-bottom: 1rem; text-align: left; }
 .success-message { background-color: #dcfce7; color: #166534; padding: 1rem; border-radius: var(--radius-md); text-align: center; font-weight: 500; }
 .description-cell { max-width: 400px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
