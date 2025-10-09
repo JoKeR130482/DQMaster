@@ -231,23 +231,30 @@ document.addEventListener('DOMContentLoaded', () => {
             const currentParams = rule ? rule.params : {};
             schema.forEach(param => {
                 const value = currentParams[param.name] ?? param.default;
-                let fieldHtml = `<div class="form-group">`;
-                fieldHtml += `<label for="param-${param.name}">${param.label}</label>`;
-                switch (param.type) {
-                    case 'checkbox':
-                        fieldHtml += `<input type="checkbox" id="param-${param.name}" name="${param.name}" ${value ? 'checked' : ''}>`;
-                        break;
-                    case 'select':
+                let fieldHtml = '';
+
+                if (param.type === 'checkbox') {
+                    // Use the dedicated checkbox group class for proper styling
+                    fieldHtml = `
+                        <div class="form-group-checkbox">
+                            <input type="checkbox" id="param-${param.name}" name="${param.name}" ${value ? 'checked' : ''}>
+                            <label for="param-${param.name}">${param.label}</label>
+                        </div>`;
+                } else {
+                    // Standard form group for other types
+                    fieldHtml = `<div class="form-group">`;
+                    fieldHtml += `<label for="param-${param.name}">${param.label}</label>`;
+                    if (param.type === 'select') {
                         fieldHtml += `<select id="param-${param.name}" name="${param.name}">`;
                         param.options.forEach(opt => {
                             fieldHtml += `<option value="${opt.value}" ${opt.value === value ? 'selected' : ''}>${opt.label}</option>`;
                         });
                         fieldHtml += `</select>`;
-                        break;
-                    default: // text
+                    } else { // text
                         fieldHtml += `<input type="text" id="param-${param.name}" name="${param.name}" value="${value || ''}">`;
+                    }
+                    fieldHtml += `</div>`;
                 }
-                fieldHtml += `</div>`;
                 form.insertAdjacentHTML('beforeend', fieldHtml);
             });
         }
