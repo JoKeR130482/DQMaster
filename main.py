@@ -272,31 +272,48 @@ async def validate_project_data(project_id: str):
                 total_rows = len(df)
                 if total_rows == 0: continue
 
-                # { "rule_name": { "errors": [], "details": {} } }
                 errors_by_rule = {}
+                required_errors_by_row = {} # {row_index: [error_details]}
 
                 # 1. Gather all errors
+                REQUIRED_RULE_NAME = "Обязательное поле"
                 for field_schema in sheet_schema.fields:
                     if field_schema.name not in df.columns:
                         continue
 
-                    # Sort rules by order before applying
-                    sorted_rules = sorted(field_schema.rules, key=lambda r: r.order)
+                    for index, value in df[field_schema.name].items():
+                        # A. Check for required field errors
+                        if field_schema.is_required and (pd.isna(value) or str(value).strip() == ""):
+                            # Add to the special count for the main statistic
+                            error_detail_for_main_stat = {
+                                "row": index + 2, "column": field_schema.name, "value": "ПУСТО", "error": "Поле не должно быть пустым"
+                            }
+                            if index not in required_errors_by_row:
+                                required_errors_by_row[index] = []
+                            required_errors_by_row[index].append(error_detail_for_main_stat)
 
-                    for rule_config in sorted_rules:
-                        rule_def = RULE_REGISTRY.get(rule_config.type)
-                        if not rule_def: continue
+                            # ALSO add it to the general per-rule summary report
+                            if REQUIRED_RULE_NAME not in errors_by_rule:
+                                errors_by_rule[REQUIRED_RULE_NAME] = []
+                            errors_by_rule[REQUIRED_RULE_NAME].append({
+                                "row": index + 2, "column": field_schema.name, "value": "ПУСТО"
+                            })
 
-                        formatter = rule_def.get("formatter")
-                        rule_name_for_error = formatter(rule_config.params) if formatter and rule_config.params else rule_def["name"]
+                        # B. Process other custom rules
+                        sorted_rules = sorted(field_schema.rules, key=lambda r: r.order)
+                        for rule_config in sorted_rules:
+                            rule_def = RULE_REGISTRY.get(rule_config.type)
+                            if not rule_def: continue
 
-                        if rule_name_for_error not in errors_by_rule:
-                            errors_by_rule[rule_name_for_error] = []
+                            formatter = rule_def.get("formatter")
+                            rule_name_for_error = formatter(rule_config.params) if formatter and rule_config.params else rule_def["name"]
 
-                        validator = rule_def["validator"]
-                        params = rule_config.params or {}
+                            if rule_name_for_error not in errors_by_rule:
+                                errors_by_rule[rule_name_for_error] = []
 
-                        for index, value in df[field_schema.name].items():
+                            validator = rule_def["validator"]
+                            params = rule_config.params or {}
+
                             is_valid = validator(value, params=params) if 'params' in inspect.signature(validator).parameters else validator(value)
                             if not is_valid:
                                 errors_by_rule[rule_name_for_error].append({
@@ -320,10 +337,15 @@ async def validate_project_data(project_id: str):
                 # Sort by error count descending
                 rule_summaries.sort(key=lambda x: x["error_count"], reverse=True)
 
+                # Flatten the list of required field errors for detailed view
+                detailed_required_errors = [error for error_list in required_errors_by_row.values() for error in error_list]
+
                 file_result["sheets"].append({
                     "sheet_name": sheet_schema.name,
                     "total_rows": total_rows,
-                    "total_errors": sum(s['error_count'] for s in rule_summaries),
+                    "total_errors": sum(s['error_count'] for s in rule_summaries), # This is now for the secondary report
+                    "required_field_error_rows_count": len(required_errors_by_row),
+                    "required_field_errors": detailed_required_errors,
                     "rule_summaries": rule_summaries
                 })
 
