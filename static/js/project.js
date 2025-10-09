@@ -11,6 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
         validationResults: null,
         isRuleModalOpen: false,
         editingRuleContext: null, // { fileId, sheetId, fieldId, ruleId? }
+        showRequiredErrorsDetails: false,
     };
 
     // --- 2. DOM ELEMENTS ---
@@ -343,66 +344,116 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const allSheets = resultsData.results.flatMap(f => f.sheets);
+        if (allSheets.length === 0) {
+            dom.summaryResults.innerHTML = '<div class="success-message">Проверка не выявила данных для анализа.</div>';
+            return;
+        }
+
         const overallTotalRows = allSheets.reduce((sum, s) => sum + s.total_rows, 0);
-        const overallTotalErrors = allSheets.reduce((sum, s) => sum + s.total_errors, 0);
+        const overallRequiredErrorRows = allSheets.reduce((sum, s) => sum + s.required_field_error_rows_count, 0);
+        const requiredErrorPercentage = overallTotalRows > 0 ? ((overallRequiredErrorRows / overallTotalRows) * 100).toFixed(2) : 0;
 
         if (overallTotalRows === 0) {
-             dom.summaryResults.innerHTML = '<div class="success-message">Проверка успешно завершена. Ошибок не найдено (файлы пусты).</div>';
+             dom.summaryResults.innerHTML = '<div class="success-message">Проверка успешно завершена. Файлы пусты.</div>';
              dom.goldenRecordStats.innerHTML = '';
              return;
         }
 
-        const errorPercentage = ((overallTotalErrors / overallTotalRows) * 100).toFixed(2);
-
-        dom.goldenRecordStats.innerHTML = `
+        // New stats block
+        const statsHtml = `
             <div class="stats-summary">
-                <span>Всего строк обработано: <strong>${overallTotalRows}</strong></span>
-                <span>Всего ошибок найдено: <strong>${overallTotalErrors}</strong></span>
-                <span>Общий процент ошибочных строк: <strong>${errorPercentage}%</strong></span>
-            </div>`;
+                <span>Всего строк: <strong>${overallTotalRows}</strong></span>
+                <span id="required-errors-stat" class="${overallRequiredErrorRows > 0 ? 'clickable' : ''}" title="Нажмите, чтобы показать/скрыть детали">
+                    Ошибочных строк (обязательные поля):
+                    <strong>${overallRequiredErrorRows}</strong>
+                </span>
+                <span>Процент ошибочных строк: <strong>${requiredErrorPercentage}%</strong></span>
+            </div>
+        `;
+        dom.goldenRecordStats.innerHTML = statsHtml;
 
-        if (overallTotalErrors === 0) {
-            dom.summaryResults.innerHTML = '<div class="success-message">Проверка успешно завершена. Ошибок не найдено!</div>';
-            return;
+        // Conditionally render the detailed required errors
+        if (state.showRequiredErrorsDetails && overallRequiredErrorRows > 0) {
+            const allRequiredErrors = allSheets.flatMap(s => s.required_field_errors);
+            const detailsHtml = `
+                <div class="detailed-results-container required-errors-details">
+                    <h5>Детализация ошибок в обязательных полях</h5>
+                    <table class="results-table detailed-table">
+                        <thead>
+                            <tr>
+                                <th>Строка</th>
+                                <th>Поле</th>
+                                <th>Значение</th>
+                                <th>Ошибка</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${allRequiredErrors.map(err => `
+                                <tr>
+                                    <td>${err.row}</td>
+                                    <td>${err.column}</td>
+                                    <td>${err.value}</td>
+                                    <td>${err.error}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>`;
+            dom.goldenRecordStats.insertAdjacentHTML('beforeend', detailsHtml);
         }
 
+        // Render the secondary report (per-rule errors)
         resultsData.results.forEach((fileResult, fileIdx) => {
             fileResult.sheets.forEach((sheetResult, sheetIdx) => {
-                const summaryHtml = `
-                    <div class="result-sheet-container">
-                        <h4>Отчет по листу: ${sheetResult.sheet_name} (Файл: ${fileResult.file_name})</h4>
-                        <p>Всего строк: ${sheetResult.total_rows} | Всего ошибок на листе: ${sheetResult.total_errors}</p>
-                        <table class="results-table summary-table">
-                            <thead>
-                                <tr>
-                                    <th>Правило</th>
-                                    <th>Кол-во ошибок</th>
-                                    <th>% от строк листа</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${sheetResult.rule_summaries.map((summary, ruleIndex) => `
-                                    <tr class="summary-row ${summary.error_count > 0 ? 'clickable' : ''}"
-                                        data-file-idx="${fileIdx}"
-                                        data-sheet-idx="${sheetIdx}"
-                                        data-rule-idx="${ruleIndex}"
-                                        ${summary.error_count === 0 ? 'style="color: #888;"' : ''}>
-                                        <td>${summary.rule_name}</td>
-                                        <td>${summary.error_count}</td>
-                                        <td>${summary.error_percentage}%</td>
+                if (sheetResult.rule_summaries.length > 0) {
+                    const summaryHtml = `
+                        <div class="result-sheet-container">
+                            <h4>Отчет по правилам: ${sheetResult.sheet_name} (Файл: ${fileResult.file_name})</h4>
+                            <table class="results-table summary-table">
+                                <thead>
+                                    <tr>
+                                        <th>Правило</th>
+                                        <th>Кол-во ошибок</th>
+                                        <th>% от строк листа</th>
                                     </tr>
-                                `).join('')}
-                            </tbody>
-                        </table>
-                    </div>
-                `;
-                dom.summaryResults.innerHTML += summaryHtml;
+                                </thead>
+                                <tbody>
+                                    ${sheetResult.rule_summaries.map((summary, ruleIndex) => `
+                                        <tr class="summary-row ${summary.error_count > 0 ? 'clickable' : ''}"
+                                            data-file-idx="${fileIdx}"
+                                            data-sheet-idx="${sheetIdx}"
+                                            data-rule-idx="${ruleIndex}"
+                                            ${summary.error_count === 0 ? 'style="color: #888;"' : ''}>
+                                            <td>${summary.rule_name}</td>
+                                            <td>${summary.error_count}</td>
+                                            <td>${summary.error_percentage}%</td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    `;
+                    dom.summaryResults.innerHTML += summaryHtml;
+                }
             });
         });
+
+        if (dom.summaryResults.innerHTML.trim() === '' && overallRequiredErrorRows === 0) {
+            dom.summaryResults.innerHTML = '<div class="success-message">Проверка успешно завершена. Ошибок не найдено!</div>';
+        }
     }
 
     // --- 6. EVENT HANDLERS & LOGIC ---
     function handleResultsClick(e) {
+        // Handle clicks on the main stats
+        const stat = e.target.closest('#required-errors-stat');
+        if (stat) {
+            state.showRequiredErrorsDetails = !state.showRequiredErrorsDetails;
+            renderValidationResults(); // Re-render to show/hide details
+            return;
+        }
+
+        // Handle clicks on the rule summary rows
         const row = e.target.closest('.summary-row.clickable');
         if (!row) return;
 
@@ -413,11 +464,9 @@ document.addEventListener('DOMContentLoaded', () => {
         dom.detailedResults.innerHTML = '';
 
         if (isActive) {
-            // If it was already active, just close it and we're done.
             return;
         }
 
-        // Otherwise, open the new one
         row.classList.add('selected');
 
         const { fileIdx, sheetIdx, ruleIdx } = row.dataset;

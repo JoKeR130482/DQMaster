@@ -220,8 +220,11 @@ body {
 .empty-state-h3 { font-size: 1.25rem; font-weight: 600; margin-bottom: 0.5rem; }
 .empty-state-p { color: var(--slate-600); }
 .results-section { margin-top: 2rem; }
-.stats-summary { display: flex; gap: 2rem; background-color: var(--slate-50); padding: 1rem; border-radius: var(--radius-md); margin-bottom: 1.5rem; }
+.stats-summary { display: flex; flex-wrap: wrap; gap: 1rem 2rem; background-color: var(--slate-50); padding: 1rem; border-radius: var(--radius-md); margin-bottom: 1.5rem; }
 .stats-summary strong { font-size: 1.5rem; }
+.stats-summary .clickable { cursor: pointer; text-decoration: underline; text-decoration-style: dashed; text-underline-offset: 4px; }
+.stats-summary .clickable:hover { color: var(--blue-600); }
+.required-errors-details { margin-top: 1rem; }
 .results-table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
 .results-table th, .results-table td { border-bottom: 1px solid var(--slate-200); padding: 0.75rem 1rem; text-align: left; }
 .results-table th { background-color: var(--slate-100); }
