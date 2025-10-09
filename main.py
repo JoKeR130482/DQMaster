@@ -251,17 +251,20 @@ async def validate_project_data(project_id: str):
         raise HTTPException(status_code=404, detail="Project not found")
 
     project_files_dir = PROJECTS_DIR / project_id / "files"
-    results = []
+
+    # Project-wide accumulators
+    project_total_rows = 0
+    project_required_error_details = {} # Key: f"{file_id}-{sheet_id}-{row_num}", Value: [error_details]
+
+    # File-level results accumulator
+    file_results = []
 
     for file_schema in project.files:
         file_path = project_files_dir / file_schema.saved_name
         if not file_path.exists():
             continue
 
-        file_result = {
-            "file_name": file_schema.name,
-            "sheets": []
-        }
+        sheet_summaries = []
 
         for sheet_schema in file_schema.sheets:
             if not sheet_schema.is_active:
@@ -269,95 +272,116 @@ async def validate_project_data(project_id: str):
 
             try:
                 df = pd.read_excel(file_path, sheet_name=sheet_schema.name)
-                total_rows = len(df)
-                if total_rows == 0: continue
+                sheet_total_rows = len(df)
+                if sheet_total_rows == 0:
+                    continue
 
-                errors_by_rule = {}
-                required_errors_by_row = {} # {row_index: [error_details]}
+                project_total_rows += sheet_total_rows
 
-                # 1. Gather all errors
-                REQUIRED_RULE_NAME = "Обязательное поле"
+                # Sheet-level accumulators
+                sheet_errors_by_rule = {}
+
+                # Get a list of all rule names that apply to this sheet for the final report
+                all_applicable_rule_names = set()
+                if any(f.is_required for f in sheet_schema.fields):
+                    all_applicable_rule_names.add("Обязательное поле")
+                for f in sheet_schema.fields:
+                    for r_conf in f.rules:
+                        r_def = RULE_REGISTRY.get(r_conf.type)
+                        if r_def:
+                            formatter = r_def.get("formatter")
+                            rule_name = formatter(r_conf.params) if formatter and r_conf.params else r_def["name"]
+                            all_applicable_rule_names.add(rule_name)
+
                 for field_schema in sheet_schema.fields:
                     if field_schema.name not in df.columns:
                         continue
 
                     for index, value in df[field_schema.name].items():
-                        # A. Check for required field errors
+                        row_num = index + 2
+
+                        # 1. Required Field Check
                         if field_schema.is_required and (pd.isna(value) or str(value).strip() == ""):
-                            # Add to the special count for the main statistic
-                            error_detail_for_main_stat = {
-                                "row": index + 2, "column": field_schema.name, "value": "ПУСТО", "error": "Поле не должно быть пустым"
+                            error_type = "Обязательное поле"
+                            error_detail = {
+                                "file_name": file_schema.name, "sheet_name": sheet_schema.name,
+                                "field_name": field_schema.name, "row": row_num,
+                                "error_type": error_type, "value": "ПУСТО"
                             }
-                            if index not in required_errors_by_row:
-                                required_errors_by_row[index] = []
-                            required_errors_by_row[index].append(error_detail_for_main_stat)
 
-                            # ALSO add it to the general per-rule summary report
-                            if REQUIRED_RULE_NAME not in errors_by_rule:
-                                errors_by_rule[REQUIRED_RULE_NAME] = []
-                            errors_by_rule[REQUIRED_RULE_NAME].append({
-                                "row": index + 2, "column": field_schema.name, "value": "ПУСТО"
-                            })
+                            # Add to project-wide stats for unique rows
+                            error_key = f"{file_schema.id}-{sheet_schema.id}-{row_num}"
+                            if error_key not in project_required_error_details:
+                                project_required_error_details[error_key] = []
+                            project_required_error_details[error_key].append(error_detail)
 
-                        # B. Process other custom rules
-                        sorted_rules = sorted(field_schema.rules, key=lambda r: r.order)
-                        for rule_config in sorted_rules:
+                            # Add to sheet-level summary
+                            if error_type not in sheet_errors_by_rule:
+                                sheet_errors_by_rule[error_type] = []
+                            sheet_errors_by_rule[error_type].append(error_detail)
+
+                        # 2. Other rules
+                        for rule_config in sorted(field_schema.rules, key=lambda r: r.order):
                             rule_def = RULE_REGISTRY.get(rule_config.type)
                             if not rule_def: continue
 
-                            formatter = rule_def.get("formatter")
-                            rule_name_for_error = formatter(rule_config.params) if formatter and rule_config.params else rule_def["name"]
-
-                            if rule_name_for_error not in errors_by_rule:
-                                errors_by_rule[rule_name_for_error] = []
-
                             validator = rule_def["validator"]
                             params = rule_config.params or {}
-
                             is_valid = validator(value, params=params) if 'params' in inspect.signature(validator).parameters else validator(value)
-                            if not is_valid:
-                                errors_by_rule[rule_name_for_error].append({
-                                    "row": index + 2,
-                                    "column": field_schema.name,
-                                    "value": str(value) if pd.notna(value) else "ПУСТО"
-                                })
 
-                # 2. Format the output
-                rule_summaries = []
-                for rule_name, errors_list in errors_by_rule.items():
+                            if not is_valid:
+                                formatter = rule_def.get("formatter")
+                                rule_name = formatter(params) if formatter and params else rule_def["name"]
+
+                                error_detail = {
+                                    "file_name": file_schema.name, "sheet_name": sheet_schema.name,
+                                    "field_name": field_schema.name, "row": row_num,
+                                    "error_type": rule_name, "value": str(value) if pd.notna(value) else "ПУСТО"
+                                }
+
+                                if rule_name not in sheet_errors_by_rule:
+                                    sheet_errors_by_rule[rule_name] = []
+                                sheet_errors_by_rule[rule_name].append(error_detail)
+
+                # Format sheet summary
+                formatted_summaries = []
+                for rule_name in sorted(list(all_applicable_rule_names)):
+                    errors_list = sheet_errors_by_rule.get(rule_name, [])
                     error_count = len(errors_list)
-                    # We report all applied rules, even if they have 0 errors
-                    rule_summaries.append({
+                    formatted_summaries.append({
                         "rule_name": rule_name,
                         "error_count": error_count,
-                        "error_percentage": round((error_count / total_rows) * 100, 2) if total_rows > 0 else 0,
+                        "error_percentage": round((error_count / sheet_total_rows) * 100, 2) if sheet_total_rows > 0 else 0,
                         "detailed_errors": errors_list
                     })
 
-                # Sort by error count descending
-                rule_summaries.sort(key=lambda x: x["error_count"], reverse=True)
+                formatted_summaries.sort(key=lambda x: x["error_count"], reverse=True)
 
-                # Flatten the list of required field errors for detailed view
-                detailed_required_errors = [error for error_list in required_errors_by_row.values() for error in error_list]
-
-                file_result["sheets"].append({
+                sheet_summaries.append({
                     "sheet_name": sheet_schema.name,
-                    "total_rows": total_rows,
-                    "total_errors": sum(s['error_count'] for s in rule_summaries), # This is now for the secondary report
-                    "required_field_error_rows_count": len(required_errors_by_row),
-                    "required_field_errors": detailed_required_errors,
-                    "rule_summaries": rule_summaries
+                    "total_rows": sheet_total_rows,
+                    "rule_summaries": formatted_summaries
                 })
 
             except Exception as e:
-                # Handle cases where a sheet might be unreadable
                 print(f"Error processing sheet {sheet_schema.name} in file {file_schema.name}: {e}")
                 continue
 
-        if file_result["sheets"]:
-            results.append(file_result)
+        if sheet_summaries:
+            file_results.append({
+                "file_name": file_schema.name,
+                "sheets": sheet_summaries
+            })
 
-    return {"results": results}
+    # Flatten the detailed errors for the main statistic
+    final_required_errors = [err for err_list in project_required_error_details.values() for err in err_list]
+
+    return {
+        "total_processed_rows": project_total_rows,
+        "required_field_error_rows_count": len(project_required_error_details),
+        "required_field_errors": final_required_errors,
+        "file_results": file_results
+    }
 
 # --- Rule Library ---
 @app.get("/api/rules")
