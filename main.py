@@ -255,6 +255,7 @@ async def validate_project_data(project_id: str):
     project_total_rows = 0
     all_errors = [] # A flat list of all errors from all files/sheets
 
+    # --- Step 1: Gather ALL errors from all files/sheets ---
     for file_schema in project.files:
         file_path = project_files_dir / file_schema.saved_name
         if not file_path.exists():
@@ -276,18 +277,7 @@ async def validate_project_data(project_id: str):
                     if field_schema.name not in df.columns:
                         continue
 
-                    # 1. Required Field Check
-                    if field_schema.is_required:
-                        for index, value in df[field_schema.name].items():
-                            if pd.isna(value) or str(value).strip() == "":
-                                all_errors.append({
-                                    "file_name": file_schema.name, "sheet_name": sheet_schema.name,
-                                    "field_name": field_schema.name, "is_required": True,
-                                    "row": index + 2, "error_type": "Обязательное поле",
-                                    "value": "ПУСТО"
-                                })
-
-                    # 2. Other Rules
+                    # Process all configured rules for the current field
                     for rule_config in sorted(field_schema.rules, key=lambda r: r.order):
                         rule_def = RULE_REGISTRY.get(rule_config.type)
                         if not rule_def: continue
@@ -301,9 +291,12 @@ async def validate_project_data(project_id: str):
                             is_valid = validator(value, params=params) if 'params' in inspect.signature(validator).parameters else validator(value)
                             if not is_valid:
                                 all_errors.append({
-                                    "file_name": file_schema.name, "sheet_name": sheet_schema.name,
-                                    "field_name": field_schema.name, "is_required": field_schema.is_required,
-                                    "row": index + 2, "error_type": rule_name,
+                                    "file_name": file_schema.name,
+                                    "sheet_name": sheet_schema.name,
+                                    "field_name": field_schema.name,
+                                    "is_required": field_schema.is_required,
+                                    "row": index + 2,
+                                    "error_type": rule_name,
                                     "value": str(value) if pd.notna(value) else "ПУСТО"
                                 })
 
@@ -311,13 +304,13 @@ async def validate_project_data(project_id: str):
                 print(f"Error processing sheet {sheet_schema.name} in file {file_schema.name}: {e}")
                 continue
 
-    # --- Post-processing and Structuring ---
+    # --- Step 2: Post-process the flat list of errors ---
 
-    # 1. Calculate main statistic: unique rows with errors in required fields
+    # 2.1: Calculate main statistic: unique rows with errors in required fields
     required_field_errors = [e for e in all_errors if e["is_required"]]
     unique_error_row_keys = {f"{e['file_name']}-{e['sheet_name']}-{e['row']}" for e in required_field_errors}
 
-    # 2. Build per-sheet summaries
+    # 2.2: Build per-sheet summaries
     file_results = []
     for file_schema in project.files:
         sheet_summaries = []
@@ -326,8 +319,6 @@ async def validate_project_data(project_id: str):
 
             # Get all rule names that *could* apply to this sheet
             all_applicable_rule_names = set()
-            if any(f.is_required for f in sheet_schema.fields):
-                all_applicable_rule_names.add("Обязательное поле")
             for f in sheet_schema.fields:
                 for r_conf in f.rules:
                     r_def = RULE_REGISTRY.get(r_conf.type)
@@ -340,21 +331,22 @@ async def validate_project_data(project_id: str):
             sheet_errors = [e for e in all_errors if e["file_name"] == file_schema.name and e["sheet_name"] == sheet_schema.name]
 
             summary_list = []
-            for rule_name in sorted(list(all_applicable_rule_names)):
-                rule_errors = [e for e in sheet_errors if e["error_type"] == rule_name]
-                error_count = len(rule_errors)
-
+            if all_applicable_rule_names: # Only build summary if there are rules
                 df_sheet = pd.read_excel(PROJECTS_DIR / project_id / "files" / file_schema.saved_name, sheet_name=sheet_schema.name)
                 sheet_total_rows = len(df_sheet)
 
-                summary_list.append({
-                    "rule_name": rule_name,
-                    "error_count": error_count,
-                    "error_percentage": round((error_count / sheet_total_rows) * 100, 2) if sheet_total_rows > 0 else 0,
-                    "detailed_errors": rule_errors
-                })
+                for rule_name in sorted(list(all_applicable_rule_names)):
+                    rule_errors = [e for e in sheet_errors if e["error_type"] == rule_name]
+                    error_count = len(rule_errors)
 
-            summary_list.sort(key=lambda x: x['error_count'], reverse=True)
+                    summary_list.append({
+                        "rule_name": rule_name,
+                        "error_count": error_count,
+                        "error_percentage": round((error_count / sheet_total_rows) * 100, 2) if sheet_total_rows > 0 else 0,
+                        "detailed_errors": rule_errors
+                    })
+
+                summary_list.sort(key=lambda x: x['error_count'], reverse=True)
 
             sheet_summaries.append({
                 "sheet_name": sheet_schema.name,
@@ -368,6 +360,7 @@ async def validate_project_data(project_id: str):
                 "sheets": sheet_summaries
             })
 
+    # --- Step 3: Return the final structured response ---
     return {
         "total_processed_rows": project_total_rows,
         "required_field_error_rows_count": len(unique_error_row_keys),

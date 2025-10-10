@@ -1,0 +1,43 @@
+{
+  "id": "0c8a4e7c-27d0-45ae-b250-ff40055f5a71",
+  "name": "Final Logic Test 1760087384",
+  "description": "",
+  "created_at": "2025-10-10T09:09:44.812193",
+  "updated_at": "2025-10-10T09:09:46.315955",
+  "files": [
+    {
+      "id": "889b9ba8-f583-430a-b0f4-39edee69d1aa",
+      "name": "test_data_final.xlsx",
+      "saved_name": "c2f94b82-eea9-4c37-8d3f-5410f52c9e70.xlsx",
+      "sheets": [
+        {
+          "id": "2878977f-3c3d-4543-981f-c2ad3173134a",
+          "name": "Лист1",
+          "is_active": true,
+          "fields": [
+            {
+              "id": "48bb37d3-7fb7-434f-82c3-7c126c391a3d",
+              "name": "WareName#Rus",
+              "is_required": true,
+              "rules": [
+                {
+                  "id": "id_1760087386240_zwkdepr0x",
+                  "type": "starts_with_capital",
+                  "value": null,
+                  "params": {},
+                  "order": 1
+                }
+              ]
+            },
+            {
+              "id": "70b1811c-b848-44f9-b0e6-f15b998b1a06",
+              "name": "Артикул",
+              "is_required": false,
+              "rules": []
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
