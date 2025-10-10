@@ -348,9 +348,16 @@ async def validate_project_data(project_id: str):
 
                 summary_list.sort(key=lambda x: x['error_count'], reverse=True)
 
+            # Calculate sheet-specific error row count and percentage
+            sheet_error_row_keys = {e['row'] for e in sheet_errors}
+            sheet_error_rows_count = len(sheet_error_row_keys)
+            sheet_error_percentage = round((sheet_error_rows_count / sheet_total_rows) * 100, 2) if sheet_total_rows > 0 else 0
+
             sheet_summaries.append({
                 "sheet_name": sheet_schema.name,
                 "total_rows": sheet_total_rows,
+                "sheet_error_rows_count": sheet_error_rows_count,
+                "sheet_error_percentage": sheet_error_percentage,
                 "rule_summaries": summary_list
             })
 
