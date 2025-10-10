@@ -128,6 +128,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <thead>
                 <tr>
                     <th><div data-sort-key="name">Название <i data-lucide="arrow-up-down" class="sort-icon"></i></div></th>
+                    <th><div>ID Проекта</div></th>
                     <th><div>Описание</div></th>
                     <th><div data-sort-key="size_kb">Размер <i data-lucide="arrow-up-down" class="sort-icon"></i></div></th>
                     <th><div data-sort-key="updated_at">Изменен <i data-lucide="arrow-up-down" class="sort-icon"></i></div></th>
@@ -167,7 +168,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
                 <p class="card-description">${escapeHTML(project.description || 'Нет описания.')}</p>
                 <div class="card-footer">
-                    <span class="card-size-badge">${project.size_kb.toFixed(2)} KB</span>
+                    <div class="card-meta">
+                        <span class="card-id">ID: ${project.id}</span>
+                        <span class="card-size-badge">${project.size_kb.toFixed(2)} KB</span>
+                    </div>
                     <button class="btn btn-success card-run-btn"><i data-lucide="play"></i><span>Запустить</span></button>
                 </div>
             </div>`;
@@ -180,7 +184,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const isEditing = state.editingId === project.id;
 
         row.innerHTML = isEditing ? `
-            <td colspan="4">
+            <td colspan="5">
                 <div class="form-grid" style="grid-template-columns: 1fr 2fr; gap: 1rem;">
                     <div class="form-group"><label>Название</label><input type="text" value="${escapeHTML(project.name)}" class="table-edit-input" name="name"></div>
                     <div class="form-group"><label>Описание</label><input type="text" value="${escapeHTML(project.description)}" class="table-edit-input" name="description"></div>
@@ -191,6 +195,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <button class="btn btn-icon cancel-btn" title="Отмена"><i data-lucide="x"></i></button>
             </td>` : `
             <td class="project-name">${escapeHTML(project.name)}</td>
+            <td><span class="table-id">${project.id}</span></td>
             <td><div class="description-cell">${escapeHTML(project.description || '---')}</div></td>
             <td>${project.size_kb.toFixed(2)} KB</td>
             <td>${formatDate(project.updated_at)}</td>

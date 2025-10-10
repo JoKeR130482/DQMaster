@@ -165,9 +165,12 @@ body {
 .card-actions { display: flex; gap: 0.5rem; }
 .card-description { color: var(--slate-600); line-height: 1.6; margin-bottom: 1rem; flex-grow: 1; }
 .card-footer { display: flex; justify-content: space-between; align-items: center; margin-top: auto; }
+.card-meta { display: flex; flex-direction: column; align-items: flex-start; gap: 0.5rem; }
+.card-id { font-family: monospace; font-size: 0.8rem; color: var(--slate-400); }
 .card-size-badge { display: inline-flex; align-items: center; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.875rem; font-weight: 500; background-color: var(--blue-100); color: var(--blue-700); }
 
 .projects-table-wrapper { background-color: var(--white); border-radius: var(--radius-xl); box-shadow: var(--shadow-lg); border: 1px solid var(--slate-200); overflow: hidden; }
+.table-id { font-family: monospace; font-size: 0.8rem; color: var(--slate-500); }
 .projects-table { width: 100%; border-collapse: collapse; }
 .projects-table th { background-color: var(--slate-50); padding: 0.75rem 1.5rem; text-align: left; font-size: 0.75rem; font-weight: 600; color: var(--slate-500); text-transform: uppercase; }
 .projects-table th > div { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; }
