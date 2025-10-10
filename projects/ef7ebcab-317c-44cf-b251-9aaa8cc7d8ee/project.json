@@ -1,0 +1,43 @@
+{
+  "id": "ef7ebcab-317c-44cf-b251-9aaa8cc7d8ee",
+  "name": "Sheet Stats Test 1760099476",
+  "description": "",
+  "created_at": "2025-10-10T12:31:16.296711",
+  "updated_at": "2025-10-10T12:31:17.941160",
+  "files": [
+    {
+      "id": "ab710146-9b7a-4111-a137-e7c7d13631ba",
+      "name": "test_data_final.xlsx",
+      "saved_name": "b92195e9-0c28-4732-a1b1-eb63f5575272.xlsx",
+      "sheets": [
+        {
+          "id": "5a11c4dc-49af-4275-a40c-38c46619c41e",
+          "name": "Лист1",
+          "is_active": true,
+          "fields": [
+            {
+              "id": "35ff35f7-5a26-4855-9069-0036539f9fd7",
+              "name": "WareName#Rus",
+              "is_required": true,
+              "rules": [
+                {
+                  "id": "id_1760099477872_srb2hbht6",
+                  "type": "starts_with_capital",
+                  "value": null,
+                  "params": {},
+                  "order": 1
+                }
+              ]
+            },
+            {
+              "id": "b9dddf1d-edec-4f74-838c-04eff422406f",
+              "name": "Артикул",
+              "is_required": false,
+              "rules": []
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

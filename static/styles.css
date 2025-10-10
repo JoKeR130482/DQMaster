@@ -235,7 +235,8 @@ body {
 .details-row .detailed-results-container .results-table { margin-top: 0; }
 .result-sheet-container { margin-top: 2rem; }
 .result-sheet-container:first-child { margin-top: 0; }
-.result-sheet-container h4 { font-size: 1.1rem; font-weight: 600; margin-bottom: 0.5rem; }
+.result-sheet-container h4 { font-size: 1.1rem; font-weight: 600; margin-bottom: 0.25rem; }
+.sheet-stats { font-size: 0.875rem; color: var(--slate-500); margin-bottom: 1rem; }
 .detail-table caption { font-size: 1.1em; font-weight: 600; margin-bottom: 1rem; text-align: left; }
 .success-message { background-color: #dcfce7; color: #166534; padding: 1rem; border-radius: var(--radius-md); text-align: center; font-weight: 500; }
 .description-cell { max-width: 400px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

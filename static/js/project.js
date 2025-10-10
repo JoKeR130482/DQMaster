@@ -393,6 +393,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const summaryHtml = `
                     <div class="result-sheet-container">
                         <h4>Отчет по листу: ${sheetResult.sheet_name} (Файл: ${fileResult.file_name})</h4>
+                        <p class="sheet-stats">Всего строк: ${sheetResult.total_rows}  |  Строк с ошибками: ${sheetResult.sheet_error_rows_count}  |  Процент ошибок: ${sheetResult.sheet_error_percentage}%</p>
                         <table class="results-table summary-table">
                             <thead><tr><th>Тип ошибки</th><th>Количество ошибок</th><th>% от строк листа</th></tr></thead>
                             <tbody>
