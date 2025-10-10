@@ -1,0 +1,35 @@
+{
+  "id": "967fcc06-eb65-4b73-8508-3c86fa2e5edd",
+  "name": "Backend Test 1760079418",
+  "description": "Testing the API",
+  "created_at": "2025-10-10T06:56:58.866589",
+  "updated_at": "2025-10-10T06:56:59.119699",
+  "files": [
+    {
+      "id": "89989e1a-9856-4814-b10e-e5fd27e47211",
+      "name": "jules-scratch/verification/test_data.xlsx",
+      "saved_name": "8b0435c3-89db-49b2-b63b-62f8929ea3f6.xlsx",
+      "sheets": [
+        {
+          "id": "dcc9f121-13d9-4dcd-bf0d-a8f3e396f6cd",
+          "name": "Лист1",
+          "is_active": true,
+          "fields": [
+            {
+              "id": "f6f0f4db-4529-4a83-b3dc-25f7e6db8eb3",
+              "name": "Название",
+              "is_required": false,
+              "rules": []
+            },
+            {
+              "id": "a0335791-4fb9-463c-b6ed-16ba8259571e",
+              "name": "Артикул",
+              "is_required": true,
+              "rules": []
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
