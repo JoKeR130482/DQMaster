@@ -30,6 +30,11 @@ document.addEventListener('DOMContentLoaded', () => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ word }),
         }),
+        editWord: (oldWord, newWord) => fetch(`/api/dictionary/${encodeURIComponent(oldWord)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ new_word: newWord }),
+        }),
         deleteWord: (word) => fetch(`/api/dictionary/${encodeURIComponent(word)}`, { method: 'DELETE' }),
     };
 
@@ -55,6 +60,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 row.innerHTML = `
                     <td>${word}</td>
                     <td class="table-actions">
+                        <button class="btn btn-icon edit-word-btn" data-word="${word}" title="Редактировать слово">
+                            <i data-lucide="edit"></i>
+                        </button>
                         <button class="btn btn-icon danger delete-word-btn" data-word="${word}" title="Удалить слово">
                             <i data-lucide="trash-2"></i>
                         </button>
@@ -103,6 +111,24 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    async function handleEditWord(oldWord) {
+        const newWord = prompt(`Редактировать слово:`, oldWord);
+        if (newWord === null || newWord.trim() === '' || newWord.trim() === oldWord) {
+            return; // User cancelled or entered the same/empty word
+        }
+        try {
+            const response = await api.editWord(oldWord, newWord);
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.detail || 'Failed to edit word');
+            }
+            showNotification(`Слово "${oldWord}" изменено на "${newWord}".`, 'success');
+            await init(); // Re-fetch all words
+        } catch (error) {
+            showNotification(`Ошибка: ${error.message}`, 'error');
+        }
+    }
+
     async function handleDeleteWord(word) {
         if (!confirm(`Вы уверены, что хотите удалить слово "${word}"?`)) return;
         try {
@@ -137,7 +163,12 @@ document.addEventListener('DOMContentLoaded', () => {
         dom.dictionaryTableBody.addEventListener('click', (e) => {
             const deleteBtn = e.target.closest('.delete-word-btn');
             if (deleteBtn) {
-                handleDeleteWord(deleteBtn.dataset.word);
+                return handleDeleteWord(deleteBtn.dataset.word);
+            }
+
+            const editBtn = e.target.closest('.edit-word-btn');
+            if (editBtn) {
+                return handleEditWord(editBtn.dataset.word);
             }
         });
     }
