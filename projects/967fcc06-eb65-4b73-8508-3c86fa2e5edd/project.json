@@ -3,7 +3,7 @@
   "name": "Backend Test 1760079418",
   "description": "Testing the API",
   "created_at": "2025-10-10T06:56:58.866589",
-  "updated_at": "2025-10-11T08:05:31.897476",
+  "updated_at": "2025-10-11T09:06:38.008591",
   "files": [
     {
       "id": "89989e1a-9856-4814-b10e-e5fd27e47211",
@@ -21,7 +21,7 @@
               "is_required": false,
               "rules": [
                 {
-                  "id": "id_1760169931662_t7iqz2u3n",
+                  "id": "id_1760173597910_94x8s5im4",
                   "type": "spell_check",
                   "value": null,
                   "params": {},
@@ -214,6 +214,110 @@
             {
               "id": "4e3902d7-d6a4-4f57-9642-eadef15aa0d1",
               "name": "Количество",
+              "is_required": false,
+              "rules": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "f9a24c8e-2675-43f3-a8f5-b60c39e14077",
+      "name": "test_data.xlsx",
+      "saved_name": "e7dd24bf-f7a0-4799-a889-3a60de877f3a.xlsx",
+      "sheets": [
+        {
+          "id": "d9abd6e7-dead-4592-bada-fc84af98c993",
+          "name": "Оборудование",
+          "is_active": true,
+          "fields": [
+            {
+              "id": "b043bcb7-20a7-42d4-a840-fead04feaee7",
+              "name": "Товар",
+              "is_required": false,
+              "rules": []
+            },
+            {
+              "id": "03e02927-b752-4119-b9c5-4a0c5245c831",
+              "name": "Статус",
+              "is_required": false,
+              "rules": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "f86cd9f8-d5e5-48cd-9161-1cf29b88b4c2",
+      "name": "test_data.xlsx",
+      "saved_name": "42412c56-649b-4b1b-93ab-003dd22d41f8.xlsx",
+      "sheets": [
+        {
+          "id": "2e3285a0-99df-47aa-82d2-899ef4bfd473",
+          "name": "Оборудование",
+          "is_active": true,
+          "fields": [
+            {
+              "id": "fd43be56-1e56-420f-b773-e8d428e1f83f",
+              "name": "Товар",
+              "is_required": false,
+              "rules": []
+            },
+            {
+              "id": "e1cf695e-65f3-4d52-87ab-6e5b7ee5184c",
+              "name": "Статус",
+              "is_required": false,
+              "rules": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "54263cf7-0a56-4b38-a597-889dd6b1d7de",
+      "name": "test_data.xlsx",
+      "saved_name": "a83eefe5-22fa-411c-bb0b-9c3e1482dc5f.xlsx",
+      "sheets": [
+        {
+          "id": "e0cf06d4-28d9-452a-a5f2-e0918a0fe759",
+          "name": "Оборудование",
+          "is_active": true,
+          "fields": [
+            {
+              "id": "0713aaf4-220b-4780-896b-7e847aca8866",
+              "name": "Товар",
+              "is_required": false,
+              "rules": []
+            },
+            {
+              "id": "7eda194a-e360-462f-9bb2-c18091d3b01a",
+              "name": "Статус",
+              "is_required": false,
+              "rules": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "6630f86c-9532-4d7d-9c8d-82ba146596d1",
+      "name": "test_data.xlsx",
+      "saved_name": "6a737851-b20c-45d5-b5ea-76695bb43aa9.xlsx",
+      "sheets": [
+        {
+          "id": "5683a0a9-b251-4488-9bad-2492a87d91e8",
+          "name": "Оборудование",
+          "is_active": true,
+          "fields": [
+            {
+              "id": "88188d41-62c7-4bc6-acb7-6422db2ba3c6",
+              "name": "Товар",
+              "is_required": false,
+              "rules": []
+            },
+            {
+              "id": "28916405-7a7d-445a-af55-c04689ab6fda",
+              "name": "Статус",
               "is_required": false,
               "rules": []
             }
