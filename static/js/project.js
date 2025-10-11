@@ -332,6 +332,18 @@ document.addEventListener('DOMContentLoaded', () => {
         render(); // Re-render main UI
     }
 
+    function highlightErrors(text, errorWords) {
+        if (!errorWords || !Array.isArray(errorWords) || errorWords.length === 0) {
+            return text;
+        }
+        // Escape special characters for regex and create a pattern
+        const escapedWords = errorWords.map(word => word.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'));
+        const regex = new RegExp(`\\b(${escapedWords.join('|')})\\b`, 'gi');
+
+        // Replace found words with a styled span
+        return text.replace(regex, (match) => `<span class="misspelled-word">${match}</span>`);
+    }
+
     function renderValidationResults() {
         const resultsData = state.validationResults;
         dom.resultsContainer.style.display = 'block';
@@ -378,7 +390,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                     <td>${err.field_name}</td>
                                     <td>${err.row}</td>
                                     <td>${err.error_type}</td>
-                                    <td>${err.value}</td>
+                                    <td>${highlightErrors(err.value, err.details)}</td>
                                 </tr>
                             `).join('')}
                         </tbody>
@@ -415,7 +427,11 @@ document.addEventListener('DOMContentLoaded', () => {
                                                 <thead><tr><th>Строка</th><th>Поле</th><th>Значение</th></tr></thead>
                                                 <tbody>
                                                 ${summary.detailed_errors.map(err => `
-                                                    <tr><td>${err.row}</td><td>${err.field_name}</td><td>${err.value}</td></tr>
+                                                    <tr>
+                                                        <td>${err.row}</td>
+                                                        <td>${err.field_name}</td>
+                                                        <td>${highlightErrors(err.value, err.details)}</td>
+                                                    </tr>
                                                 `).join('')}
                                                 </tbody>
                                             </table>

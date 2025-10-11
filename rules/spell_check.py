@@ -24,24 +24,26 @@ WORD_REGEX = re.compile(r'[а-яА-ЯёЁ]+')
 def validate(value):
     """
     Проверяет орфографию каждого слова в строке.
-    Возвращает True, если все слова корректны, иначе False.
+    Возвращает словарь:
+    {
+        "is_valid": bool,
+        "errors": list[str] | None
+    }
     """
-    # 1. Если значение пустое или не строка, считаем его корректным (за это отвечают другие правила)
+    # 1. Если значение пустое или не строка, считаем его корректным
     if pd.isna(value) or not isinstance(value, str) or not value.strip():
-        return True
+        return {"is_valid": True, "errors": None}
 
     # 2. Извлекаем все слова из строки, приводим к нижнему регистру
     words = WORD_REGEX.findall(value.lower())
     if not words:
-        return True # Если слов нет (например, только цифры или символы), то и ошибок нет
+        return {"is_valid": True, "errors": None}
 
     # 3. Ищем слова, которых нет в словаре
     misspelled = spell.unknown(words)
 
-    # 4. Если есть хотя бы одно неизвестное слово, возвращаем False (ошибка)
+    # 4. Если есть хотя бы одно неизвестное слово, возвращаем ошибку со списком слов
     if misspelled:
-        # Для отладки можно вывести некорректные слова:
-        # print(f"Ошибки в словах: {misspelled}")
-        return False
+        return {"is_valid": False, "errors": list(misspelled)}
 
-    return True
+    return {"is_valid": True, "errors": None}

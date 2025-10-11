@@ -450,3 +450,11 @@ body > .main-container > .page-header { padding: 0; box-shadow: none; background
     accent-color: var(--blue-600);
     cursor: pointer;
 }
+
+/* --- 10. Spelling Error Highlight --- */
+.misspelled-word {
+    text-decoration: underline;
+    text-decoration-color: var(--red-500);
+    text-decoration-style: wavy;
+    text-underline-offset: 2px;
+}
