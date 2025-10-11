@@ -288,9 +288,19 @@ async def validate_project_data(project_id: str):
                         rule_name = formatter(params) if formatter and params else rule_def["name"]
 
                         for index, value in df[field_schema.name].items():
-                            is_valid = validator(value, params=params) if 'params' in inspect.signature(validator).parameters else validator(value)
+                            result = validator(value, params=params) if 'params' in inspect.signature(validator).parameters else validator(value)
+
+                            is_valid = False
+                            details = None
+
+                            if isinstance(result, bool):
+                                is_valid = result
+                            elif isinstance(result, dict):
+                                is_valid = result.get("is_valid", False)
+                                details = result.get("errors")
+
                             if not is_valid:
-                                all_errors.append({
+                                error_entry = {
                                     "file_name": file_schema.name,
                                     "sheet_name": sheet_schema.name,
                                     "field_name": field_schema.name,
@@ -298,7 +308,10 @@ async def validate_project_data(project_id: str):
                                     "row": index + 2,
                                     "error_type": rule_name,
                                     "value": str(value) if pd.notna(value) else "ПУСТО"
-                                })
+                                }
+                                if details:
+                                    error_entry["details"] = details
+                                all_errors.append(error_entry)
 
             except Exception as e:
                 print(f"Error processing sheet {sheet_schema.name} in file {file_schema.name}: {e}")

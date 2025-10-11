@@ -3,7 +3,7 @@
   "name": "Backend Test 1760079418",
   "description": "Testing the API",
   "created_at": "2025-10-10T06:56:58.866589",
-  "updated_at": "2025-10-10T06:56:59.119699",
+  "updated_at": "2025-10-10T20:17:24.998144",
   "files": [
     {
       "id": "89989e1a-9856-4814-b10e-e5fd27e47211",
@@ -19,12 +19,46 @@
               "id": "f6f0f4db-4529-4a83-b3dc-25f7e6db8eb3",
               "name": "Название",
               "is_required": false,
-              "rules": []
+              "rules": [
+                {
+                  "id": "id_1760127444841_gg50nt24p",
+                  "type": "spell_check",
+                  "value": null,
+                  "params": {},
+                  "order": 1
+                }
+              ]
             },
             {
               "id": "a0335791-4fb9-463c-b6ed-16ba8259571e",
               "name": "Артикул",
               "is_required": true,
+              "rules": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "e4083f7b-40b8-470c-9258-fb8b48e5d6a9",
+      "name": "test_data.xlsx",
+      "saved_name": "70a65ab2-16de-4c7a-a64a-30f35ade599d.xlsx",
+      "sheets": [
+        {
+          "id": "e6a57e10-8c05-4917-85a4-96e33884ab1d",
+          "name": "Товары",
+          "is_active": true,
+          "fields": [
+            {
+              "id": "7972d21b-bf55-49bf-b484-68d7787db98e",
+              "name": "Наименование",
+              "is_required": false,
+              "rules": []
+            },
+            {
+              "id": "9a10530f-54c2-461d-9465-0d66007d7ce2",
+              "name": "Количество",
+              "is_required": false,
               "rules": []
             }
           ]
