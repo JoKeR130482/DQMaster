@@ -380,13 +380,32 @@ async def validate_project_data(project_id: str):
                 "sheets": sheet_summaries
             })
 
-    # --- Step 3: Return the final structured response ---
-    return {
+    # --- Step 3: Structure the final response ---
+    response_data = {
         "total_processed_rows": project_total_rows,
         "required_field_error_rows_count": len(unique_error_row_keys),
         "required_field_errors": required_field_errors,
-        "file_results": file_results
+        "file_results": file_results,
+        "validated_at": datetime.datetime.utcnow().isoformat()
     }
+
+    # --- Step 4: Save the results to a file ---
+    results_path = PROJECTS_DIR / project_id / "validation_result.json"
+    results_path.write_text(json.dumps(response_data, indent=2), encoding="utf-8")
+
+    return response_data
+
+@app.get("/api/projects/{project_id}/results")
+async def get_validation_results(project_id: str):
+    project_dir = PROJECTS_DIR / project_id
+    if not project_dir.is_dir():
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    results_path = project_dir / "validation_result.json"
+    if not results_path.exists():
+        raise HTTPException(status_code=404, detail="No validation results found for this project.")
+
+    return FileResponse(results_path)
 
 # --- Rule Library ---
 @app.get("/api/rules")

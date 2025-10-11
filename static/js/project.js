@@ -45,6 +45,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const api = {
         getProject: () => fetch(`/api/projects/${projectId}`),
         getRules: () => fetch('/api/rules'),
+        getResults: () => fetch(`/api/projects/${projectId}/results`),
         saveProject: (projectData) => fetch(`/api/projects/${projectId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -390,7 +391,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                     <td>${err.field_name}</td>
                                     <td>${err.row}</td>
                                     <td>${err.error_type}</td>
-                                    <td>${highlightErrors(err.value, err.details)}</td>
+                                    <td class="highlightable-cell" data-value="${err.value}" data-details="${encodeURIComponent(JSON.stringify(err.details || []))}"></td>
                                 </tr>
                             `).join('')}
                         </tbody>
@@ -430,7 +431,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                                     <tr>
                                                         <td>${err.row}</td>
                                                         <td>${err.field_name}</td>
-                                                        <td>${highlightErrors(err.value, err.details)}</td>
+                                                        <td class="highlightable-cell" data-value="${err.value}" data-details="${encodeURIComponent(JSON.stringify(err.details || []))}"></td>
                                                     </tr>
                                                 `).join('')}
                                                 </tbody>
@@ -449,6 +450,13 @@ document.addEventListener('DOMContentLoaded', () => {
         if (required_field_error_rows_count === 0 && file_results.every(f => f.sheets.every(s => s.rule_summaries.every(r => r.error_count === 0)))) {
             dom.summaryResults.innerHTML = '<div class="success-message">Проверка успешно завершена. Ошибок не найдено!</div>';
         }
+
+        // After rendering, go through cells that need highlighting
+        document.querySelectorAll('.highlightable-cell').forEach(cell => {
+            const value = cell.dataset.value;
+            const details = JSON.parse(decodeURIComponent(cell.dataset.details));
+            cell.innerHTML = highlightErrors(value, details);
+        });
     }
 
     // --- 6. EVENT HANDLERS & LOGIC ---
@@ -586,17 +594,33 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- 7. INITIALIZATION ---
     async function init() {
         try {
-            const [projectRes, rulesRes] = await Promise.all([api.getProject(), api.getRules()]);
+            const [projectRes, rulesRes, resultsRes] = await Promise.all([
+                api.getProject(),
+                api.getRules(),
+                api.getResults() // Fetch previous results
+            ]);
+
             if (!projectRes.ok) throw new Error((await projectRes.json()).detail);
             if (!rulesRes.ok) throw new Error('Failed to load rules');
 
             state.project = await projectRes.json();
             state.availableRules = await rulesRes.json();
-            state.isLoading = false;
-            render();
+
+            // If results exist, load them into state
+            if (resultsRes.ok) {
+                state.validationResults = await resultsRes.json();
+                renderValidationResults(); // Render them immediately
+            }
+
         } catch (error) {
+            // Don't show an error if results just don't exist (404)
+            if (error.message.includes('No validation results found')) {
+                console.log("No previous validation results found. That's OK.");
+            } else {
+                 state.error = `Не удалось загрузить проект: ${error.message}`;
+            }
+        } finally {
             state.isLoading = false;
-            state.error = `Не удалось загрузить проект: ${error.message}`;
             render();
         }
     }
