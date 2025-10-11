@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Словарь - DQMaster</title>
+    <link rel="icon" href="/static/favicon.ico" type="image/svg+xml">
+    <link rel="stylesheet" href="/static/styles.css?v=1.5">
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+    <div class="main-container">
+        <!-- Header -->
+        <header class="page-title-header">
+            <div>
+                <h1 class="main-h1">Пользовательский словарь</h1>
+                <p class="main-p">Управляйте списком слов, которые считаются корректными при проверке орфографии.</p>
+            </div>
+            <a href="/" class="btn btn-secondary">
+                <i data-lucide="arrow-left"></i>
+                <span>К проектам</span>
+            </a>
+        </header>
+
+        <!-- Controls -->
+        <div class="controls-bar">
+            <div class="search-wrapper">
+                <i data-lucide="search" class="search-icon"></i>
+                <input type="text" id="search-input" placeholder="Поиск по словарю..." class="search-input">
+            </div>
+            <div id="add-word-container" class="add-rule-form">
+                <input type="text" id="new-word-input" placeholder="Новое слово...">
+                <button id="add-word-btn" class="btn btn-primary">
+                    <i data-lucide="plus"></i>
+                    <span>Добавить</span>
+                </button>
+            </div>
+        </div>
+
+        <div id="loading" class="loading-spinner" style="display: none;"></div>
+        <div id="error-container" class="error-container" style="display: none;"></div>
+
+        <!-- Dictionary Table -->
+        <main id="dictionary-container" class="projects-table-wrapper">
+            <table class="projects-table">
+                <thead>
+                    <tr>
+                        <th><div id="sort-word-btn" data-sort-key="word" style="cursor: pointer;">Слово <i data-lucide="arrow-up-down" class="sort-icon"></i></div></th>
+                        <th style="width: 100px;">Действия</th>
+                    </tr>
+                </thead>
+                <tbody id="dictionary-table-body">
+                    <!-- Words will be injected here by JS -->
+                </tbody>
+            </table>
+        </main>
+
+        <div id="empty-state" style="display: none;">
+             <div class="empty-state-icon-box"></div>
+             <h3 class="empty-state-h3">Словарь пуст</h3>
+             <p class="empty-state-p">Добавьте ваше первое слово, чтобы оно не считалось ошибкой.</p>
+        </div>
+    </div>
+
+    <div id="notification-toast" class="toast"></div>
+    <script src="/static/js/dictionary.js?v=1.5"></script>
+    <script>lucide.createIcons();</script>
+</body>
+</html>
