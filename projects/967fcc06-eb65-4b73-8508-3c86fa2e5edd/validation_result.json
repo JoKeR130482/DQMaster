@@ -1,5 +1,5 @@
 {
-  "total_processed_rows": 26,
+  "total_processed_rows": 38,
   "required_field_error_rows_count": 0,
   "required_field_errors": [],
   "file_results": [
@@ -9,39 +9,14 @@
         {
           "sheet_name": "\u041b\u0438\u0441\u04421",
           "total_rows": 5,
-          "sheet_error_rows_count": 2,
-          "sheet_error_percentage": 40.0,
+          "sheet_error_rows_count": 0,
+          "sheet_error_percentage": 0.0,
           "rule_summaries": [
             {
               "rule_name": "\u041f\u0440\u043e\u0432\u0435\u0440\u043a\u0430 \u043e\u0440\u0444\u043e\u0433\u0440\u0430\u0444\u0438\u0438",
-              "error_count": 2,
-              "error_percentage": 40.0,
-              "detailed_errors": [
-                {
-                  "file_name": "jules-scratch/verification/test_data.xlsx",
-                  "sheet_name": "\u041b\u0438\u0441\u04421",
-                  "field_name": "\u041d\u0430\u0437\u0432\u0430\u043d\u0438\u0435",
-                  "is_required": false,
-                  "row": 3,
-                  "error_type": "\u041f\u0440\u043e\u0432\u0435\u0440\u043a\u0430 \u043e\u0440\u0444\u043e\u0433\u0440\u0430\u0444\u0438\u0438",
-                  "value": "\u0410\u043f\u0435\u043b\u044c\u0441\u0438\u043d",
-                  "details": [
-                    "\u0430\u043f\u0435\u043b\u044c\u0441\u0438\u043d"
-                  ]
-                },
-                {
-                  "file_name": "jules-scratch/verification/test_data.xlsx",
-                  "sheet_name": "\u041b\u0438\u0441\u04421",
-                  "field_name": "\u041d\u0430\u0437\u0432\u0430\u043d\u0438\u0435",
-                  "is_required": false,
-                  "row": 6,
-                  "error_type": "\u041f\u0440\u043e\u0432\u0435\u0440\u043a\u0430 \u043e\u0440\u0444\u043e\u0433\u0440\u0430\u0444\u0438\u0438",
-                  "value": "\u0412\u0438\u0448\u043d\u044f",
-                  "details": [
-                    "\u0432\u0438\u0448\u043d\u044f"
-                  ]
-                }
-              ]
+              "error_count": 0,
+              "error_percentage": 0.0,
+              "detailed_errors": []
             }
           ]
         }
@@ -130,7 +105,55 @@
           "rule_summaries": []
         }
       ]
+    },
+    {
+      "file_name": "test_data.xlsx",
+      "sheets": [
+        {
+          "sheet_name": "\u041e\u0431\u043e\u0440\u0443\u0434\u043e\u0432\u0430\u043d\u0438\u0435",
+          "total_rows": 5,
+          "sheet_error_rows_count": 0,
+          "sheet_error_percentage": 0.0,
+          "rule_summaries": []
+        }
+      ]
+    },
+    {
+      "file_name": "test_data.xlsx",
+      "sheets": [
+        {
+          "sheet_name": "\u041e\u0431\u043e\u0440\u0443\u0434\u043e\u0432\u0430\u043d\u0438\u0435",
+          "total_rows": 5,
+          "sheet_error_rows_count": 0,
+          "sheet_error_percentage": 0.0,
+          "rule_summaries": []
+        }
+      ]
+    },
+    {
+      "file_name": "test_data.xlsx",
+      "sheets": [
+        {
+          "sheet_name": "\u041e\u0431\u043e\u0440\u0443\u0434\u043e\u0432\u0430\u043d\u0438\u0435",
+          "total_rows": 5,
+          "sheet_error_rows_count": 0,
+          "sheet_error_percentage": 0.0,
+          "rule_summaries": []
+        }
+      ]
+    },
+    {
+      "file_name": "test_data.xlsx",
+      "sheets": [
+        {
+          "sheet_name": "\u041e\u0431\u043e\u0440\u0443\u0434\u043e\u0432\u0430\u043d\u0438\u0435",
+          "total_rows": 5,
+          "sheet_error_rows_count": 0,
+          "sheet_error_percentage": 0.0,
+          "rule_summaries": []
+        }
+      ]
     }
   ],
-  "validated_at": "2025-10-11T08:05:31.990316"
+  "validated_at": "2025-10-11T09:06:38.107728"
 }
