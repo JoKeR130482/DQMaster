@@ -10,7 +10,7 @@ import pandas as pd
 import io
 import json
 
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import Depends, FastAPI, File, UploadFile, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, ValidationError
@@ -422,33 +422,30 @@ class AddWordRequest(BaseModel):
     word: str
 
 @app.post("/api/dictionary", status_code=201)
-async def add_word_to_dictionary(request: AddWordRequest):
+async def add_word_to_dictionary(request: AddWordRequest, current_words: List[str] = Depends(get_dictionary)):
     new_word = request.word.strip().lower()
     if not new_word:
         raise HTTPException(status_code=400, detail="Word cannot be empty.")
 
-    current_words = set(get_dictionary.__wrapped__())
-    if new_word in current_words:
+    if new_word in set(current_words):
         raise HTTPException(status_code=400, detail="Word already exists in the dictionary.")
 
     with CUSTOM_DICT_PATH.open("a", encoding="utf-8") as f:
         f.write(f"\n{new_word}")
 
-    spell_check.reload_custom_dictionary() # Hot-reload the dictionary
+    spell_check.reload_custom_dictionary()
     return {"message": "Word added successfully."}
 
 class EditWordRequest(BaseModel):
     new_word: str
 
 @app.put("/api/dictionary/{old_word}", status_code=200)
-async def edit_word_in_dictionary(old_word: str, request: EditWordRequest):
+async def edit_word_in_dictionary(old_word: str, request: EditWordRequest, current_words: List[str] = Depends(get_dictionary)):
     old_word_clean = old_word.strip().lower()
     new_word_clean = request.new_word.strip().lower()
 
     if not old_word_clean or not new_word_clean:
         raise HTTPException(status_code=400, detail="Words cannot be empty.")
-
-    current_words = get_dictionary.__wrapped__()
 
     if old_word_clean not in current_words:
         raise HTTPException(status_code=404, detail="Word to edit not found in the dictionary.")
@@ -463,19 +460,18 @@ async def edit_word_in_dictionary(old_word: str, request: EditWordRequest):
     return {"message": "Word updated successfully."}
 
 @app.delete("/api/dictionary/{word}", status_code=200)
-async def remove_word_from_dictionary(word: str):
+async def remove_word_from_dictionary(word: str, current_words: List[str] = Depends(get_dictionary)):
     word_to_delete = word.strip().lower()
     if not word_to_delete:
         raise HTTPException(status_code=400, detail="Word cannot be empty.")
 
-    current_words = get_dictionary.__wrapped__()
     if word_to_delete not in current_words:
         raise HTTPException(status_code=404, detail="Word not found in the dictionary.")
 
     updated_words = [w for w in current_words if w.lower() != word_to_delete]
     CUSTOM_DICT_PATH.write_text("\n".join(updated_words), encoding="utf-8")
 
-    spell_check.reload_custom_dictionary() # Hot-reload the dictionary
+    spell_check.reload_custom_dictionary()
     return {"message": "Word removed successfully."}
 
 
