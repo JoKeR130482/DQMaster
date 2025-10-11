@@ -437,6 +437,31 @@ async def add_word_to_dictionary(request: AddWordRequest):
     spell_check.reload_custom_dictionary() # Hot-reload the dictionary
     return {"message": "Word added successfully."}
 
+class EditWordRequest(BaseModel):
+    new_word: str
+
+@app.put("/api/dictionary/{old_word}", status_code=200)
+async def edit_word_in_dictionary(old_word: str, request: EditWordRequest):
+    old_word_clean = old_word.strip().lower()
+    new_word_clean = request.new_word.strip().lower()
+
+    if not old_word_clean or not new_word_clean:
+        raise HTTPException(status_code=400, detail="Words cannot be empty.")
+
+    current_words = get_dictionary.__wrapped__()
+
+    if old_word_clean not in current_words:
+        raise HTTPException(status_code=404, detail="Word to edit not found in the dictionary.")
+
+    if new_word_clean in current_words and new_word_clean != old_word_clean:
+        raise HTTPException(status_code=400, detail="New word already exists in the dictionary.")
+
+    updated_words = [new_word_clean if w.lower() == old_word_clean else w for w in current_words]
+    CUSTOM_DICT_PATH.write_text("\n".join(updated_words), encoding="utf-8")
+
+    spell_check.reload_custom_dictionary()
+    return {"message": "Word updated successfully."}
+
 @app.delete("/api/dictionary/{word}", status_code=200)
 async def remove_word_from_dictionary(word: str):
     word_to_delete = word.strip().lower()
