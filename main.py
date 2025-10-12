@@ -14,7 +14,6 @@ from fastapi import Depends, FastAPI, File, UploadFile, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, ValidationError
-from rules import spell_check
 
 # ==============================================================================
 # 1. Globals & App Initialization
@@ -129,7 +128,8 @@ def load_rules():
                             "validator": module.validate,
                             "is_configurable": getattr(module, "IS_CONFIGURABLE", False),
                             "formatter": getattr(module, "format_name", None),
-                            "params_schema": getattr(module, "PARAMS_SCHEMA", None)
+                            "params_schema": getattr(module, "PARAMS_SCHEMA", None),
+                            "module": module # Store the module itself
                         }
             except Exception as e:
                 print(f"Error loading rule from {filename}: {e}")
@@ -433,7 +433,8 @@ async def add_word_to_dictionary(request: AddWordRequest, current_words: List[st
     with CUSTOM_DICT_PATH.open("a", encoding="utf-8") as f:
         f.write(f"\n{new_word}")
 
-    spell_check.reload_custom_dictionary()
+    if "spell_check" in RULE_REGISTRY:
+        RULE_REGISTRY["spell_check"]["module"].reload_custom_dictionary()
     return {"message": "Word added successfully."}
 
 class EditWordRequest(BaseModel):
@@ -456,7 +457,8 @@ async def edit_word_in_dictionary(old_word: str, request: EditWordRequest, curre
     updated_words = [new_word_clean if w.lower() == old_word_clean else w for w in current_words]
     CUSTOM_DICT_PATH.write_text("\n".join(updated_words), encoding="utf-8")
 
-    spell_check.reload_custom_dictionary()
+    if "spell_check" in RULE_REGISTRY:
+        RULE_REGISTRY["spell_check"]["module"].reload_custom_dictionary()
     return {"message": "Word updated successfully."}
 
 @app.delete("/api/dictionary/{word}", status_code=200)
@@ -471,7 +473,8 @@ async def remove_word_from_dictionary(word: str, current_words: List[str] = Depe
     updated_words = [w for w in current_words if w.lower() != word_to_delete]
     CUSTOM_DICT_PATH.write_text("\n".join(updated_words), encoding="utf-8")
 
-    spell_check.reload_custom_dictionary()
+    if "spell_check" in RULE_REGISTRY:
+        RULE_REGISTRY["spell_check"]["module"].reload_custom_dictionary()
     return {"message": "Word removed successfully."}
 
 
