@@ -45,7 +45,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const api = {
         getProject: () => fetch(`/api/projects/${projectId}`),
         getRules: () => fetch('/api/rules'),
-        getResults: () => fetch(`/api/projects/${projectId}/results`),
         saveProject: (projectData) => fetch(`/api/projects/${projectId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -68,6 +67,13 @@ document.addEventListener('DOMContentLoaded', () => {
         dom.errorContainer.textContent = message;
         dom.errorContainer.style.display = 'block';
     };
+    const formatDate = (isoString) => {
+        if (!isoString) return 'N/A';
+        return new Date(isoString).toLocaleString('ru-RU', {
+            day: '2-digit', month: '2-digit', year: 'numeric',
+            hour: '2-digit', minute: '2-digit', second: '2-digit'
+        });
+    };
     const newId = () => `id_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
     // --- 5. RENDER FUNCTIONS ---
@@ -85,6 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!state.project) return;
 
         dom.projectNameHeader.textContent = state.project.name;
+        document.getElementById('project-id-display').textContent = `ID: ${state.project.id}`;
         dom.uploadFormContainer.style.display = state.showUploadForm ? 'flex' : 'none';
 
         renderFiles();
@@ -100,7 +107,10 @@ document.addEventListener('DOMContentLoaded', () => {
             fileCard.dataset.fileId = file.id;
             fileCard.innerHTML = `
                 <div class="file-header">
-                    <h3 class="file-name">${file.name}</h3>
+                    <div>
+                        <h3 class="file-name">${file.name}</h3>
+                        <span class="card-id" style="font-size: 0.8rem;">ID: ${file.id}</span>
+                    </div>
                     <div class="file-actions">
                     <button class="btn btn-icon danger remove-file-btn" title="Удалить файл"><i data-lucide="trash-2"></i></button>
                     </div>
@@ -333,26 +343,6 @@ document.addEventListener('DOMContentLoaded', () => {
         render(); // Re-render main UI
     }
 
-    function highlightErrors(text, errorWords) {
-        if (!errorWords || !Array.isArray(errorWords) || errorWords.length === 0) {
-            return text;
-        }
-
-        let highlightedText = text;
-
-        // Escape special characters for use in regex
-        const escapeRegex = (str) => str.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-
-        errorWords.forEach(word => {
-            // Create a regex that finds the word, but not as a part of another word.
-            // It looks for boundaries that are not alphanumeric characters.
-            const regex = new RegExp(`(^|[^a-zA-Zа-яА-ЯёЁ0-9])(${escapeRegex(word)})([^a-zA-Zа-яА-ЯёЁ0-9]|$)`, 'g');
-            highlightedText = highlightedText.replace(regex, `$1<span class="misspelled-word">$2</span>$3`);
-        });
-
-        return highlightedText;
-    }
-
     function renderValidationResults() {
         const resultsData = state.validationResults;
         dom.resultsContainer.style.display = 'block';
@@ -368,8 +358,14 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        const { total_processed_rows, required_field_error_rows_count, required_field_errors } = resultsData;
+        const { total_processed_rows, required_field_error_rows_count, required_field_errors, validated_at } = resultsData;
         const requiredErrorPercentage = total_processed_rows > 0 ? ((required_field_error_rows_count / total_processed_rows) * 100).toFixed(2) : 0;
+
+        // Add last validated date to the section header
+        const resultsHeader = dom.resultsContainer.querySelector('.section-header h2');
+        if (resultsHeader) {
+            resultsHeader.innerHTML = `Результаты проверки <span class="sheet-stats" style="margin-left: 1rem;">(Последняя: ${formatDate(validated_at)})</span>`;
+        }
 
         // 1. Render Main Stats
         const statsHtml = `
@@ -399,7 +395,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                     <td>${err.field_name}</td>
                                     <td>${err.row}</td>
                                     <td>${err.error_type}</td>
-                                    <td class="highlightable-cell" data-value="${err.value}" data-details="${encodeURIComponent(JSON.stringify(err.details || []))}"></td>
+                                    <td>${err.value}</td>
                                 </tr>
                             `).join('')}
                         </tbody>
@@ -436,11 +432,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                                 <thead><tr><th>Строка</th><th>Поле</th><th>Значение</th></tr></thead>
                                                 <tbody>
                                                 ${summary.detailed_errors.map(err => `
-                                                    <tr>
-                                                        <td>${err.row}</td>
-                                                        <td>${err.field_name}</td>
-                                                        <td class="highlightable-cell" data-value="${err.value}" data-details="${encodeURIComponent(JSON.stringify(err.details || []))}"></td>
-                                                    </tr>
+                                                    <tr><td>${err.row}</td><td>${err.field_name}</td><td>${err.value}</td></tr>
                                                 `).join('')}
                                                 </tbody>
                                             </table>
@@ -458,14 +450,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (required_field_error_rows_count === 0 && file_results.every(f => f.sheets.every(s => s.rule_summaries.every(r => r.error_count === 0)))) {
             dom.summaryResults.innerHTML = '<div class="success-message">Проверка успешно завершена. Ошибок не найдено!</div>';
         }
-
-        // After rendering, go through cells that need highlighting
-        document.querySelectorAll('.highlightable-cell').forEach(cell => {
-            const value = cell.dataset.value;
-            const detailsData = cell.dataset.details;
-            const details = detailsData ? JSON.parse(decodeURIComponent(detailsData)) : [];
-            cell.innerHTML = highlightErrors(value, details);
-        });
     }
 
     // --- 6. EVENT HANDLERS & LOGIC ---
@@ -603,33 +587,17 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- 7. INITIALIZATION ---
     async function init() {
         try {
-            const [projectRes, rulesRes, resultsRes] = await Promise.all([
-                api.getProject(),
-                api.getRules(),
-                api.getResults() // Fetch previous results
-            ]);
-
+            const [projectRes, rulesRes] = await Promise.all([api.getProject(), api.getRules()]);
             if (!projectRes.ok) throw new Error((await projectRes.json()).detail);
             if (!rulesRes.ok) throw new Error('Failed to load rules');
 
             state.project = await projectRes.json();
             state.availableRules = await rulesRes.json();
-
-            // If results exist, load them into state
-            if (resultsRes.ok) {
-                state.validationResults = await resultsRes.json();
-                renderValidationResults(); // Render them immediately
-            }
-
-        } catch (error) {
-            // Don't show an error if results just don't exist (404)
-            if (error.message.includes('No validation results found')) {
-                console.log("No previous validation results found. That's OK.");
-            } else {
-                 state.error = `Не удалось загрузить проект: ${error.message}`;
-            }
-        } finally {
             state.isLoading = false;
+            render();
+        } catch (error) {
+            state.isLoading = false;
+            state.error = `Не удалось загрузить проект: ${error.message}`;
             render();
         }
     }

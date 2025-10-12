@@ -4,4 +4,3 @@ python-multipart
 pandas
 openpyxl
 requests
-pyspellchecker>=0.7.0
