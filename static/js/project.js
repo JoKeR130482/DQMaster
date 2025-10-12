@@ -45,6 +45,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const api = {
         getProject: () => fetch(`/api/projects/${projectId}`),
         getRules: () => fetch('/api/rules'),
+        getResults: () => fetch(`/api/projects/${projectId}/results`),
         saveProject: (projectData) => fetch(`/api/projects/${projectId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -343,6 +344,26 @@ document.addEventListener('DOMContentLoaded', () => {
         render(); // Re-render main UI
     }
 
+    function highlightErrors(text, errorWords) {
+        if (!errorWords || !Array.isArray(errorWords) || errorWords.length === 0) {
+            return text;
+        }
+
+        let highlightedText = text;
+
+        // Escape special characters for use in regex
+        const escapeRegex = (str) => str.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+
+        errorWords.forEach(word => {
+            // Create a regex that finds the word, but not as a part of another word.
+            // It looks for boundaries that are not alphanumeric characters.
+            const regex = new RegExp(`(^|[^a-zA-Zа-яА-ЯёЁ0-9])(${escapeRegex(word)})([^a-zA-Zа-яА-ЯёЁ0-9]|$)`, 'g');
+            highlightedText = highlightedText.replace(regex, `$1<span class="misspelled-word">$2</span>$3`);
+        });
+
+        return highlightedText;
+    }
+
     function renderValidationResults() {
         const resultsData = state.validationResults;
         dom.resultsContainer.style.display = 'block';
@@ -395,7 +416,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                     <td>${err.field_name}</td>
                                     <td>${err.row}</td>
                                     <td>${err.error_type}</td>
-                                    <td>${err.value}</td>
+                                    <td class="highlightable-cell" data-value="${err.value}" data-details="${encodeURIComponent(JSON.stringify(err.details || []))}"></td>
                                 </tr>
                             `).join('')}
                         </tbody>
@@ -432,7 +453,11 @@ document.addEventListener('DOMContentLoaded', () => {
                                                 <thead><tr><th>Строка</th><th>Поле</th><th>Значение</th></tr></thead>
                                                 <tbody>
                                                 ${summary.detailed_errors.map(err => `
-                                                    <tr><td>${err.row}</td><td>${err.field_name}</td><td>${err.value}</td></tr>
+                                                    <tr>
+                                                        <td>${err.row}</td>
+                                                        <td>${err.field_name}</td>
+                                                        <td class="highlightable-cell" data-value="${err.value}" data-details="${encodeURIComponent(JSON.stringify(err.details || []))}"></td>
+                                                    </tr>
                                                 `).join('')}
                                                 </tbody>
                                             </table>
@@ -450,6 +475,14 @@ document.addEventListener('DOMContentLoaded', () => {
         if (required_field_error_rows_count === 0 && file_results.every(f => f.sheets.every(s => s.rule_summaries.every(r => r.error_count === 0)))) {
             dom.summaryResults.innerHTML = '<div class="success-message">Проверка успешно завершена. Ошибок не найдено!</div>';
         }
+
+        // After rendering, go through cells that need highlighting
+        document.querySelectorAll('.highlightable-cell').forEach(cell => {
+            const value = cell.dataset.value;
+            const detailsData = cell.dataset.details;
+            const details = detailsData ? JSON.parse(decodeURIComponent(detailsData)) : [];
+            cell.innerHTML = highlightErrors(value, details);
+        });
     }
 
     // --- 6. EVENT HANDLERS & LOGIC ---
@@ -587,18 +620,32 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- 7. INITIALIZATION ---
     async function init() {
         try {
-            const [projectRes, rulesRes] = await Promise.all([api.getProject(), api.getRules()]);
+            const [projectRes, rulesRes, resultsRes] = await Promise.all([
+                api.getProject(),
+                api.getRules(),
+                api.getResults() // Fetch previous results
+            ]);
+
             if (!projectRes.ok) throw new Error((await projectRes.json()).detail);
             if (!rulesRes.ok) throw new Error('Failed to load rules');
 
             state.project = await projectRes.json();
             state.availableRules = await rulesRes.json();
+
+            // Render basic page structure first
             state.isLoading = false;
             render();
+
+            // If results exist, load and render them
+            if (resultsRes.ok) {
+                state.validationResults = await resultsRes.json();
+                renderValidationResults();
+            }
+
         } catch (error) {
             state.isLoading = false;
             state.error = `Не удалось загрузить проект: ${error.message}`;
-            render();
+            render(); // Render error state
         }
     }
 
@@ -617,3 +664,4 @@ document.addEventListener('DOMContentLoaded', () => {
 
     init();
 });
+>>>>>>> REPLACE
