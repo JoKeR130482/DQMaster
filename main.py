@@ -129,6 +129,7 @@ def load_rules():
                             "is_configurable": getattr(module, "IS_CONFIGURABLE", False),
                             "formatter": getattr(module, "format_name", None),
                             "params_schema": getattr(module, "PARAMS_SCHEMA", None),
+                            "needs_column_access": getattr(module, "NEEDS_COLUMN_ACCESS", False),
                             "module": module # Store the module itself
                         }
             except Exception as e:
@@ -288,6 +289,22 @@ async def validate_project_data(project_id: str):
                         formatter = rule_def.get("formatter")
                         rule_name = formatter(params) if formatter and params else rule_def["name"]
 
+                        # --- Branch for rules needing full column access ---
+                        if rule_def.get("needs_column_access"):
+                            validity_series = validator(df[field_schema.name])
+                            # Iterate through the boolean series and log errors where it's False
+                            for index, is_valid in validity_series.items():
+                                if not is_valid:
+                                    value = df.loc[index, field_schema.name]
+                                    all_errors.append({
+                                        "file_name": file_schema.name, "sheet_name": sheet_schema.name,
+                                        "field_name": field_schema.name, "is_required": field_schema.is_required,
+                                        "row": index + 2, "error_type": rule_name,
+                                        "value": str(value) if pd.notna(value) else "ПУСТО"
+                                    })
+                            continue # Move to the next rule
+
+                        # --- Default logic for single-value rules ---
                         for index, value in df[field_schema.name].items():
                             result = validator(value, params=params) if 'params' in inspect.signature(validator).parameters else validator(value)
 
@@ -302,12 +319,9 @@ async def validate_project_data(project_id: str):
 
                             if not is_valid:
                                 error_entry = {
-                                    "file_name": file_schema.name,
-                                    "sheet_name": sheet_schema.name,
-                                    "field_name": field_schema.name,
-                                    "is_required": field_schema.is_required,
-                                    "row": index + 2,
-                                    "error_type": rule_name,
+                                    "file_name": file_schema.name, "sheet_name": sheet_schema.name,
+                                    "field_name": field_schema.name, "is_required": field_schema.is_required,
+                                    "row": index + 2, "error_type": rule_name,
                                     "value": str(value) if pd.notna(value) else "ПУСТО"
                                 }
                                 if details:
