@@ -10,7 +10,7 @@ import pandas as pd
 import io
 import json
 
-from fastapi import Depends, FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, ValidationError
@@ -128,9 +128,7 @@ def load_rules():
                             "validator": module.validate,
                             "is_configurable": getattr(module, "IS_CONFIGURABLE", False),
                             "formatter": getattr(module, "format_name", None),
-                            "params_schema": getattr(module, "PARAMS_SCHEMA", None),
-                            "needs_column_access": getattr(module, "NEEDS_COLUMN_ACCESS", False),
-                            "module": module # Store the module itself
+                            "params_schema": getattr(module, "PARAMS_SCHEMA", None)
                         }
             except Exception as e:
                 print(f"Error loading rule from {filename}: {e}")
@@ -289,44 +287,18 @@ async def validate_project_data(project_id: str):
                         formatter = rule_def.get("formatter")
                         rule_name = formatter(params) if formatter and params else rule_def["name"]
 
-                        # --- Branch for rules needing full column access ---
-                        if rule_def.get("needs_column_access"):
-                            validity_series = validator(df[field_schema.name])
-                            # Iterate through the boolean series and log errors where it's False
-                            for index, is_valid in validity_series.items():
-                                if not is_valid:
-                                    value = df.loc[index, field_schema.name]
-                                    all_errors.append({
-                                        "file_name": file_schema.name, "sheet_name": sheet_schema.name,
-                                        "field_name": field_schema.name, "is_required": field_schema.is_required,
-                                        "row": index + 2, "error_type": rule_name,
-                                        "value": str(value) if pd.notna(value) else "ПУСТО"
-                                    })
-                            continue # Move to the next rule
-
-                        # --- Default logic for single-value rules ---
                         for index, value in df[field_schema.name].items():
-                            result = validator(value, params=params) if 'params' in inspect.signature(validator).parameters else validator(value)
-
-                            is_valid = False
-                            details = None
-
-                            if isinstance(result, bool):
-                                is_valid = result
-                            elif isinstance(result, dict):
-                                is_valid = result.get("is_valid", False)
-                                details = result.get("errors")
-
+                            is_valid = validator(value, params=params) if 'params' in inspect.signature(validator).parameters else validator(value)
                             if not is_valid:
-                                error_entry = {
-                                    "file_name": file_schema.name, "sheet_name": sheet_schema.name,
-                                    "field_name": field_schema.name, "is_required": field_schema.is_required,
-                                    "row": index + 2, "error_type": rule_name,
+                                all_errors.append({
+                                    "file_name": file_schema.name,
+                                    "sheet_name": sheet_schema.name,
+                                    "field_name": field_schema.name,
+                                    "is_required": field_schema.is_required,
+                                    "row": index + 2,
+                                    "error_type": rule_name,
                                     "value": str(value) if pd.notna(value) else "ПУСТО"
-                                }
-                                if details:
-                                    error_entry["details"] = details
-                                all_errors.append(error_entry)
+                                })
 
             except Exception as e:
                 print(f"Error processing sheet {sheet_schema.name} in file {file_schema.name}: {e}")
@@ -395,102 +367,13 @@ async def validate_project_data(project_id: str):
                 "sheets": sheet_summaries
             })
 
-    # --- Step 3: Structure the final response ---
-    response_data = {
+    # --- Step 3: Return the final structured response ---
+    return {
         "total_processed_rows": project_total_rows,
         "required_field_error_rows_count": len(unique_error_row_keys),
         "required_field_errors": required_field_errors,
-        "file_results": file_results,
-        "validated_at": datetime.datetime.utcnow().isoformat()
+        "file_results": file_results
     }
-
-    # --- Step 4: Save the results to a file ---
-    results_path = PROJECTS_DIR / project_id / "validation_result.json"
-    results_path.write_text(json.dumps(response_data, indent=2), encoding="utf-8")
-
-    return response_data
-
-@app.get("/api/projects/{project_id}/results")
-async def get_validation_results(project_id: str):
-    project_dir = PROJECTS_DIR / project_id
-    if not project_dir.is_dir():
-        raise HTTPException(status_code=404, detail="Project not found")
-
-    results_path = project_dir / "validation_result.json"
-    if not results_path.exists():
-        raise HTTPException(status_code=404, detail="No validation results found for this project.")
-
-    return FileResponse(results_path)
-
-# --- Dictionary Management ---
-CUSTOM_DICT_PATH = Path(__file__).resolve().parent / "custom_dictionary.txt"
-
-@app.get("/api/dictionary", response_model=List[str])
-async def get_dictionary():
-    if not CUSTOM_DICT_PATH.exists():
-        return []
-    words = CUSTOM_DICT_PATH.read_text(encoding="utf-8").strip().split("\n")
-    return sorted([word for word in words if word]) # Return sorted, non-empty words
-
-class AddWordRequest(BaseModel):
-    word: str
-
-@app.post("/api/dictionary", status_code=201)
-async def add_word_to_dictionary(request: AddWordRequest, current_words: List[str] = Depends(get_dictionary)):
-    new_word = request.word.strip().lower()
-    if not new_word:
-        raise HTTPException(status_code=400, detail="Word cannot be empty.")
-
-    if new_word in set(current_words):
-        raise HTTPException(status_code=400, detail="Word already exists in the dictionary.")
-
-    with CUSTOM_DICT_PATH.open("a", encoding="utf-8") as f:
-        f.write(f"\n{new_word}")
-
-    if "spell_check" in RULE_REGISTRY:
-        RULE_REGISTRY["spell_check"]["module"].reload_custom_dictionary()
-    return {"message": "Word added successfully."}
-
-class EditWordRequest(BaseModel):
-    new_word: str
-
-@app.put("/api/dictionary/{old_word}", status_code=200)
-async def edit_word_in_dictionary(old_word: str, request: EditWordRequest, current_words: List[str] = Depends(get_dictionary)):
-    old_word_clean = old_word.strip().lower()
-    new_word_clean = request.new_word.strip().lower()
-
-    if not old_word_clean or not new_word_clean:
-        raise HTTPException(status_code=400, detail="Words cannot be empty.")
-
-    if old_word_clean not in current_words:
-        raise HTTPException(status_code=404, detail="Word to edit not found in the dictionary.")
-
-    if new_word_clean in current_words and new_word_clean != old_word_clean:
-        raise HTTPException(status_code=400, detail="New word already exists in the dictionary.")
-
-    updated_words = [new_word_clean if w.lower() == old_word_clean else w for w in current_words]
-    CUSTOM_DICT_PATH.write_text("\n".join(updated_words), encoding="utf-8")
-
-    if "spell_check" in RULE_REGISTRY:
-        RULE_REGISTRY["spell_check"]["module"].reload_custom_dictionary()
-    return {"message": "Word updated successfully."}
-
-@app.delete("/api/dictionary/{word}", status_code=200)
-async def remove_word_from_dictionary(word: str, current_words: List[str] = Depends(get_dictionary)):
-    word_to_delete = word.strip().lower()
-    if not word_to_delete:
-        raise HTTPException(status_code=400, detail="Word cannot be empty.")
-
-    if word_to_delete not in current_words:
-        raise HTTPException(status_code=404, detail="Word not found in the dictionary.")
-
-    updated_words = [w for w in current_words if w.lower() != word_to_delete]
-    CUSTOM_DICT_PATH.write_text("\n".join(updated_words), encoding="utf-8")
-
-    if "spell_check" in RULE_REGISTRY:
-        RULE_REGISTRY["spell_check"]["module"].reload_custom_dictionary()
-    return {"message": "Word removed successfully."}
-
 
 # --- Rule Library ---
 @app.get("/api/rules")
@@ -524,10 +407,6 @@ async def read_project_page(project_id: str):
 @app.get("/rules")
 async def read_rules_page():
     return FileResponse(STATIC_DIR / "rules.html")
-
-@app.get("/dictionary")
-async def read_dictionary_page():
-    return FileResponse(STATIC_DIR / "dictionary.html")
 
 # ==============================================================================
 # 6. Startup Logic
