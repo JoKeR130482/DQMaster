@@ -462,7 +462,8 @@ document.addEventListener('DOMContentLoaded', () => {
         // After rendering, go through cells that need highlighting
         document.querySelectorAll('.highlightable-cell').forEach(cell => {
             const value = cell.dataset.value;
-            const details = JSON.parse(decodeURIComponent(cell.dataset.details));
+            const detailsData = cell.dataset.details;
+            const details = detailsData ? JSON.parse(decodeURIComponent(detailsData)) : [];
             cell.innerHTML = highlightErrors(value, details);
         });
     }
