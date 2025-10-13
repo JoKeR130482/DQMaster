@@ -429,6 +429,17 @@ async def read_rules_page():
 async def read_dictionary_page():
     return FileResponse(STATIC_DIR / "dictionary.html")
 
+# --- Dictionary Management ---
+CUSTOM_DICT_PATH = Path(__file__).resolve().parent / "custom_dictionary.txt"
+
+@app.get("/api/dictionary", response_model=List[str])
+async def get_dictionary():
+    if not CUSTOM_DICT_PATH.exists():
+        return []
+    words = CUSTOM_DICT_PATH.read_text(encoding="utf-8").strip().split("\n")
+    # Убираем комментарии и пустые строки, сортируем
+    return sorted([word for word in words if word and not word.startswith('#')])
+
 # ==============================================================================
 # 6. Startup Logic
 # ==============================================================================
