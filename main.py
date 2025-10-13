@@ -10,7 +10,7 @@ import pandas as pd
 import io
 import json
 
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import Depends, FastAPI, File, UploadFile, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, ValidationError
@@ -439,6 +439,20 @@ async def get_dictionary():
     words = CUSTOM_DICT_PATH.read_text(encoding="utf-8").strip().split("\n")
     # Убираем комментарии и пустые строки, сортируем
     return sorted([word for word in words if word and not word.startswith('#')])
+
+class AddWordRequest(BaseModel):
+    word: str
+
+@app.post("/api/dictionary", status_code=201)
+async def add_word_to_dictionary(request: AddWordRequest, current_words: List[str] = Depends(get_dictionary)):
+    new_word = request.word.strip().lower()
+    if not new_word:
+        raise HTTPException(status_code=400, detail="Word cannot be empty.")
+    if new_word in set(current_words):
+        raise HTTPException(status_code=400, detail="Word already exists in the dictionary.")
+    with CUSTOM_DICT_PATH.open("a", encoding="utf-8") as f:
+        f.write(f"\n{new_word}")
+    return {"message": "Word added successfully."}
 
 # ==============================================================================
 # 6. Startup Logic
