@@ -271,7 +271,7 @@ async def validate_project_data(project_id: str):
                                         "file_name": file_schema.name, "sheet_name": sheet_schema.name,
                                         "field_name": field_schema.name, "is_required": field_schema.is_required,
                                         "row": index + 2, "error_type": rule_name,
-                                        "value": str(value) if pd.notna(value) else "ПУСТО"
+                                        "value": str(value).replace('"', '&quot;') if pd.notna(value) else "ПУСТО"
                                     })
                             continue
                         for index, value in df[field_schema.name].items():
@@ -288,7 +288,7 @@ async def validate_project_data(project_id: str):
                                     "file_name": file_schema.name, "sheet_name": sheet_schema.name,
                                     "field_name": field_schema.name, "is_required": field_schema.is_required,
                                     "row": index + 2, "error_type": rule_name,
-                                    "value": str(value) if pd.notna(value) else "ПУСТО"
+                                    "value": str(value).replace('"', '&quot;') if pd.notna(value) else "ПУСТО"
                                 }
                                 if details:
                                     error_entry["details"] = details
@@ -358,11 +358,9 @@ async def get_validation_results(project_id: str):
     project_dir = PROJECTS_DIR / project_id
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail="Project not found")
-
     results_path = project_dir / "validation_result.json"
     if not results_path.exists():
         raise HTTPException(status_code=404, detail="No validation results found for this project.")
-
     return FileResponse(results_path)
 
 # --- Dictionary Management ---

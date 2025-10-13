@@ -349,19 +349,12 @@ document.addEventListener('DOMContentLoaded', () => {
             return text;
         }
 
-        let highlightedText = text;
-
         // Escape special characters for use in regex
         const escapeRegex = (str) => str.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
 
-        errorWords.forEach(word => {
-            // Create a regex that finds the word, but not as a part of another word.
-            // It looks for boundaries that are not alphanumeric characters.
-            const regex = new RegExp(`(^|[^a-zA-Zа-яА-ЯёЁ0-9])(${escapeRegex(word)})([^a-zA-Zа-яА-ЯёЁ0-9]|$)`, 'g');
-            highlightedText = highlightedText.replace(regex, `$1<span class="misspelled-word">$2</span>$3`);
-        });
+        const pattern = new RegExp(errorWords.map(escapeRegex).join('|'), 'g');
 
-        return highlightedText;
+        return text.replace(pattern, (match) => `<span class="misspelled-word">${match}</span>`);
     }
 
     function renderValidationResults() {
