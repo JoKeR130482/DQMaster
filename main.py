@@ -10,7 +10,7 @@ import pandas as pd
 import io
 import json
 
-from fastapi import Depends, FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, ValidationError
@@ -129,8 +129,7 @@ def load_rules():
                             "is_configurable": getattr(module, "IS_CONFIGURABLE", False),
                             "formatter": getattr(module, "format_name", None),
                             "params_schema": getattr(module, "PARAMS_SCHEMA", None),
-                            "needs_column_access": getattr(module, "NEEDS_COLUMN_ACCESS", False),
-                            "module": module
+                            "needs_column_access": getattr(module, "NEEDS_COLUMN_ACCESS", False)
                         }
             except Exception as e:
                 print(f"Error loading rule from {filename}: {e}")
@@ -165,6 +164,7 @@ async def get_projects():
 async def create_project(project_data: ProjectCreateRequest):
     project_id = str(uuid.uuid4())
     project_dir = PROJECTS_DIR / project_id
+    # Ensure the base projects directory and the new project directory are created.
     project_dir.mkdir(parents=True, exist_ok=True)
     (project_dir / "files").mkdir(exist_ok=True)
     now = datetime.datetime.utcnow().isoformat()
@@ -184,6 +184,7 @@ async def update_full_project(project_id: str, project_update: FullProjectUpdate
     project_dir = PROJECTS_DIR / project_id
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail="Project not found")
+
     project_update.id = project_id
     write_project(project_id, project_update)
     return project_update
@@ -193,9 +194,11 @@ async def partial_update_project(project_id: str, project_update: ProjectPartial
     project = read_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+
     update_data = project_update.model_dump(exclude_unset=True)
     if not update_data:
         raise HTTPException(status_code=400, detail="No fields to update")
+
     updated_project = project.model_copy(update=update_data)
     write_project(project_id, updated_project)
     return updated_project
@@ -216,7 +219,9 @@ async def upload_file_to_project(project_id: str, file: UploadFile = File(...)):
 
     project_files_dir = PROJECTS_DIR / project_id / "files"
     project_files_dir.mkdir(exist_ok=True)
+
     contents = await file.read()
+
     try:
         xls = pd.ExcelFile(io.BytesIO(contents))
         sheets = []
@@ -224,14 +229,21 @@ async def upload_file_to_project(project_id: str, file: UploadFile = File(...)):
             df = pd.read_excel(xls, sheet_name=sheet_name)
             fields = [FieldSchema(name=col) for col in df.columns]
             sheets.append(SheetSchema(name=sheet_name, fields=fields))
+
         saved_filename = f"{uuid.uuid4()}{Path(file.filename).suffix}"
         new_file = FileSchema(name=file.filename, saved_name=saved_filename, sheets=sheets)
         project.files.append(new_file)
+
         write_project(project_id, project)
+
+        # Save the actual file with a unique name
         (project_files_dir / saved_filename).write_bytes(contents)
+
         return project
+
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Could not process Excel file: {e}")
+
 
 @app.post("/api/projects/{project_id}/validate")
 async def validate_project_data(project_id: str):
@@ -240,70 +252,89 @@ async def validate_project_data(project_id: str):
         raise HTTPException(status_code=404, detail="Project not found")
 
     project_files_dir = PROJECTS_DIR / project_id / "files"
-    project_total_rows = 0
-    all_errors = []
 
+    project_total_rows = 0
+    all_errors = [] # A flat list of all errors from all files/sheets
+
+    # --- Step 1: Gather ALL errors from all files/sheets ---
     for file_schema in project.files:
         file_path = project_files_dir / file_schema.saved_name
-        if not file_path.exists(): continue
+        if not file_path.exists():
+            continue
+
         for sheet_schema in file_schema.sheets:
-            if not sheet_schema.is_active: continue
+            if not sheet_schema.is_active:
+                continue
+
             try:
                 df = pd.read_excel(file_path, sheet_name=sheet_schema.name)
                 sheet_total_rows = len(df)
-                if sheet_total_rows == 0: continue
+                if sheet_total_rows == 0:
+                    continue
+
                 project_total_rows += sheet_total_rows
+
                 for field_schema in sheet_schema.fields:
-                    if field_schema.name not in df.columns: continue
+                    if field_schema.name not in df.columns:
+                        continue
+
+                    # Process all configured rules for the current field
                     for rule_config in sorted(field_schema.rules, key=lambda r: r.order):
                         rule_def = RULE_REGISTRY.get(rule_config.type)
                         if not rule_def: continue
+
                         validator = rule_def["validator"]
                         params = rule_config.params or {}
                         formatter = rule_def.get("formatter")
                         rule_name = formatter(params) if formatter and params else rule_def["name"]
+
                         if rule_def.get("needs_column_access"):
                             validity_series = validator(df[field_schema.name])
                             for index, is_valid in validity_series.items():
                                 if not is_valid:
                                     value = df.loc[index, field_schema.name]
                                     all_errors.append({
-                                        "file_name": file_schema.name, "sheet_name": sheet_schema.name,
-                                        "field_name": field_schema.name, "is_required": field_schema.is_required,
-                                        "row": index + 2, "error_type": rule_name,
-                                        "value": str(value).replace('"', '&quot;') if pd.notna(value) else "ПУСТО"
+                                        "file_name": file_schema.name,
+                                        "sheet_name": sheet_schema.name,
+                                        "field_name": field_schema.name,
+                                        "is_required": field_schema.is_required,
+                                        "row": index + 2,
+                                        "error_type": rule_name,
+                                        "value": str(value) if pd.notna(value) else "ПУСТО"
                                     })
                             continue
+
                         for index, value in df[field_schema.name].items():
-                            result = validator(value, params=params) if 'params' in inspect.signature(validator).parameters else validator(value)
-                            is_valid = False
-                            details = None
-                            if isinstance(result, bool):
-                                is_valid = result
-                            elif isinstance(result, dict):
-                                is_valid = result.get("is_valid", False)
-                                details = result.get("errors")
+                            is_valid = validator(value, params=params) if 'params' in inspect.signature(validator).parameters else validator(value)
                             if not is_valid:
-                                error_entry = {
-                                    "file_name": file_schema.name, "sheet_name": sheet_schema.name,
-                                    "field_name": field_schema.name, "is_required": field_schema.is_required,
-                                    "row": index + 2, "error_type": rule_name,
-                                    "value": str(value).replace('"', '&quot;') if pd.notna(value) else "ПУСТО"
-                                }
-                                if details:
-                                    error_entry["details"] = details
-                                all_errors.append(error_entry)
+                                all_errors.append({
+                                    "file_name": file_schema.name,
+                                    "sheet_name": sheet_schema.name,
+                                    "field_name": field_schema.name,
+                                    "is_required": field_schema.is_required,
+                                    "row": index + 2,
+                                    "error_type": rule_name,
+                                    "value": str(value) if pd.notna(value) else "ПУСТО"
+                                })
+
             except Exception as e:
                 print(f"Error processing sheet {sheet_schema.name} in file {file_schema.name}: {e}")
                 continue
 
+    # --- Step 2: Post-process the flat list of errors ---
+
+    # 2.1: Calculate main statistic: unique rows with errors in required fields
     required_field_errors = [e for e in all_errors if e["is_required"]]
     unique_error_row_keys = {f"{e['file_name']}-{e['sheet_name']}-{e['row']}" for e in required_field_errors}
+
+    # 2.2: Build per-sheet summaries
     file_results = []
     for file_schema in project.files:
         sheet_summaries = []
         for sheet_schema in file_schema.sheets:
             if not sheet_schema.is_active: continue
+
+            # Get all rule names that *could* apply to this sheet
             all_applicable_rule_names = set()
             for f in sheet_schema.fields:
                 for r_conf in f.rules:
@@ -312,24 +343,33 @@ async def validate_project_data(project_id: str):
                         formatter = r_def.get("formatter")
                         rule_name = formatter(r_conf.params) if formatter and r_conf.params else r_def["name"]
                         all_applicable_rule_names.add(rule_name)
+
+            # Group errors for this sheet
             sheet_errors = [e for e in all_errors if e["file_name"] == file_schema.name and e["sheet_name"] == sheet_schema.name]
+
             summary_list = []
-            if all_applicable_rule_names:
+            if all_applicable_rule_names: # Only build summary if there are rules
                 df_sheet = pd.read_excel(PROJECTS_DIR / project_id / "files" / file_schema.saved_name, sheet_name=sheet_schema.name)
                 sheet_total_rows = len(df_sheet)
+
                 for rule_name in sorted(list(all_applicable_rule_names)):
                     rule_errors = [e for e in sheet_errors if e["error_type"] == rule_name]
                     error_count = len(rule_errors)
+
                     summary_list.append({
                         "rule_name": rule_name,
                         "error_count": error_count,
                         "error_percentage": round((error_count / sheet_total_rows) * 100, 2) if sheet_total_rows > 0 else 0,
                         "detailed_errors": rule_errors
                     })
+
                 summary_list.sort(key=lambda x: x['error_count'], reverse=True)
+
+            # Calculate sheet-specific error row count and percentage
             sheet_error_row_keys = {e['row'] for e in sheet_errors}
             sheet_error_rows_count = len(sheet_error_row_keys)
             sheet_error_percentage = round((sheet_error_rows_count / sheet_total_rows) * 100, 2) if sheet_total_rows > 0 else 0
+
             sheet_summaries.append({
                 "sheet_name": sheet_schema.name,
                 "total_rows": sheet_total_rows,
@@ -337,89 +377,20 @@ async def validate_project_data(project_id: str):
                 "sheet_error_percentage": sheet_error_percentage,
                 "rule_summaries": summary_list
             })
+
         if sheet_summaries:
             file_results.append({
                 "file_name": file_schema.name,
                 "sheets": sheet_summaries
             })
-    response_data = {
+
+    # --- Step 3: Return the final structured response ---
+    return {
         "total_processed_rows": project_total_rows,
         "required_field_error_rows_count": len(unique_error_row_keys),
         "required_field_errors": required_field_errors,
-        "file_results": file_results,
-        "validated_at": datetime.datetime.utcnow().isoformat()
+        "file_results": file_results
     }
-    results_path = PROJECTS_DIR / project_id / "validation_result.json"
-    results_path.write_text(json.dumps(response_data, indent=2), encoding="utf-8")
-    return response_data
-
-@app.get("/api/projects/{project_id}/results")
-async def get_validation_results(project_id: str):
-    project_dir = PROJECTS_DIR / project_id
-    if not project_dir.is_dir():
-        raise HTTPException(status_code=404, detail="Project not found")
-    results_path = project_dir / "validation_result.json"
-    if not results_path.exists():
-        raise HTTPException(status_code=404, detail="No validation results found for this project.")
-    return FileResponse(results_path)
-
-# --- Dictionary Management ---
-CUSTOM_DICT_PATH = Path(__file__).resolve().parent / "custom_dictionary.txt"
-
-@app.get("/api/dictionary", response_model=List[str])
-async def get_dictionary():
-    if not CUSTOM_DICT_PATH.exists():
-        return []
-    words = CUSTOM_DICT_PATH.read_text(encoding="utf-8").strip().split("\n")
-    return sorted([word for word in words if word])
-
-class AddWordRequest(BaseModel):
-    word: str
-
-@app.post("/api/dictionary", status_code=201)
-async def add_word_to_dictionary(request: AddWordRequest, current_words: List[str] = Depends(get_dictionary)):
-    new_word = request.word.strip().lower()
-    if not new_word:
-        raise HTTPException(status_code=400, detail="Word cannot be empty.")
-    if new_word in set(current_words):
-        raise HTTPException(status_code=400, detail="Word already exists in the dictionary.")
-    with CUSTOM_DICT_PATH.open("a", encoding="utf-8") as f:
-        f.write(f"\n{new_word}")
-    if "spell_check" in RULE_REGISTRY:
-        RULE_REGISTRY["spell_check"]["module"].reload_custom_dictionary()
-    return {"message": "Word added successfully."}
-
-class EditWordRequest(BaseModel):
-    new_word: str
-
-@app.put("/api/dictionary/{old_word}", status_code=200)
-async def edit_word_in_dictionary(old_word: str, request: EditWordRequest, current_words: List[str] = Depends(get_dictionary)):
-    old_word_clean = old_word.strip().lower()
-    new_word_clean = request.new_word.strip().lower()
-    if not old_word_clean or not new_word_clean:
-        raise HTTPException(status_code=400, detail="Words cannot be empty.")
-    if old_word_clean not in current_words:
-        raise HTTPException(status_code=404, detail="Word to edit not found in the dictionary.")
-    if new_word_clean in current_words and new_word_clean != old_word_clean:
-        raise HTTPException(status_code=400, detail="New word already exists in the dictionary.")
-    updated_words = [new_word_clean if w.lower() == old_word_clean else w for w in current_words]
-    CUSTOM_DICT_PATH.write_text("\n".join(updated_words), encoding="utf-8")
-    if "spell_check" in RULE_REGISTRY:
-        RULE_REGISTRY["spell_check"]["module"].reload_custom_dictionary()
-    return {"message": "Word updated successfully."}
-
-@app.delete("/api/dictionary/{word}", status_code=200)
-async def remove_word_from_dictionary(word: str, current_words: List[str] = Depends(get_dictionary)):
-    word_to_delete = word.strip().lower()
-    if not word_to_delete:
-        raise HTTPException(status_code=400, detail="Word cannot be empty.")
-    if word_to_delete not in current_words:
-        raise HTTPException(status_code=404, detail="Word not found in the dictionary.")
-    updated_words = [w for w in current_words if w.lower() != word_to_delete]
-    CUSTOM_DICT_PATH.write_text("\n".join(updated_words), encoding="utf-8")
-    if "spell_check" in RULE_REGISTRY:
-        RULE_REGISTRY["spell_check"]["module"].reload_custom_dictionary()
-    return {"message": "Word removed successfully."}
 
 # --- Rule Library ---
 @app.get("/api/rules")
@@ -431,7 +402,7 @@ async def get_all_rules():
             "name": data["name"],
             "description": data["description"],
             "is_configurable": data["is_configurable"],
-            "params_schema": data.get("params_schema")
+            "params_schema": data.get("params_schema") # Use .get for safety, might be None
         })
     return rules_list
 
@@ -453,10 +424,6 @@ async def read_project_page(project_id: str):
 @app.get("/rules")
 async def read_rules_page():
     return FileResponse(STATIC_DIR / "rules.html")
-
-@app.get("/dictionary")
-async def read_dictionary_page():
-    return FileResponse(STATIC_DIR / "dictionary.html")
 
 # ==============================================================================
 # 6. Startup Logic
