@@ -3,7 +3,7 @@
   "name": "Backend Test 1760079418",
   "description": "Testing the API",
   "created_at": "2025-10-10T06:56:58.866589",
-  "updated_at": "2025-10-10T06:56:59.119699",
+  "updated_at": "2025-10-13T07:41:53.097547",
   "files": [
     {
       "id": "89989e1a-9856-4814-b10e-e5fd27e47211",
@@ -25,6 +25,26 @@
               "id": "a0335791-4fb9-463c-b6ed-16ba8259571e",
               "name": "Артикул",
               "is_required": true,
+              "rules": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "20d1959d-06a5-440a-9ce0-8348d2ff6781",
+      "name": "test_data.xlsx",
+      "saved_name": "fa819d40-a550-4abe-b2a0-9a499fb38dd2.xlsx",
+      "sheets": [
+        {
+          "id": "d08d1313-8d1b-4744-a25d-1fbdf858cb66",
+          "name": "Sheet1",
+          "is_active": true,
+          "fields": [
+            {
+              "id": "acde5674-f9a2-444e-920b-c8eef132df71",
+              "name": "Email",
+              "is_required": false,
               "rules": []
             }
           ]
