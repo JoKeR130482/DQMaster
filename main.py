@@ -425,6 +425,10 @@ async def read_project_page(project_id: str):
 async def read_rules_page():
     return FileResponse(STATIC_DIR / "rules.html")
 
+@app.get("/dictionary")
+async def read_dictionary_page():
+    return FileResponse(STATIC_DIR / "dictionary.html")
+
 # ==============================================================================
 # 6. Startup Logic
 # ==============================================================================
