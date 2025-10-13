@@ -6,6 +6,7 @@ document.addEventListener('DOMContentLoaded', () => {
         isLoading: true,
         searchTerm: '',
         sortDirection: 'asc',
+        editingWord: null, // The word currently being edited
     };
 
     // --- 2. DOM ELEMENTS ---
@@ -30,6 +31,14 @@ document.addEventListener('DOMContentLoaded', () => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ word }),
         }),
+        updateWord: (oldWord, newWord) => fetch(`/api/dictionary/${encodeURIComponent(oldWord)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ new_word: newWord }),
+        }),
+        deleteWord: (word) => fetch(`/api/dictionary/${encodeURIComponent(word)}`, {
+            method: 'DELETE',
+        }),
     };
 
     // --- 5. RENDER FUNCTIONS ---
@@ -39,12 +48,33 @@ document.addEventListener('DOMContentLoaded', () => {
         const filteredAndSortedWords = getFilteredAndSortedWords();
         dom.dictionaryTableBody.innerHTML = '';
 
-        if (filteredAndSortedWords.length > 0) {
-            dom.dictionaryContainer.style.display = 'block';
+        if (filteredAndSortedWords.length > 0 || state.searchTerm) {
+            dom.dictionaryContainer.style.display = 'table';
             dom.emptyState.style.display = 'none';
+
             filteredAndSortedWords.forEach(word => {
                 const row = document.createElement('tr');
-                row.innerHTML = `<td>${word}</td>`;
+                row.dataset.word = word;
+
+                if (state.editingWord === word) {
+                    row.innerHTML = `
+                        <td class="word-cell">
+                            <input type="text" class="edit-word-input" value="${word}">
+                        </td>
+                        <td class="actions-cell">
+                            <button class="btn btn-icon save-edit-btn" title="Сохранить"><i data-lucide="check"></i></button>
+                            <button class="btn btn-icon cancel-edit-btn" title="Отмена"><i data-lucide="x"></i></button>
+                        </td>
+                    `;
+                } else {
+                    row.innerHTML = `
+                        <td class="word-cell">${word}</td>
+                        <td class="actions-cell">
+                            <button class="btn btn-icon edit-word-btn" title="Редактировать"><i data-lucide="pencil"></i></button>
+                            <button class="btn btn-icon danger delete-word-btn" title="Удалить"><i data-lucide="trash-2"></i></button>
+                        </td>
+                    `;
+                }
                 dom.dictionaryTableBody.appendChild(row);
             });
         } else {
@@ -93,6 +123,46 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    async function handleDeleteWord(word) {
+        if (!confirm(`Вы уверены, что хотите удалить слово "${word}"?`)) return;
+
+        try {
+            const response = await api.deleteWord(word);
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.detail || 'Failed to delete word');
+            }
+            showNotification(`Слово "${word}" удалено.`, 'success');
+            await init();
+        } catch (error) {
+            showNotification(`Ошибка: ${error.message}`, 'error');
+        }
+    }
+
+    async function handleUpdateWord(oldWord, newWord) {
+        if (!newWord || oldWord === newWord) {
+            state.editingWord = null;
+            render();
+            return;
+        }
+
+        try {
+            const response = await api.updateWord(oldWord, newWord);
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.detail || 'Failed to update word');
+            }
+            showNotification(`Слово "${oldWord}" обновлено на "${newWord}".`, 'success');
+            state.editingWord = null;
+            await init();
+        } catch (error) {
+            showNotification(`Ошибка: ${error.message}`, 'error');
+            state.editingWord = null; // Exit editing mode on error
+            render();
+        }
+    }
+
+
     function setupEventListeners() {
         dom.searchInput.addEventListener('input', (e) => {
             state.searchTerm = e.target.value;
@@ -107,6 +177,27 @@ document.addEventListener('DOMContentLoaded', () => {
         dom.addWordBtn.addEventListener('click', handleAddWord);
         dom.addWordInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') handleAddWord();
+        });
+
+        dom.dictionaryTableBody.addEventListener('click', (e) => {
+            const target = e.target;
+            const row = target.closest('tr');
+            if (!row) return;
+
+            const originalWord = row.dataset.word;
+
+            if (target.closest('.delete-word-btn')) {
+                handleDeleteWord(originalWord);
+            } else if (target.closest('.edit-word-btn')) {
+                state.editingWord = originalWord;
+                render();
+            } else if (target.closest('.cancel-edit-btn')) {
+                state.editingWord = null;
+                render();
+            } else if (target.closest('.save-edit-btn')) {
+                const input = row.querySelector('.edit-word-input');
+                handleUpdateWord(originalWord, input.value.trim());
+            }
         });
     }
 

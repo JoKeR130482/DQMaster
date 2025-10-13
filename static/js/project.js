@@ -69,6 +69,21 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     const newId = () => `id_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
+    function highlightMisspelledWords(text, errors) {
+        if (typeof text !== 'string' || !Array.isArray(errors) || errors.length === 0) {
+            return text;
+        }
+        // Escape HTML to prevent XSS
+        const escapedText = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+        // Build a regex to find all misspelled words (case-insensitive)
+        // Using word boundaries (\b) to avoid matching parts of words.
+        const errorsRegex = new RegExp(`\\b(${errors.map(e => e.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')).join('|')})\\b`, 'gi');
+
+        return escapedText.replace(errorsRegex, (match) => `<span class="misspelled-word" title="Ошибка в слове">${match}</span>`);
+    }
+
+
     // --- 5. RENDER FUNCTIONS ---
     function render() {
         dom.loading.style.display = state.isLoading ? 'block' : 'none';
@@ -371,16 +386,20 @@ document.addEventListener('DOMContentLoaded', () => {
                     <table class="results-table detailed-table">
                         <thead><tr><th>Файл</th><th>Лист</th><th>Поле</th><th>Строка</th><th>Ошибка</th><th>Значение</th></tr></thead>
                         <tbody>
-                            ${required_field_errors.map(err => `
-                                <tr>
-                                    <td>${err.file_name}</td>
-                                    <td>${err.sheet_name}</td>
-                                    <td>${err.field_name}</td>
-                                    <td>${err.row}</td>
-                                    <td>${err.error_type}</td>
-                                    <td>${err.value}</td>
-                                </tr>
-                            `).join('')}
+                            ${required_field_errors.map(err => {
+                                const valueCellContent = (err.details && Array.isArray(err.details.errors))
+                                    ? highlightMisspelledWords(err.value, err.details.errors)
+                                    : (err.value || '');
+                                return `
+                                    <tr>
+                                        <td>${err.file_name}</td>
+                                        <td>${err.sheet_name}</td>
+                                        <td>${err.field_name}</td>
+                                        <td>${err.row}</td>
+                                        <td>${err.error_type}</td>
+                                        <td>${valueCellContent}</td>
+                                    </tr>`;
+                            }).join('')}
                         </tbody>
                     </table>
                 </div>`;
@@ -414,9 +433,12 @@ document.addEventListener('DOMContentLoaded', () => {
                                             <table class="results-table detailed-table">
                                                 <thead><tr><th>Строка</th><th>Поле</th><th>Значение</th></tr></thead>
                                                 <tbody>
-                                                ${summary.detailed_errors.map(err => `
-                                                    <tr><td>${err.row}</td><td>${err.field_name}</td><td>${err.value}</td></tr>
-                                                `).join('')}
+                                                ${summary.detailed_errors.map(err => {
+                                                    const valueCellContent = (err.details && Array.isArray(err.details.errors))
+                                                        ? highlightMisspelledWords(err.value, err.details.errors)
+                                                        : (err.value || '');
+                                                    return `<tr><td>${err.row}</td><td>${err.field_name}</td><td>${valueCellContent}</td></tr>`;
+                                                }).join('')}
                                                 </tbody>
                                             </table>
                                         </div>

@@ -1,0 +1,162 @@
+{
+  "total_processed_rows": 5,
+  "required_field_error_rows_count": 5,
+  "required_field_errors": [
+    {
+      "file_name": "test_data_final.xlsx",
+      "sheet_name": "\u041b\u0438\u0441\u04421",
+      "field_name": "WareName#Rus",
+      "is_required": true,
+      "row": 2,
+      "error_type": "\u041d\u0435 \u043d\u0430\u0447\u0438\u043d\u0430\u0435\u0442\u0441\u044f \u0441 \u0437\u0430\u0433\u043b\u0430\u0432\u043d\u043e\u0439",
+      "value": "\u044f\u0431\u043b\u043e\u043a\u043e"
+    },
+    {
+      "file_name": "test_data_final.xlsx",
+      "sheet_name": "\u041b\u0438\u0441\u04421",
+      "field_name": "WareName#Rus",
+      "is_required": true,
+      "row": 4,
+      "error_type": "\u041d\u0435 \u043d\u0430\u0447\u0438\u043d\u0430\u0435\u0442\u0441\u044f \u0441 \u0437\u0430\u0433\u043b\u0430\u0432\u043d\u043e\u0439",
+      "value": "\u0431\u0430\u043d\u0430\u043d"
+    },
+    {
+      "file_name": "test_data_final.xlsx",
+      "sheet_name": "\u041b\u0438\u0441\u04421",
+      "field_name": "WareName#Rus",
+      "is_required": true,
+      "row": 5,
+      "error_type": "\u041d\u0435 \u043d\u0430\u0447\u0438\u043d\u0430\u0435\u0442\u0441\u044f \u0441 \u0437\u0430\u0433\u043b\u0430\u0432\u043d\u043e\u0439",
+      "value": "\u0432\u0438\u0448\u043d\u044f"
+    },
+    {
+      "file_name": "test_data_final.xlsx",
+      "sheet_name": "\u041b\u0438\u0441\u04421",
+      "field_name": "WareName#Rus",
+      "is_required": true,
+      "row": 3,
+      "error_type": "\u041f\u0440\u043e\u0432\u0435\u0440\u043a\u0430 \u043e\u0440\u0444\u043e\u0433\u0440\u0430\u0444\u0438\u0438",
+      "value": "\u0410\u043f\u0435\u043b\u044c\u0441\u0438\u043d",
+      "details": [
+        "\u0410\u043f\u0435\u043b\u044c\u0441\u0438\u043d"
+      ]
+    },
+    {
+      "file_name": "test_data_final.xlsx",
+      "sheet_name": "\u041b\u0438\u0441\u04421",
+      "field_name": "WareName#Rus",
+      "is_required": true,
+      "row": 5,
+      "error_type": "\u041f\u0440\u043e\u0432\u0435\u0440\u043a\u0430 \u043e\u0440\u0444\u043e\u0433\u0440\u0430\u0444\u0438\u0438",
+      "value": "\u0432\u0438\u0448\u043d\u044f",
+      "details": [
+        "\u0432\u0438\u0448\u043d\u044f"
+      ]
+    },
+    {
+      "file_name": "test_data_final.xlsx",
+      "sheet_name": "\u041b\u0438\u0441\u04421",
+      "field_name": "WareName#Rus",
+      "is_required": true,
+      "row": 6,
+      "error_type": "\u041f\u0440\u043e\u0432\u0435\u0440\u043a\u0430 \u043e\u0440\u0444\u043e\u0433\u0440\u0430\u0444\u0438\u0438",
+      "value": "\u0413\u0440\u0443\u0448\u0430",
+      "details": [
+        "\u0413\u0440\u0443\u0448\u0430"
+      ]
+    }
+  ],
+  "file_results": [
+    {
+      "file_name": "test_data_final.xlsx",
+      "sheets": [
+        {
+          "sheet_name": "\u041b\u0438\u0441\u04421",
+          "total_rows": 5,
+          "sheet_error_rows_count": 5,
+          "sheet_error_percentage": 100.0,
+          "rule_summaries": [
+            {
+              "rule_name": "\u041d\u0435 \u043d\u0430\u0447\u0438\u043d\u0430\u0435\u0442\u0441\u044f \u0441 \u0437\u0430\u0433\u043b\u0430\u0432\u043d\u043e\u0439",
+              "error_count": 3,
+              "error_percentage": 60.0,
+              "detailed_errors": [
+                {
+                  "file_name": "test_data_final.xlsx",
+                  "sheet_name": "\u041b\u0438\u0441\u04421",
+                  "field_name": "WareName#Rus",
+                  "is_required": true,
+                  "row": 2,
+                  "error_type": "\u041d\u0435 \u043d\u0430\u0447\u0438\u043d\u0430\u0435\u0442\u0441\u044f \u0441 \u0437\u0430\u0433\u043b\u0430\u0432\u043d\u043e\u0439",
+                  "value": "\u044f\u0431\u043b\u043e\u043a\u043e"
+                },
+                {
+                  "file_name": "test_data_final.xlsx",
+                  "sheet_name": "\u041b\u0438\u0441\u04421",
+                  "field_name": "WareName#Rus",
+                  "is_required": true,
+                  "row": 4,
+                  "error_type": "\u041d\u0435 \u043d\u0430\u0447\u0438\u043d\u0430\u0435\u0442\u0441\u044f \u0441 \u0437\u0430\u0433\u043b\u0430\u0432\u043d\u043e\u0439",
+                  "value": "\u0431\u0430\u043d\u0430\u043d"
+                },
+                {
+                  "file_name": "test_data_final.xlsx",
+                  "sheet_name": "\u041b\u0438\u0441\u04421",
+                  "field_name": "WareName#Rus",
+                  "is_required": true,
+                  "row": 5,
+                  "error_type": "\u041d\u0435 \u043d\u0430\u0447\u0438\u043d\u0430\u0435\u0442\u0441\u044f \u0441 \u0437\u0430\u0433\u043b\u0430\u0432\u043d\u043e\u0439",
+                  "value": "\u0432\u0438\u0448\u043d\u044f"
+                }
+              ]
+            },
+            {
+              "rule_name": "\u041f\u0440\u043e\u0432\u0435\u0440\u043a\u0430 \u043e\u0440\u0444\u043e\u0433\u0440\u0430\u0444\u0438\u0438",
+              "error_count": 3,
+              "error_percentage": 60.0,
+              "detailed_errors": [
+                {
+                  "file_name": "test_data_final.xlsx",
+                  "sheet_name": "\u041b\u0438\u0441\u04421",
+                  "field_name": "WareName#Rus",
+                  "is_required": true,
+                  "row": 3,
+                  "error_type": "\u041f\u0440\u043e\u0432\u0435\u0440\u043a\u0430 \u043e\u0440\u0444\u043e\u0433\u0440\u0430\u0444\u0438\u0438",
+                  "value": "\u0410\u043f\u0435\u043b\u044c\u0441\u0438\u043d",
+                  "details": [
+                    "\u0410\u043f\u0435\u043b\u044c\u0441\u0438\u043d"
+                  ]
+                },
+                {
+                  "file_name": "test_data_final.xlsx",
+                  "sheet_name": "\u041b\u0438\u0441\u04421",
+                  "field_name": "WareName#Rus",
+                  "is_required": true,
+                  "row": 5,
+                  "error_type": "\u041f\u0440\u043e\u0432\u0435\u0440\u043a\u0430 \u043e\u0440\u0444\u043e\u0433\u0440\u0430\u0444\u0438\u0438",
+                  "value": "\u0432\u0438\u0448\u043d\u044f",
+                  "details": [
+                    "\u0432\u0438\u0448\u043d\u044f"
+                  ]
+                },
+                {
+                  "file_name": "test_data_final.xlsx",
+                  "sheet_name": "\u041b\u0438\u0441\u04421",
+                  "field_name": "WareName#Rus",
+                  "is_required": true,
+                  "row": 6,
+                  "error_type": "\u041f\u0440\u043e\u0432\u0435\u0440\u043a\u0430 \u043e\u0440\u0444\u043e\u0433\u0440\u0430\u0444\u0438\u0438",
+                  "value": "\u0413\u0440\u0443\u0448\u0430",
+                  "details": [
+                    "\u0413\u0440\u0443\u0448\u0430"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "validated_at": "2025-10-13T15:47:01.422300"
+}
