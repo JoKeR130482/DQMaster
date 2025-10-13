@@ -45,6 +45,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const api = {
         getProject: () => fetch(`/api/projects/${projectId}`),
         getRules: () => fetch('/api/rules'),
+        getResults: () => fetch(`/api/projects/${projectId}/results`),
         saveProject: (projectData) => fetch(`/api/projects/${projectId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -67,6 +68,13 @@ document.addEventListener('DOMContentLoaded', () => {
         dom.errorContainer.textContent = message;
         dom.errorContainer.style.display = 'block';
     };
+    const formatDate = (isoString) => {
+        if (!isoString) return 'N/A';
+        return new Date(isoString).toLocaleString('ru-RU', {
+            day: '2-digit', month: '2-digit', year: 'numeric',
+            hour: '2-digit', minute: '2-digit', second: '2-digit'
+        });
+    };
     const newId = () => `id_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
     // --- 5. RENDER FUNCTIONS ---
@@ -84,6 +92,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!state.project) return;
 
         dom.projectNameHeader.textContent = state.project.name;
+        document.getElementById('project-id-display').textContent = `ID: ${state.project.id}`;
         dom.uploadFormContainer.style.display = state.showUploadForm ? 'flex' : 'none';
 
         renderFiles();
@@ -99,7 +108,10 @@ document.addEventListener('DOMContentLoaded', () => {
             fileCard.dataset.fileId = file.id;
             fileCard.innerHTML = `
                 <div class="file-header">
-                    <h3 class="file-name">${file.name}</h3>
+                    <div>
+                        <h3 class="file-name">${file.name}</h3>
+                        <span class="card-id" style="font-size: 0.8rem;">ID: ${file.id}</span>
+                    </div>
                     <div class="file-actions">
                     <button class="btn btn-icon danger remove-file-btn" title="Удалить файл"><i data-lucide="trash-2"></i></button>
                     </div>
@@ -181,23 +193,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const ruleDef = state.availableRules.find(r => r.id === rule.type);
         if (!ruleDef) return rule.type;
 
-        // Specific formatter for substring_check
-        if (rule.type === 'substring_check' && rule.params) {
-            const { value, mode = 'contains', case_sensitive = false } = rule.params;
-            if (!value) return ruleDef.name;
-            const mode_text = mode === 'not_contains' ? 'не содержит' : 'содержит';
-            const case_text = case_sensitive ? " (регистр важен)" : "";
-            return `Подстрока '${value}' (${mode_text}${case_text})`;
-        }
-
-        // Generic fallback for other rules that might have been configured
-        if (rule.params && rule.params.value) {
-             return `${ruleDef.name}: ${rule.params.value}`;
-        }
-
-        // Backward compatibility for old format
-        if (rule.value) {
-            return `${ruleDef.name}: ${rule.value}`;
+        if (ruleDef.formatter) {
+             const formatted = ruleDef.formatter(rule.params);
+             if (formatted) return formatted;
         }
 
         return ruleDef.name;
@@ -236,14 +234,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 let fieldHtml = '';
 
                 if (param.type === 'checkbox') {
-                    // Use the dedicated checkbox group class for proper styling
                     fieldHtml = `
                         <div class="form-group-checkbox">
                             <input type="checkbox" id="param-${param.name}" name="${param.name}" ${value ? 'checked' : ''}>
                             <label for="param-${param.name}">${param.label}</label>
                         </div>`;
                 } else {
-                    // Standard form group for other types
                     fieldHtml = `<div class="form-group">`;
                     fieldHtml += `<label for="param-${param.name}">${param.label}</label>`;
                     if (param.type === 'select') {
@@ -252,7 +248,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             fieldHtml += `<option value="${opt.value}" ${opt.value === value ? 'selected' : ''}>${opt.label}</option>`;
                         });
                         fieldHtml += `</select>`;
-                    } else { // text
+                    } else {
                         fieldHtml += `<input type="text" id="param-${param.name}" name="${param.name}" value="${value || ''}">`;
                     }
                     fieldHtml += `</div>`;
@@ -262,21 +258,19 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const ruleTypeSelect = form.querySelector('#rule-type-select');
-        if (!rule) { // Only allow changing type for new rules
+        if (!rule) {
             ruleTypeSelect.addEventListener('change', () => {
                 state.editingRuleContext.type = ruleTypeSelect.value;
-                renderRuleEditor(); // Re-render modal with new schema
+                renderRuleEditor();
             });
         }
     }
 
-    function openRuleModal(context) { // context = { fileId, sheetId, fieldId, ruleId? }
+    function openRuleModal(context) {
         const { ruleId } = context;
-        // For new rules, initialize a 'type' property to be managed during modal interaction
         if (!ruleId) {
             context.type = '';
         } else {
-            // For existing rules, get the type from the rule object
             const { rule } = findElements(Object.values(context));
             context.type = rule.type;
         }
@@ -315,21 +309,30 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
-        if (ruleId) { // Editing existing rule
+        if (ruleId) {
             const rule = field.rules.find(r => r.id === ruleId);
             rule.params = params;
-        } else { // Adding new rule
+        } else {
             field.rules.push({
                 id: newId(),
                 type: type,
                 params: params,
-                value: null, // Deprecate 'value'
+                value: null,
                 order: field.rules.length + 1
             });
         }
         closeRuleModal();
         await handleSaveProject();
-        render(); // Re-render main UI
+        render();
+    }
+
+    function highlightErrors(text, errorWords) {
+        if (!errorWords || !Array.isArray(errorWords) || errorWords.length === 0) {
+            return text;
+        }
+        const escapeRegex = (str) => str.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+        const pattern = new RegExp(errorWords.map(escapeRegex).join('|'), 'g');
+        return text.replace(pattern, (match) => `<span class="misspelled-word">${match}</span>`);
     }
 
     function renderValidationResults() {
@@ -337,9 +340,8 @@ document.addEventListener('DOMContentLoaded', () => {
         dom.resultsContainer.style.display = 'block';
         dom.goldenRecordStats.innerHTML = '';
         dom.summaryResults.innerHTML = '';
-        dom.detailedResults.innerHTML = ''; // Clear legacy container
+        dom.detailedResults.innerHTML = '';
 
-        // FINAL FIX: Handle both 'file_results' (new) and 'results' (cached old) for resilience.
         const file_results = resultsData.file_results || resultsData.results;
 
         if (!resultsData || !file_results) {
@@ -347,10 +349,14 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        const { total_processed_rows, required_field_error_rows_count, required_field_errors } = resultsData;
+        const { total_processed_rows, required_field_error_rows_count, required_field_errors, validated_at } = resultsData;
         const requiredErrorPercentage = total_processed_rows > 0 ? ((required_field_error_rows_count / total_processed_rows) * 100).toFixed(2) : 0;
 
-        // 1. Render Main Stats
+        const resultsHeader = dom.resultsContainer.querySelector('.section-header h2');
+        if (resultsHeader) {
+            resultsHeader.innerHTML = `Результаты проверки <span class="sheet-stats" style="margin-left: 1rem;">(Последняя: ${formatDate(validated_at)})</span>`;
+        }
+
         const statsHtml = `
             <div class="stats-summary">
                 <span>Всего обработано строк: <strong>${total_processed_rows}</strong></span>
@@ -363,7 +369,6 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
         dom.goldenRecordStats.innerHTML = statsHtml;
 
-        // 2. Conditionally render the detailed required errors
         if (state.showRequiredErrorsDetails && required_field_error_rows_count > 0) {
             const detailsHtml = `
                 <div class="detailed-results-container required-errors-details">
@@ -378,7 +383,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                     <td>${err.field_name}</td>
                                     <td>${err.row}</td>
                                     <td>${err.error_type}</td>
-                                    <td>${err.value}</td>
+                                    <td class="highlightable-cell" data-value="${err.value}" data-details="${encodeURIComponent(JSON.stringify(err.details || []))}"></td>
                                 </tr>
                             `).join('')}
                         </tbody>
@@ -387,7 +392,6 @@ document.addEventListener('DOMContentLoaded', () => {
             dom.goldenRecordStats.insertAdjacentHTML('beforeend', detailsHtml);
         }
 
-        // 3. Render Per-File, Per-Sheet Summaries
         file_results.forEach((fileResult, fileIdx) => {
             fileResult.sheets.forEach((sheetResult, sheetIdx) => {
                 const summaryHtml = `
@@ -415,7 +419,11 @@ document.addEventListener('DOMContentLoaded', () => {
                                                 <thead><tr><th>Строка</th><th>Поле</th><th>Значение</th></tr></thead>
                                                 <tbody>
                                                 ${summary.detailed_errors.map(err => `
-                                                    <tr><td>${err.row}</td><td>${err.field_name}</td><td>${err.value}</td></tr>
+                                                    <tr>
+                                                        <td>${err.row}</td>
+                                                        <td>${err.field_name}</td>
+                                                        <td class="highlightable-cell" data-value="${err.value}" data-details="${encodeURIComponent(JSON.stringify(err.details || []))}"></td>
+                                                    </tr>
                                                 `).join('')}
                                                 </tbody>
                                             </table>
@@ -433,11 +441,16 @@ document.addEventListener('DOMContentLoaded', () => {
         if (required_field_error_rows_count === 0 && file_results.every(f => f.sheets.every(s => s.rule_summaries.every(r => r.error_count === 0)))) {
             dom.summaryResults.innerHTML = '<div class="success-message">Проверка успешно завершена. Ошибок не найдено!</div>';
         }
+
+        document.querySelectorAll('.highlightable-cell').forEach(cell => {
+            const value = cell.dataset.value;
+            const detailsData = cell.dataset.details;
+            const details = detailsData ? JSON.parse(decodeURIComponent(detailsData)) : [];
+            cell.innerHTML = highlightErrors(value, details);
+        });
     }
 
-    // --- 6. EVENT HANDLERS & LOGIC ---
     function handleResultsClick(e) {
-        console.log("--- CLICK: handleResultsClick() CALLED ---");
         const requiredStat = e.target.closest('#required-errors-stat.clickable');
         if (requiredStat) {
             state.showRequiredErrorsDetails = !state.showRequiredErrorsDetails;
@@ -449,7 +462,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (summaryRow) {
             const detailsKey = summaryRow.dataset.detailsKey;
             state.activeRuleDetailsKey = state.activeRuleDetailsKey === detailsKey ? null : detailsKey;
-            state.showRequiredErrorsDetails = false; // Hide other details when showing this one
+            state.showRequiredErrorsDetails = false;
             renderValidationResults();
             return;
         }
@@ -531,9 +544,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function handleValidate() {
-        await handleSaveProject(); // Ensure latest config is saved before validation
+        await handleSaveProject();
         dom.resultsContainer.style.display = 'block';
-        dom.summaryResults.innerHTML = '<div class="loading-spinner"></div>'; // Show loading indicator
+        dom.summaryResults.innerHTML = '<div class="loading-spinner"></div>';
         dom.detailedResults.innerHTML = '';
         state.validationResults = null;
 
@@ -544,7 +557,7 @@ document.addEventListener('DOMContentLoaded', () => {
             renderValidationResults();
         } catch (error) {
             showError(`Ошибка валидации: ${error.message}`);
-            dom.summaryResults.innerHTML = ''; // Clear loading indicator on error
+            dom.summaryResults.innerHTML = '';
         }
     }
 
@@ -570,14 +583,26 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- 7. INITIALIZATION ---
     async function init() {
         try {
-            const [projectRes, rulesRes] = await Promise.all([api.getProject(), api.getRules()]);
+            const [projectRes, rulesRes, resultsRes] = await Promise.all([
+                api.getProject(),
+                api.getRules(),
+                api.getResults()
+            ]);
+
             if (!projectRes.ok) throw new Error((await projectRes.json()).detail);
             if (!rulesRes.ok) throw new Error('Failed to load rules');
 
             state.project = await projectRes.json();
             state.availableRules = await rulesRes.json();
+
             state.isLoading = false;
             render();
+
+            if (resultsRes.ok) {
+                state.validationResults = await resultsRes.json();
+                renderValidationResults();
+            }
+
         } catch (error) {
             state.isLoading = false;
             state.error = `Не удалось загрузить проект: ${error.message}`;
