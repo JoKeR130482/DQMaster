@@ -15,13 +15,21 @@ document.addEventListener('DOMContentLoaded', () => {
         dictionaryContainer: document.getElementById('dictionary-container'),
         dictionaryTableBody: document.getElementById('dictionary-table-body'),
         searchInput: document.getElementById('search-input'),
+        addWordInput: document.getElementById('new-word-input'),
+        addWordBtn: document.getElementById('add-word-btn'),
         sortWordBtn: document.getElementById('sort-word-btn'),
         emptyState: document.getElementById('empty-state'),
+        notificationToast: document.getElementById('notification-toast'),
     };
 
     // --- 3. API HELPERS ---
     const api = {
         getDictionary: () => fetch('/api/dictionary'),
+        addWord: (word) => fetch('/api/dictionary', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ word }),
+        }),
     };
 
     // --- 5. RENDER FUNCTIONS ---
@@ -59,7 +67,32 @@ document.addEventListener('DOMContentLoaded', () => {
         return words;
     }
 
+    // --- 4. UTILS ---
+    const showNotification = (message, type = 'success') => {
+        dom.notificationToast.textContent = message;
+        dom.notificationToast.className = `toast ${type} show`;
+        setTimeout(() => { dom.notificationToast.className = dom.notificationToast.className.replace('show', ''); }, 3000);
+    };
+
     // --- 6. EVENT HANDLERS & LOGIC ---
+    async function handleAddWord() {
+        const newWord = dom.addWordInput.value.trim();
+        if (!newWord) return;
+
+        try {
+            const response = await api.addWord(newWord);
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.detail || 'Failed to add word');
+            }
+            showNotification(`Слово "${newWord}" успешно добавлено.`, 'success');
+            dom.addWordInput.value = '';
+            await init(); // Re-fetch all words
+        } catch (error) {
+            showNotification(`Ошибка: ${error.message}`, 'error');
+        }
+    }
+
     function setupEventListeners() {
         dom.searchInput.addEventListener('input', (e) => {
             state.searchTerm = e.target.value;
@@ -69,6 +102,11 @@ document.addEventListener('DOMContentLoaded', () => {
         dom.sortWordBtn.addEventListener('click', () => {
             state.sortDirection = state.sortDirection === 'asc' ? 'desc' : 'asc';
             render();
+        });
+
+        dom.addWordBtn.addEventListener('click', handleAddWord);
+        dom.addWordInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') handleAddWord();
         });
     }
 
