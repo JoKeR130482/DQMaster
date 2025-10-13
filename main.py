@@ -14,7 +14,6 @@ from fastapi import Depends, FastAPI, File, UploadFile, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, ValidationError
-import rules as rules_package
 
 # ==============================================================================
 # 1. Globals & App Initialization
@@ -113,20 +112,28 @@ def write_project(project_id: str, project_data: Project):
 
 def load_rules():
     RULE_REGISTRY.clear()
-    for rule_module in rules_package.ALL_RULES:
-        module_name = rule_module.__name__.split('.')[-1]
-        if hasattr(rule_module, "validate") and hasattr(rule_module, "RULE_NAME"):
-            RULE_REGISTRY[module_name] = {
-                "id": module_name,
-                "name": rule_module.RULE_NAME,
-                "description": getattr(rule_module, "RULE_DESC", ""),
-                "validator": rule_module.validate,
-                "is_configurable": getattr(rule_module, "IS_CONFIGURABLE", False),
-                "formatter": getattr(rule_module, "format_name", None),
-                "params_schema": getattr(rule_module, "PARAMS_SCHEMA", None),
-                "needs_column_access": getattr(rule_module, "NEEDS_COLUMN_ACCESS", False),
-                "module": rule_module
-            }
+    if not RULES_DIR.exists(): return
+    for filename in os.listdir(RULES_DIR):
+        if filename.endswith(".py") and filename != "__init__.py":
+            try:
+                spec = importlib.util.spec_from_file_location(filename[:-3], RULES_DIR / filename)
+                if spec and spec.loader:
+                    module = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(module)
+                    if hasattr(module, "validate") and hasattr(module, "RULE_NAME"):
+                        RULE_REGISTRY[filename[:-3]] = {
+                            "id": filename[:-3],
+                            "name": module.RULE_NAME,
+                            "description": getattr(module, "RULE_DESC", ""),
+                            "validator": module.validate,
+                            "is_configurable": getattr(module, "IS_CONFIGURABLE", False),
+                            "formatter": getattr(module, "format_name", None),
+                            "params_schema": getattr(module, "PARAMS_SCHEMA", None),
+                            "needs_column_access": getattr(module, "NEEDS_COLUMN_ACCESS", False),
+                            "module": module
+                        }
+            except Exception as e:
+                print(f"Error loading rule from {filename}: {e}")
 
 # ==============================================================================
 # 4. API Endpoints
