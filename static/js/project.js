@@ -55,6 +55,7 @@ document.addEventListener('DOMContentLoaded', () => {
             body: formData,
         }),
         validate: () => fetch(`/api/projects/${projectId}/validate`, { method: 'POST' }),
+        getResults: () => fetch(`/api/projects/${projectId}/results`),
     };
 
     // --- 4. UTILS ---
@@ -369,12 +370,15 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        const { total_processed_rows, required_field_error_rows_count, required_field_errors } = resultsData;
+        const { total_processed_rows, required_field_error_rows_count, required_field_errors, validated_at } = resultsData;
         const requiredErrorPercentage = total_processed_rows > 0 ? ((required_field_error_rows_count / total_processed_rows) * 100).toFixed(2) : 0;
+        const validationDate = validated_at ? new Date(validated_at).toLocaleString('ru-RU') : 'N/A';
+
 
         // 1. Render Main Stats
         const statsHtml = `
-            <div class="stats-summary">
+            <div class="stats-header">
+                 <div class="stats-summary">
                 <span>Всего обработано строк: <strong>${total_processed_rows}</strong></span>
                 <span id="required-errors-stat" class="${required_field_error_rows_count > 0 ? 'clickable' : ''}" title="Нажмите, чтобы показать/скрыть детали">
                     Строк с ошибками (обязательные поля):
@@ -382,6 +386,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 </span>
                 <span>Процент ошибочных строк: <strong>${requiredErrorPercentage}%</strong></span>
             </div>
+            <div class="stats-timestamp">Последняя проверка: ${validationDate}</div>
+        </div>
         `;
         dom.goldenRecordStats.innerHTML = statsHtml;
 
@@ -599,14 +605,27 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- 7. INITIALIZATION ---
     async function init() {
         try {
-            const [projectRes, rulesRes] = await Promise.all([api.getProject(), api.getRules()]);
+            const [projectRes, rulesRes, resultsRes] = await Promise.all([
+                api.getProject(),
+                api.getRules(),
+                api.getResults() // Попытаемся загрузить последние результаты
+            ]);
+
+            // Основные данные проекта и правил обязательны
             if (!projectRes.ok) throw new Error((await projectRes.json()).detail);
             if (!rulesRes.ok) throw new Error('Failed to load rules');
 
             state.project = await projectRes.json();
             state.availableRules = await rulesRes.json();
+
+            // Результаты проверки не обязательны, обрабатываем их отдельно
+            if (resultsRes.ok) {
+                state.validationResults = await resultsRes.json();
+                renderValidationResults(); // Сразу отображаем, если они есть
+            }
+
             state.isLoading = false;
-            render();
+            render(); // Основной рендер для остальной части страницы
         } catch (error) {
             state.isLoading = false;
             state.error = `Не удалось загрузить проект: ${error.message}`;
