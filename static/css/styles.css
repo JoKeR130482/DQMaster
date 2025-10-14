@@ -338,6 +338,13 @@ body > .main-container > .page-header { padding: 0; box-shadow: none; background
     flex-shrink: 0;
 }
 
+.entity-id {
+    font-size: 0.8rem;
+    font-family: monospace;
+    color: var(--slate-400);
+    margin-top: 0.25rem;
+}
+
 /* --- 9. Modal Styles --- */
 .modal-overlay {
     position: fixed;
