@@ -400,8 +400,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         <thead><tr><th>Файл</th><th>Лист</th><th>Поле</th><th>Строка</th><th>Ошибка</th><th>Значение</th></tr></thead>
                         <tbody>
                             ${required_field_errors.map(err => {
-                                const valueCellContent = (err.details && Array.isArray(err.details.errors))
-                                    ? highlightMisspelledWords(err.value, err.details.errors)
+                                const valueCellContent = (err.details && Array.isArray(err.details))
+                                    ? highlightMisspelledWords(err.value, err.details)
                                     : (err.value || '');
                                 return `
                                     <tr>
@@ -447,8 +447,8 @@ document.addEventListener('DOMContentLoaded', () => {
                                                 <thead><tr><th>Строка</th><th>Поле</th><th>Значение</th></tr></thead>
                                                 <tbody>
                                                 ${summary.detailed_errors.map(err => {
-                                                    const valueCellContent = (err.details && Array.isArray(err.details.errors))
-                                                        ? highlightMisspelledWords(err.value, err.details.errors)
+                                                    const valueCellContent = (err.details && Array.isArray(err.details))
+                                                        ? highlightMisspelledWords(err.value, err.details)
                                                         : (err.value || '');
                                                     return `<tr><td>${err.row}</td><td>${err.field_name}</td><td>${valueCellContent}</td></tr>`;
                                                 }).join('')}
