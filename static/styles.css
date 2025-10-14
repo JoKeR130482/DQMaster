@@ -181,6 +181,13 @@ body {
 
 /* --- 7. Project Detail Page (`project.html`) --- */
 #project-name-header { font-size: 1.875rem; }
+
+.entity-id {
+    font-size: 12px;
+    font-weight: normal;
+    color: #6B7280;
+}
+
 .files-section, .results-section { background-color: var(--white); border-radius: var(--radius-xl); box-shadow: var(--shadow-lg); padding: 1.5rem; margin-bottom: 2rem; }
 .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
 .section-header h2 { font-size: 1.25rem; font-weight: 600; }
@@ -231,6 +238,12 @@ body {
 .results-table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
 .results-table th, .results-table td { border-bottom: 1px solid var(--slate-200); padding: 0.75rem 1rem; text-align: left; }
 .results-table th { background-color: var(--slate-100); }
+
+.misspelled-word {
+    text-decoration: wavy underline var(--red-600);
+    text-decoration-thickness: 1px;
+}
+
 .summary-table tbody tr.clickable:hover { background-color: var(--slate-50); }
 .summary-table tbody tr.selected { background-color: var(--blue-100) !important; }
 .details-row > td { padding: 0; }
