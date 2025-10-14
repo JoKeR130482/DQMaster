@@ -234,6 +234,20 @@ body {
 .stats-summary strong { font-size: 1.5rem; }
 .stats-summary .clickable { cursor: pointer; text-decoration: underline; text-decoration-style: dashed; text-underline-offset: 4px; }
 .stats-summary .clickable:hover { color: var(--blue-600); }
+.stats-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+.stats-timestamp {
+    font-size: 0.8rem;
+    color: var(--slate-500);
+    text-align: right;
+    flex-shrink: 0;
+}
 .required-errors-details { margin-top: 1rem; }
 .results-table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
 .results-table th, .results-table td { border-bottom: 1px solid var(--slate-200); padding: 0.75rem 1rem; text-align: left; }
