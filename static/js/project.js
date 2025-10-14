@@ -98,7 +98,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (!state.project) return;
 
-        dom.projectNameHeader.innerHTML = `${state.project.name} <span class="text-sm text-muted">(ID: ${state.project.id})</span>`;
+        dom.projectNameHeader.innerHTML = `
+            <div>
+                ${state.project.name}
+                <div class="entity-id">ID: ${state.project.id}</div>
+            </div>`;
         dom.uploadFormContainer.style.display = state.showUploadForm ? 'flex' : 'none';
 
         renderFiles();
@@ -114,7 +118,10 @@ document.addEventListener('DOMContentLoaded', () => {
             fileCard.dataset.fileId = file.id;
             fileCard.innerHTML = `
                 <div class="file-header">
-                    <h3 class="file-name">${file.name} <span class="text-sm text-muted">(ID: ${file.id})</span></h3>
+                    <div class="file-name-wrapper">
+                        <h3 class="file-name">${file.name}</h3>
+                        <div class="entity-id">ID: ${file.id}</div>
+                    </div>
                     <div class="file-actions">
                     <button class="btn btn-icon danger remove-file-btn" title="Удалить файл"><i data-lucide="trash-2"></i></button>
                     </div>
