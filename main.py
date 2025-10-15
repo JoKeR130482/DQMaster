@@ -233,35 +233,47 @@ async def upload_file_to_project(project_id: str, file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Could not process Excel file: {e}")
 
-@app.post("/api/projects/{project_id}/validate")
-async def validate_project_data(project_id: str):
-    project = read_project(project_id)
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-
-    project_files_dir = PROJECTS_DIR / project_id / "files"
+def _run_validation_for_project(project: Project) -> dict:
+    """
+    Helper function to run validation for a given project.
+    This contains the core logic for processing files, sheets, and rules.
+    """
+    project_files_dir = PROJECTS_DIR / project.id / "files"
     project_total_rows = 0
     all_errors = []
 
     for file_schema in project.files:
         file_path = project_files_dir / file_schema.saved_name
-        if not file_path.exists(): continue
+        if not file_path.exists():
+            continue
+
         for sheet_schema in file_schema.sheets:
-            if not sheet_schema.is_active: continue
+            if not sheet_schema.is_active:
+                continue
+
             try:
                 df = pd.read_excel(file_path, sheet_name=sheet_schema.name)
                 sheet_total_rows = len(df)
-                if sheet_total_rows == 0: continue
+                if sheet_total_rows == 0:
+                    continue
+
                 project_total_rows += sheet_total_rows
+
                 for field_schema in sheet_schema.fields:
-                    if field_schema.name not in df.columns: continue
+                    if field_schema.name not in df.columns:
+                        continue
+
                     for rule_config in sorted(field_schema.rules, key=lambda r: r.order):
                         rule_def = RULE_REGISTRY.get(rule_config.type)
-                        if not rule_def: continue
+                        if not rule_def:
+                            continue
+
                         validator = rule_def["validator"]
                         params = rule_config.params or {}
                         formatter = rule_def.get("formatter")
                         rule_name = formatter(params) if formatter and params else rule_def["name"]
+
+                        # Process whole column at once if rule supports it
                         if rule_def.get("needs_column_access"):
                             validity_series = validator(df[field_schema.name])
                             for index, is_valid in validity_series.items():
@@ -274,62 +286,75 @@ async def validate_project_data(project_id: str):
                                         "value": str(value).replace('"', '&quot;') if pd.notna(value) else "ПУСТО"
                                     })
                             continue
+
+                        # Process cell by cell
                         for index, value in df[field_schema.name].items():
                             result = validator(value, params=params) if 'params' in inspect.signature(validator).parameters else validator(value)
                             is_valid = False
                             details = None
+
                             if isinstance(result, bool):
                                 is_valid = result
                             elif isinstance(result, dict):
                                 is_valid = result.get("is_valid", False)
                                 details = result.get("errors")
+
                             if not is_valid:
                                 error_entry = {
-                                    "file_name": file_schema.name, "sheet_name": sheet_schema.name,
-                                    "field_name": field_schema.name, "is_required": field_schema.is_required,
-                                    "row": index + 2, "error_type": rule_name,
-                                    "value": str(value).replace('"', '&quot;') if pd.notna(value) else "ПУСТО"
+                                    "file_name": file_schema.name,
+                                    "sheet_name": sheet_schema.name,
+                                    "field_name": field_schema.name,
+                                    "is_required": field_schema.is_required,
+                                    "row": index + 2,
+                                    "error_type": rule_name,
+                                    "value": str(value).replace('"', '&quot;') if pd.notna(value) else "ПУСТО",
+                                    "details": details
                                 }
-                                if details:
-                                    error_entry["details"] = details
                                 all_errors.append(error_entry)
+
             except Exception as e:
                 print(f"Error processing sheet {sheet_schema.name} in file {file_schema.name}: {e}")
                 continue
 
+    # --- Aggregation and Formatting ---
     required_field_errors = [e for e in all_errors if e["is_required"]]
     unique_error_row_keys = {f"{e['file_name']}-{e['sheet_name']}-{e['row']}" for e in required_field_errors}
+
     file_results = []
     for file_schema in project.files:
         sheet_summaries = []
         for sheet_schema in file_schema.sheets:
             if not sheet_schema.is_active: continue
-            all_applicable_rule_names = set()
-            for f in sheet_schema.fields:
-                for r_conf in f.rules:
-                    r_def = RULE_REGISTRY.get(r_conf.type)
-                    if r_def:
-                        formatter = r_def.get("formatter")
-                        rule_name = formatter(r_conf.params) if formatter and r_conf.params else r_def["name"]
-                        all_applicable_rule_names.add(rule_name)
+
+            try:
+                df_sheet = pd.read_excel(PROJECTS_DIR / project.id / "files" / file_schema.saved_name, sheet_name=sheet_schema.name)
+                sheet_total_rows = len(df_sheet)
+            except Exception:
+                sheet_total_rows = 0 # Cannot read sheet, assume 0 rows
+
+            all_applicable_rule_names = {
+                (RULE_REGISTRY.get(r_conf.type)["formatter"](r_conf.params) if RULE_REGISTRY.get(r_conf.type, {}).get("formatter") and r_conf.params else RULE_REGISTRY.get(r_conf.type, {}).get("name"))
+                for f in sheet_schema.fields for r_conf in f.rules if RULE_REGISTRY.get(r_conf.type)
+            }
+
             sheet_errors = [e for e in all_errors if e["file_name"] == file_schema.name and e["sheet_name"] == sheet_schema.name]
             summary_list = []
-            if all_applicable_rule_names:
-                df_sheet = pd.read_excel(PROJECTS_DIR / project_id / "files" / file_schema.saved_name, sheet_name=sheet_schema.name)
-                sheet_total_rows = len(df_sheet)
-                for rule_name in sorted(list(all_applicable_rule_names)):
-                    rule_errors = [e for e in sheet_errors if e["error_type"] == rule_name]
-                    error_count = len(rule_errors)
-                    summary_list.append({
-                        "rule_name": rule_name,
-                        "error_count": error_count,
-                        "error_percentage": round((error_count / sheet_total_rows) * 100, 2) if sheet_total_rows > 0 else 0,
-                        "detailed_errors": rule_errors
-                    })
-                summary_list.sort(key=lambda x: x['error_count'], reverse=True)
+
+            for rule_name in sorted(list(all_applicable_rule_names)):
+                rule_errors = [e for e in sheet_errors if e["error_type"] == rule_name]
+                error_count = len(rule_errors)
+                summary_list.append({
+                    "rule_name": rule_name,
+                    "error_count": error_count,
+                    "error_percentage": round((error_count / sheet_total_rows) * 100, 2) if sheet_total_rows > 0 else 0,
+                    "detailed_errors": rule_errors
+                })
+            summary_list.sort(key=lambda x: x['error_count'], reverse=True)
+
             sheet_error_row_keys = {e['row'] for e in sheet_errors}
             sheet_error_rows_count = len(sheet_error_row_keys)
             sheet_error_percentage = round((sheet_error_rows_count / sheet_total_rows) * 100, 2) if sheet_total_rows > 0 else 0
+
             sheet_summaries.append({
                 "sheet_name": sheet_schema.name,
                 "total_rows": sheet_total_rows,
@@ -337,20 +362,40 @@ async def validate_project_data(project_id: str):
                 "sheet_error_percentage": sheet_error_percentage,
                 "rule_summaries": summary_list
             })
+
         if sheet_summaries:
             file_results.append({
                 "file_name": file_schema.name,
                 "sheets": sheet_summaries
             })
-    response_data = {
+
+    return {
         "total_processed_rows": project_total_rows,
         "required_field_error_rows_count": len(unique_error_row_keys),
         "required_field_errors": required_field_errors,
         "file_results": file_results,
         "validated_at": datetime.datetime.utcnow().isoformat()
     }
+
+
+@app.post("/api/projects/{project_id}/validate")
+async def validate_project_data(project_id: str):
+    """
+    Validates all active sheets and fields in a project against the configured rules.
+    Saves the results to a JSON file and returns them.
+    """
+    project = read_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    response_data = _run_validation_for_project(project)
+
     results_path = PROJECTS_DIR / project_id / "validation_result.json"
-    results_path.write_text(json.dumps(response_data, indent=2), encoding="utf-8")
+    try:
+        results_path.write_text(json.dumps(response_data, indent=2, ensure_ascii=False), encoding="utf-8")
+    except IOError as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save validation results: {e}")
+
     return response_data
 
 @app.get("/api/projects/{project_id}/results")
