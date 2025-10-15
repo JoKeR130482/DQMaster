@@ -75,13 +75,20 @@ document.addEventListener('DOMContentLoaded', () => {
             return text;
         }
         // Escape HTML to prevent XSS
-        const escapedText = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        const escapedText = text
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;");
 
-        // Build a regex to find all misspelled words (case-insensitive)
-        // Using word boundaries (\b) to avoid matching parts of words.
-        const errorsRegex = new RegExp(`\\b(${errors.map(e => e.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')).join('|')})\\b`, 'gi');
+        // Создаём регулярку с флагом 'i' (case-insensitive)
+        const escapedErrors = errors.map(e =>
+            e.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')
+        );
+        const errorsRegex = new RegExp(`\\b(${escapedErrors.join('|')})\\b`, 'gi');
 
-        return escapedText.replace(errorsRegex, (match) => `<span class="misspelled-word" title="Ошибка в слове">${match}</span>`);
+        return escapedText.replace(errorsRegex, (match) =>
+            `<span class="misspelled-word" title="Орфографическая ошибка">${match}</span>`
+        );
     }
 
 
@@ -355,92 +362,80 @@ document.addEventListener('DOMContentLoaded', () => {
         render(); // Re-render main UI
     }
 
-    function renderValidationResults() {
-        const resultsData = state.validationResults;
-        dom.resultsContainer.style.display = 'block';
-        dom.goldenRecordStats.innerHTML = '';
-        dom.summaryResults.innerHTML = '';
-        dom.detailedResults.innerHTML = ''; // Clear legacy container
-
-        // FINAL FIX: Handle both 'file_results' (new) and 'results' (cached old) for resilience.
-        const file_results = resultsData.file_results || resultsData.results;
-
-        if (!resultsData || !file_results) {
-            dom.summaryResults.innerHTML = '<div class="success-message">Проверка не выявила данных для анализа.</div>';
-            return;
-        }
-
-        const { total_processed_rows, required_field_error_rows_count, required_field_errors, validated_at } = resultsData;
+    /**
+     * Renders the main statistics block (golden record summary).
+     * @param {object} resultsData - The validation results data.
+     */
+    function renderMainStats(resultsData) {
+        const { total_processed_rows, required_field_error_rows_count, validated_at } = resultsData;
         const requiredErrorPercentage = total_processed_rows > 0 ? ((required_field_error_rows_count / total_processed_rows) * 100).toFixed(2) : 0;
         const validationDate = validated_at ? new Date(validated_at).toLocaleString('ru-RU') : 'N/A';
 
-
-        // 1. Render Main Stats
         const statsHtml = `
             <div class="stats-header">
-                 <div class="stats-summary">
-                <span>Всего обработано строк: <strong>${total_processed_rows}</strong></span>
-                <span id="required-errors-stat" class="${required_field_error_rows_count > 0 ? 'clickable' : ''}" title="Нажмите, чтобы показать/скрыть детали">
-                    Строк с ошибками (обязательные поля):
-                    <strong>${required_field_error_rows_count}</strong>
-                </span>
-                <span>Процент ошибочных строк: <strong>${requiredErrorPercentage}%</strong></span>
+                <div class="stats-summary">
+                    <span>Всего обработано строк: <strong>${total_processed_rows}</strong></span>
+                    <span id="required-errors-stat" class="${required_field_error_rows_count > 0 ? 'clickable' : ''}" title="Нажмите, чтобы показать/скрыть детали">
+                        Строк с ошибками (обязательные поля):
+                        <strong>${required_field_error_rows_count}</strong>
+                    </span>
+                    <span>Процент ошибочных строк: <strong>${requiredErrorPercentage}%</strong></span>
+                </div>
+                <div class="stats-timestamp">Последняя проверка: ${validationDate}</div>
             </div>
-            <div class="stats-timestamp">Последняя проверка: ${validationDate}</div>
-        </div>
         `;
         dom.goldenRecordStats.innerHTML = statsHtml;
+    }
 
-        // 2. Conditionally render the detailed required errors
-        if (state.showRequiredErrorsDetails && required_field_error_rows_count > 0) {
-            const detailsHtml = `
-                <div class="detailed-results-container required-errors-details">
-                    <h5>Детализация ошибок в обязательных полях</h5>
-                    <table class="results-table detailed-table">
-                        <thead><tr><th>Файл</th><th>Лист</th><th>Поле</th><th>Строка</th><th>Ошибка</th><th>Значение</th></tr></thead>
+    /**
+     * Renders the detailed table for required field errors.
+     * @param {Array} required_field_errors - Array of error objects.
+     */
+    function renderRequiredErrorsDetails(required_field_errors) {
+        const detailsHtml = `
+            <div class="detailed-results-container required-errors-details">
+                <h5>Детализация ошибок в обязательных полях</h5>
+                <table class="results-table detailed-table">
+                    <thead><tr><th>Файл</th><th>Лист</th><th>Поле</th><th>Строка</th><th>Ошибка</th><th>Значение</th></tr></thead>
+                    <tbody>
+                        ${required_field_errors.map(err => {
+                            const valueCellContent = (err.details && Array.isArray(err.details))
+                                ? highlightMisspelledWords(err.value, err.details)
+                                : (err.value || '');
+                            return `
+                                <tr>
+                                    <td>${err.file_name}</td>
+                                    <td>${err.sheet_name}</td>
+                                    <td>${err.field_name}</td>
+                                    <td>${err.row}</td>
+                                    <td>${err.error_type}</td>
+                                    <td>${valueCellContent}</td>
+                                </tr>`;
+                        }).join('')}
+                    </tbody>
+                </table>
+            </div>`;
+        dom.goldenRecordStats.insertAdjacentHTML('beforeend', detailsHtml);
+    }
+
+    /**
+     * Renders the summary table for a specific sheet, including expandable detailed errors.
+     * @param {object} fileResult - The result object for a single file.
+     * @param {number} fileIdx - The index of the file.
+     */
+    function renderSheetSummaries(fileResult, fileIdx) {
+        fileResult.sheets.forEach((sheetResult, sheetIdx) => {
+            const summaryHtml = `
+                <div class="result-sheet-container">
+                    <h4>Отчет по листу: ${sheetResult.sheet_name} (Файл: ${fileResult.file_name})</h4>
+                    <p class="sheet-stats">Всего строк: ${sheetResult.total_rows}  |  Строк с ошибками: ${sheetResult.sheet_error_rows_count}  |  Процент ошибок: ${sheetResult.sheet_error_percentage}%</p>
+                    <table class="results-table summary-table">
+                        <thead><tr><th>Тип ошибки</th><th>Количество ошибок</th><th>% от строк листа</th></tr></thead>
                         <tbody>
-                            ${required_field_errors.map(err => {
-                                const valueCellContent = (err.details && Array.isArray(err.details))
-                                    ? highlightMisspelledWords(err.value, err.details)
-                                    : (err.value || '');
-                                return `
-                                    <tr>
-                                        <td>${err.file_name}</td>
-                                        <td>${err.sheet_name}</td>
-                                        <td>${err.field_name}</td>
-                                        <td>${err.row}</td>
-                                        <td>${err.error_type}</td>
-                                        <td>${valueCellContent}</td>
-                                    </tr>`;
-                            }).join('')}
-                        </tbody>
-                    </table>
-                </div>`;
-            dom.goldenRecordStats.insertAdjacentHTML('beforeend', detailsHtml);
-        }
-
-        // 3. Render Per-File, Per-Sheet Summaries
-        file_results.forEach((fileResult, fileIdx) => {
-            fileResult.sheets.forEach((sheetResult, sheetIdx) => {
-                const summaryHtml = `
-                    <div class="result-sheet-container">
-                        <h4>Отчет по листу: ${sheetResult.sheet_name} (Файл: ${fileResult.file_name})</h4>
-                        <p class="sheet-stats">Всего строк: ${sheetResult.total_rows}  |  Строк с ошибками: ${sheetResult.sheet_error_rows_count}  |  Процент ошибок: ${sheetResult.sheet_error_percentage}%</p>
-                        <table class="results-table summary-table">
-                            <thead><tr><th>Тип ошибки</th><th>Количество ошибок</th><th>% от строк листа</th></tr></thead>
-                            <tbody>
-                                ${sheetResult.rule_summaries.map((summary, ruleIndex) => {
-                                    const detailsKey = `${fileIdx}-${sheetIdx}-${ruleIndex}`;
-                                    const isSelected = state.activeRuleDetailsKey === detailsKey;
-                                    return `
-                                    <tr class="summary-row ${summary.error_count > 0 ? 'clickable' : ''} ${isSelected ? 'selected' : ''}"
-                                        data-details-key="${detailsKey}"
-                                        ${summary.error_count === 0 ? 'style="opacity: 0.6;"' : ''}>
-                                        <td>${summary.rule_name}</td>
-                                        <td>${summary.error_count}</td>
-                                        <td>${summary.error_percentage}%</td>
-                                    </tr>
-                                    ${isSelected ? `
+                            ${sheetResult.rule_summaries.map((summary, ruleIndex) => {
+                                const detailsKey = `${fileIdx}-${sheetIdx}-${ruleIndex}`;
+                                const isSelected = state.activeRuleDetailsKey === detailsKey;
+                                const detailedErrorsHtml = isSelected ? `
                                     <tr class="details-row"><td colspan="3">
                                         <div class="detailed-results-container">
                                             <table class="results-table detailed-table">
@@ -455,17 +450,55 @@ document.addEventListener('DOMContentLoaded', () => {
                                                 </tbody>
                                             </table>
                                         </div>
-                                    </td></tr>
-                                    ` : ''}
-                                `}).join('')}
-                            </tbody>
-                        </table>
-                    </div>`;
-                dom.summaryResults.innerHTML += summaryHtml;
-            });
-        });
+                                    </td></tr>` : '';
 
-        if (required_field_error_rows_count === 0 && file_results.every(f => f.sheets.every(s => s.rule_summaries.every(r => r.error_count === 0)))) {
+                                return `
+                                <tr class="summary-row ${summary.error_count > 0 ? 'clickable' : ''} ${isSelected ? 'selected' : ''}"
+                                    data-details-key="${detailsKey}"
+                                    ${summary.error_count === 0 ? 'style="opacity: 0.6;"' : ''}>
+                                    <td>${summary.rule_name}</td>
+                                    <td>${summary.error_count}</td>
+                                    <td>${summary.error_percentage}%</td>
+                                </tr>
+                                ${detailedErrorsHtml}
+                            `}).join('')}
+                        </tbody>
+                    </table>
+                </div>`;
+            dom.summaryResults.innerHTML += summaryHtml;
+        });
+    }
+
+    /**
+     * Main function to render all validation results.
+     * It orchestrates calls to more specific render functions.
+     */
+    function renderValidationResults() {
+        const resultsData = state.validationResults;
+        dom.resultsContainer.style.display = 'block';
+        dom.goldenRecordStats.innerHTML = '';
+        dom.summaryResults.innerHTML = '';
+        dom.detailedResults.innerHTML = ''; // Clear legacy container, no longer used
+
+        const file_results = resultsData.file_results || resultsData.results;
+        if (!resultsData || !file_results) {
+            dom.summaryResults.innerHTML = '<div class="success-message">Проверка не выявила данных для анализа.</div>';
+            return;
+        }
+
+        // 1. Render the main statistics block
+        renderMainStats(resultsData);
+
+        // 2. Conditionally render the detailed table for required field errors
+        if (state.showRequiredErrorsDetails && resultsData.required_field_error_rows_count > 0) {
+            renderRequiredErrorsDetails(resultsData.required_field_errors);
+        }
+
+        // 3. Render per-file, per-sheet summaries
+        file_results.forEach(renderSheetSummaries);
+
+        // 4. Show a success message if no errors were found at all
+        if (resultsData.required_field_error_rows_count === 0 && file_results.every(f => f.sheets.every(s => s.rule_summaries.every(r => r.error_count === 0)))) {
             dom.summaryResults.innerHTML = '<div class="success-message">Проверка успешно завершена. Ошибок не найдено!</div>';
         }
     }
