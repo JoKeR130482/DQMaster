@@ -64,10 +64,6 @@ document.addEventListener('DOMContentLoaded', () => {
         dom.notificationToast.className = `toast ${type} show`;
         setTimeout(() => { dom.notificationToast.className = dom.notificationToast.className.replace('show', ''); }, 3000);
     };
-    const showError = (message) => {
-        dom.errorContainer.textContent = message;
-        dom.errorContainer.style.display = 'block';
-    };
     const newId = () => `id_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
     const escapeHTML = (str) => {
@@ -507,8 +503,45 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- 6. EVENT HANDLERS & LOGIC ---
-    function handleResultsClick(e) {
-        console.log("--- CLICK: handleResultsClick() CALLED ---");
+    async function handleResultsClick(e) {
+        // 1. Handle click on misspelled word to add to dictionary
+        const misspelledSpan = e.target.closest('.misspelled-word');
+        if (misspelledSpan) {
+            const word = misspelledSpan.textContent.trim();
+            if (!word) return;
+
+            // Use a modern, non-blocking confirmation dialog if possible, but confirm is fine for now.
+            if (!confirm(`Добавить слово «${word}» в пользовательский словарь?`)) return;
+
+            try {
+                const response = await fetch('/api/dictionary', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ word })
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Не удалось добавить слово');
+                }
+
+                // On success, remove highlighting from all instances of this word
+                document.querySelectorAll('.misspelled-word').forEach(span => {
+                    if (span.textContent.trim().toLowerCase() === word.toLowerCase()) {
+                        // Replace the span with just its text content
+                        span.replaceWith(document.createTextNode(span.textContent));
+                    }
+                });
+
+                showNotification(`Слово «${word}» добавлено в словарь.`, 'success');
+
+            } catch (err) {
+                showNotification(`Ошибка: ${err.message}`, 'error');
+            }
+            return; // Stop further event processing
+        }
+
+        // 2. Handle click on golden record stats
         const requiredStat = e.target.closest('#required-errors-stat.clickable');
         if (requiredStat) {
             state.showRequiredErrorsDetails = !state.showRequiredErrorsDetails;
@@ -516,6 +549,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
+        // 3. Handle click on summary row to see details
         const summaryRow = e.target.closest('.summary-row.clickable');
         if (summaryRow) {
             const detailsKey = summaryRow.dataset.detailsKey;
