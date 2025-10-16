@@ -1,0 +1,43 @@
+{
+  "id": "f1ff708a-9bf9-4c1b-8707-1dc17a3c1e01",
+  "name": "Тест подсветки ошибок",
+  "description": "Проверка подсветки орфографических ошибок",
+  "created_at": "2025-10-16T13:07:18.989692",
+  "updated_at": "2025-10-16T13:07:19.855026",
+  "files": [
+    {
+      "id": "7953d946-f9f0-4ee0-9e56-2251cae0b64e",
+      "name": "test_data.xlsx",
+      "saved_name": "826752a4-e351-486f-8b51-26caf87dfa12.xlsx",
+      "sheets": [
+        {
+          "id": "4f1a7c4c-610e-4722-bad9-b57c1f68c9b1",
+          "name": "Тестовые данные",
+          "is_active": true,
+          "fields": [
+            {
+              "id": "34b0ca35-9e0e-45b6-9645-697fd2c2e3f9",
+              "name": "Review",
+              "is_required": false,
+              "rules": []
+            },
+            {
+              "id": "6667c56e-ec5f-43a4-b33a-25c5d2382753",
+              "name": "Comment",
+              "is_required": false,
+              "rules": [
+                {
+                  "id": "id_1760620039794_uuknvqz9u",
+                  "type": "spell_check",
+                  "value": null,
+                  "params": {},
+                  "order": 1
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
