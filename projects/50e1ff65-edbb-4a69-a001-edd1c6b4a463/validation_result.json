@@ -1,0 +1,53 @@
+{
+  "total_processed_rows": 2,
+  "required_field_error_rows_count": 0,
+  "required_field_errors": [],
+  "file_results": [
+    {
+      "file_name": "test_data.xlsx",
+      "sheets": [
+        {
+          "sheet_name": "Тестовые данные",
+          "total_rows": 2,
+          "sheet_error_rows_count": 2,
+          "sheet_error_percentage": 100.0,
+          "rule_summaries": [
+            {
+              "rule_name": "Проверка орфографии",
+              "error_count": 2,
+              "error_percentage": 100.0,
+              "detailed_errors": [
+                {
+                  "file_name": "test_data.xlsx",
+                  "sheet_name": "Тестовые данные",
+                  "field_name": "Comment",
+                  "is_required": false,
+                  "row": 2,
+                  "error_type": "Проверка орфографии",
+                  "value": "Отличное начало, но есть превет и кагдила",
+                  "details": [
+                    "превет",
+                    "кагдила"
+                  ]
+                },
+                {
+                  "file_name": "test_data.xlsx",
+                  "sheet_name": "Тестовые данные",
+                  "field_name": "Comment",
+                  "is_required": false,
+                  "row": 3,
+                  "error_type": "Проверка орфографии",
+                  "value": "Нужно больше работать над качеством",
+                  "details": [
+                    "качеством"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "validated_at": "2025-10-16T13:05:19.468153"
+}

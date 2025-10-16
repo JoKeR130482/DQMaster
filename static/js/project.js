@@ -76,19 +76,19 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     function highlightMisspelledWords(escapedText, errors) {
-        // Если нет ошибок для подсветки, возвращаем только экранированный текст.
         if (!Array.isArray(errors) || errors.length === 0) {
             return escapedText;
         }
-
-        // Создаём регулярное выражение для поиска всех слов с ошибками.
         const escapedErrors = errors.map(e =>
-            String(e).replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')
+            String(e).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
         );
-        // Флаг 'gi' для глобального и регистронезависимого поиска.
-        const errorsRegex = new RegExp(`\\b(${escapedErrors.join('|')})\\b`, 'gi');
+        // Используем Unicode-совместимые границы слов:
+        // (?<!\p{L}) — отрицательный просмотр назад: не буква перед
+        // (?!\p{L})  — отрицательный просмотр вперёд: не буква после
+        // Флаг 'u' обязателен для поддержки \p{L}
+        const pattern = `(?<!\\p{L})(${escapedErrors.join('|')})(?!\\p{L})`;
+        const errorsRegex = new RegExp(pattern, 'gui');
 
-        // Заменяем найденные слова, обернув их в span.
         return escapedText.replace(errorsRegex, (match) =>
             `<span class="misspelled-word" title="Орфографическая ошибка">${match}</span>`
         );
