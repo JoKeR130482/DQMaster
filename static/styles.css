@@ -256,6 +256,7 @@ body {
 .misspelled-word {
     text-decoration: wavy underline var(--red-600);
     text-decoration-thickness: 1px;
+    cursor: pointer; /* Показывает, что слово интерактивно */
 }
 
 .summary-table tbody tr.clickable:hover { background-color: var(--slate-50); }
