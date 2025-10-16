@@ -1,0 +1,43 @@
+{
+  "id": "4e1115e9-578f-4566-88c8-9a7d7b4da688",
+  "name": "Тест перезагрузки после добавления",
+  "description": "Проверка, что ошибка исчезает после перезагрузки",
+  "created_at": "2025-10-16T16:41:54.985278",
+  "updated_at": "2025-10-16T16:41:56.295327",
+  "files": [
+    {
+      "id": "eb1235ef-92fd-48d9-a4f3-47486cb578c1",
+      "name": "test_data.xlsx",
+      "saved_name": "abd29e56-860a-47d7-abc7-36cb431408d9.xlsx",
+      "sheets": [
+        {
+          "id": "9df57301-2cb1-4715-bdee-3a65ec2dfa8a",
+          "name": "Тестовые данные",
+          "is_active": true,
+          "fields": [
+            {
+              "id": "036e4e19-f3ab-466e-9f51-9ce2bd2de356",
+              "name": "Review",
+              "is_required": false,
+              "rules": []
+            },
+            {
+              "id": "5f2cda9c-f4a7-44c6-a5c4-3d87596bee75",
+              "name": "Comment",
+              "is_required": false,
+              "rules": [
+                {
+                  "id": "id_1760632916215_x9d676vn0",
+                  "type": "spell_check",
+                  "value": null,
+                  "params": {},
+                  "order": 1
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
