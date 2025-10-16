@@ -709,6 +709,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
             showNotification(`Слово «${word}» добавлено в словарь.`, 'success');
 
+            // 🔁 Запускаем повторную валидацию проекта
+            await handleValidate();
+
         } catch (err) {
             showError(`Ошибка при добавлении в словарь: ${err.message}`);
         }
