@@ -70,22 +70,25 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     const newId = () => `id_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-    function highlightMisspelledWords(text, errors) {
-        if (typeof text !== 'string' || !Array.isArray(errors) || errors.length === 0) {
-            return text;
-        }
-        // Escape HTML to prevent XSS
-        const escapedText = text
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;");
+    const escapeHTML = (str) => {
+        if (typeof str !== 'string') return str;
+        return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+    };
 
-        // Создаём регулярку с флагом 'i' (case-insensitive)
+    function highlightMisspelledWords(escapedText, errors) {
+        // Если нет ошибок для подсветки, возвращаем только экранированный текст.
+        if (!Array.isArray(errors) || errors.length === 0) {
+            return escapedText;
+        }
+
+        // Создаём регулярное выражение для поиска всех слов с ошибками.
         const escapedErrors = errors.map(e =>
-            e.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')
+            String(e).replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')
         );
+        // Флаг 'gi' для глобального и регистронезависимого поиска.
         const errorsRegex = new RegExp(`\\b(${escapedErrors.join('|')})\\b`, 'gi');
 
+        // Заменяем найденные слова, обернув их в span.
         return escapedText.replace(errorsRegex, (match) =>
             `<span class="misspelled-word" title="Орфографическая ошибка">${match}</span>`
         );
@@ -400,15 +403,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     <tbody>
                         ${required_field_errors.map(err => {
                             const valueCellContent = (err.details && Array.isArray(err.details))
-                                ? highlightMisspelledWords(err.value, err.details)
-                                : (err.value || '');
+                                ? highlightMisspelledWords(escapeHTML(String(err.value ?? '')), err.details)
+                                : escapeHTML(String(err.value ?? ''));
                             return `
                                 <tr>
-                                    <td>${err.file_name}</td>
-                                    <td>${err.sheet_name}</td>
-                                    <td>${err.field_name}</td>
+                                    <td>${escapeHTML(err.file_name)}</td>
+                                    <td>${escapeHTML(err.sheet_name)}</td>
+                                    <td>${escapeHTML(err.field_name)}</td>
                                     <td>${err.row}</td>
-                                    <td>${err.error_type}</td>
+                                    <td>${escapeHTML(err.error_type)}</td>
                                     <td>${valueCellContent}</td>
                                 </tr>`;
                         }).join('')}
@@ -443,9 +446,9 @@ document.addEventListener('DOMContentLoaded', () => {
                                                 <tbody>
                                                 ${summary.detailed_errors.map(err => {
                                                     const valueCellContent = (err.details && Array.isArray(err.details))
-                                                        ? highlightMisspelledWords(err.value, err.details)
-                                                        : (err.value || '');
-                                                    return `<tr><td>${err.row}</td><td>${err.field_name}</td><td>${valueCellContent}</td></tr>`;
+                                                        ? highlightMisspelledWords(escapeHTML(String(err.value ?? '')), err.details)
+                                                        : escapeHTML(String(err.value ?? ''));
+                                                    return `<tr><td>${err.row}</td><td>${escapeHTML(err.field_name)}</td><td>${valueCellContent}</td></tr>`;
                                                 }).join('')}
                                                 </tbody>
                                             </table>
