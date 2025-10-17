@@ -4,6 +4,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let state = {
         project: null,
         availableRules: [],
+        availableGroups: [],
         isLoading: true,
         error: null,
         showUploadForm: false,
@@ -46,6 +47,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const api = {
         getProject: () => fetch(`/api/projects/${projectId}`),
         getRules: () => fetch('/api/rules'),
+        getRuleGroups: () => fetch('/api/rule-groups'),
         saveProject: (projectData) => fetch(`/api/projects/${projectId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -214,6 +216,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function formatRuleName(rule) {
+        if (rule.group_id) {
+            const group = state.availableGroups.find(g => g.id === rule.group_id);
+            return group ? `Группа: ${group.name}` : `Неизвестная группа: ${rule.group_id}`;
+        }
+
         const ruleDef = state.availableRules.find(r => r.id === rule.type);
         if (!ruleDef) return rule.type;
 
@@ -251,17 +258,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const ruleTypeSelectHtml = `
             <div class="form-group">
-                <label for="rule-type-select">Тип правила</label>
-                <select id="rule-type-select" name="type" ${rule ? 'disabled' : ''}>
-                    <option value="">-- Выберите правило --</option>
-                    ${state.availableRules.map(r => `<option value="${r.id}" ${r.id === selectedRuleType ? 'selected' : ''}>${r.name}</option>`).join('')}
+                <label for="rule-type-select">Тип правила или группа</label>
+                <select id="rule-type-select" name="type_or_group" ${rule ? 'disabled' : ''}>
+                    <option value="">-- Выберите --</option>
+                    <optgroup label="Правила">
+                        ${state.availableRules.map(r => `<option value="rule:${r.id}" ${rule && rule.type === r.id ? 'selected' : ''}>${r.name}</option>`).join('')}
+                    </optgroup>
+                    <optgroup label="Группы правил">
+                        ${state.availableGroups.map(g => `<option value="group:${g.id}" ${rule && rule.group_id === g.id ? 'selected' : ''}>${g.name}</option>`).join('')}
+                    </optgroup>
                 </select>
             </div>
         `;
         form.insertAdjacentHTML('beforeend', ruleTypeSelectHtml);
 
-        if (selectedRuleType) {
-            const ruleDef = state.availableRules.find(r => r.id === selectedRuleType);
+        // Logic for showing params schema only for single rules
+        const selectedRuleId = rule ? rule.type : (typeOrGroup.startsWith('rule:') ? typeOrGroup.split(':')[1] : null);
+        if (selectedRuleId) {
+            const ruleDef = state.availableRules.find(r => r.id === selectedRuleId);
             schema = ruleDef ? ruleDef.params_schema : null;
         }
 
@@ -333,11 +347,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const { fileId, sheetId, fieldId, ruleId } = state.editingRuleContext;
         const { field } = findElements([fileId, sheetId, fieldId]);
 
-        const type = formData.get('type');
-        if (!type) {
-            showNotification('Необходимо выбрать тип правила.', 'error');
+        const typeOrGroup = formData.get('type_or_group');
+        if (!typeOrGroup) {
+            showNotification('Необходимо выбрать правило или группу.', 'error');
             return;
         }
+
+        const [itemType, itemId] = typeOrGroup.split(':');
 
         const ruleDef = state.availableRules.find(r => r.id === type);
         const params = {};
@@ -353,15 +369,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (ruleId) { // Editing existing rule
             const rule = field.rules.find(r => r.id === ruleId);
-            rule.params = params;
-        } else { // Adding new rule
-            field.rules.push({
+            if (rule.type) { // It's a single rule, update its params
+                 rule.params = params;
+            }
+            // Groups are not editable from here, so no 'else' needed.
+        } else { // Adding new rule or group
+            const newRule = {
                 id: newId(),
-                type: type,
-                params: params,
-                value: null, // Deprecate 'value'
+                params: null,
+                value: null,
                 order: field.rules.length + 1
-            });
+            };
+
+            if (itemType === 'rule') {
+                newRule.type = itemId;
+                newRule.params = params;
+            } else { // 'group'
+                newRule.group_id = itemId;
+            }
+            field.rules.push(newRule);
         }
         closeRuleModal();
         await handleSaveProject();
@@ -645,18 +671,21 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- 7. INITIALIZATION ---
     async function init() {
         try {
-            const [projectRes, rulesRes, resultsRes] = await Promise.all([
+            const [projectRes, rulesRes, groupsRes, resultsRes] = await Promise.all([
                 api.getProject(),
                 api.getRules(),
+                api.getRuleGroups(),
                 api.getResults() // Попытаемся загрузить последние результаты
             ]);
 
             // Основные данные проекта и правил обязательны
             if (!projectRes.ok) throw new Error((await projectRes.json()).detail);
             if (!rulesRes.ok) throw new Error('Failed to load rules');
+            if (!groupsRes.ok) throw new Error('Failed to load rule groups');
 
             state.project = await projectRes.json();
             state.availableRules = await rulesRes.json();
+            state.availableGroups = await groupsRes.json();
 
             // Результаты проверки не обязательны, обрабатываем их отдельно
             if (resultsRes.ok) {
