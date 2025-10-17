@@ -72,37 +72,43 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function renderModal() {
         const form = dom.groupEditorForm;
+        const modalBody = form.querySelector('.modal-body');
         const group = state.editingGroup;
         if (!group) return;
 
         dom.modalTitle.textContent = group.id ? 'Редактировать группу' : 'Создать новую группу';
 
-        form.innerHTML = `
+        modalBody.innerHTML = `
             <input type="hidden" name="id" value="${group.id || ''}">
             <div class="form-group">
-                <label for="group-name">Название группы</label>
-                <input type="text" id="group-name" name="name" value="${group.name}" required>
+                <label for="group-name">Название группы *</label>
+                <input type="text" id="group-name" name="name" value="${group.name || ''}" required placeholder="Например: Некорректное название продукта">
             </div>
             <div class="form-group">
                 <label>Логический оператор (условие для ошибки)</label>
                 <div class="radio-group">
-                    <label><input type="radio" name="logic" value="OR" ${group.logic === 'OR' ? 'checked' : ''}> ИЛИ (любое правило)</label>
-                    <label><input type="radio" name="logic" value="AND" ${group.logic === 'AND' ? 'checked' : ''}> И (все правила)</label>
+                    <label>
+                        <input type="radio" name="logic" value="OR" ${group.logic === 'OR' ? 'checked' : ''}>
+                        <strong>ИЛИ</strong> — ошибка, если хотя бы одно правило нарушено
+                    </label>
+                    <label>
+                        <input type="radio" name="logic" value="AND" ${group.logic === 'AND' ? 'checked' : ''}>
+                        <strong>И</strong> — ошибка, если все правила нарушены
+                    </label>
                 </div>
             </div>
             <div class="form-group">
-                <label>Правила в группе</label>
-                <div id="rules-in-group-list"></div>
-                <div class="add-rule-container" style="margin-top: 1rem;">
-                    <select id="add-rule-select">
-                        <option value="">-- Добавить правило --</option>
-                        ${state.availableRules.map(r => `<option value="${r.id}">${r.name}</option>`).join('')}
-                    </select>
+                <label for="add-rule-select">Добавить правило в группу</label>
+                <select id="add-rule-select">
+                    <option value="">-- Добавить правило --</option>
+                    ${state.availableRules.map(r => `<option value="${r.id}">${r.name}</option>`).join('')}
+                </select>
+                <div class="rules-in-group-list" id="rules-in-group-list">
                 </div>
             </div>
         `;
 
-        const rulesListContainer = form.querySelector('#rules-in-group-list');
+        const rulesListContainer = modalBody.querySelector('#rules-in-group-list');
         group.rules.forEach(ruleInGroup => {
             const ruleDef = state.availableRules.find(r => r.id === ruleInGroup.id);
             const ruleItem = document.createElement('div');
@@ -141,6 +147,8 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    const generateId = () => `grp_${Date.now().toString(36)}_${Math.random().toString(36).substr(2, 9)}`;
+
     async function handleSaveGroup(e) {
         e.preventDefault();
         const formData = new FormData(dom.groupEditorForm);
@@ -153,7 +161,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const groupData = {
-            id: state.editingGroup.id,
+            id: state.editingGroup.id || generateId(),
             name,
             logic,
             rules: state.editingGroup.rules,
@@ -161,13 +169,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         try {
             let updatedGroup;
-            if (groupData.id) {
+            if (state.editingGroup.id) { // If ID exists, it's an update
                 const res = await api.updateGroup(groupData.id, groupData);
                 if (!res.ok) throw new Error(await res.text());
                 updatedGroup = await res.json();
                 const index = state.groups.findIndex(g => g.id === updatedGroup.id);
                 state.groups[index] = updatedGroup;
-            } else {
+            } else { // No ID, so create new
                 const res = await api.createGroup(groupData);
                 if (!res.ok) throw new Error(await res.text());
                 updatedGroup = await res.json();

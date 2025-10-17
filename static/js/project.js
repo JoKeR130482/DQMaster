@@ -273,9 +273,10 @@ document.addEventListener('DOMContentLoaded', () => {
         form.insertAdjacentHTML('beforeend', ruleTypeSelectHtml);
 
         // Logic for showing params schema only for single rules
-        const selectedRuleId = rule ? rule.type : (typeOrGroup.startsWith('rule:') ? typeOrGroup.split(':')[1] : null);
-        if (selectedRuleId) {
-            const ruleDef = state.availableRules.find(r => r.id === selectedRuleId);
+        const selectedValue = form.querySelector('#rule-type-select').value;
+        if (selectedValue && selectedValue.startsWith('rule:')) {
+            const ruleId = selectedValue.split(':')[1];
+            const ruleDef = state.availableRules.find(r => r.id === ruleId);
             schema = ruleDef ? ruleDef.params_schema : null;
         }
 
@@ -355,16 +356,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const [itemType, itemId] = typeOrGroup.split(':');
 
-        const ruleDef = state.availableRules.find(r => r.id === type);
         const params = {};
-        if (ruleDef && ruleDef.params_schema) {
-            ruleDef.params_schema.forEach(p => {
-                if (p.type === 'checkbox') {
-                    params[p.name] = formData.has(p.name);
-                } else {
-                    params[p.name] = formData.get(p.name);
-                }
-            });
+        if (itemType === 'rule') {
+            const ruleDef = state.availableRules.find(r => r.id === itemId);
+            if (ruleDef && ruleDef.params_schema) {
+                ruleDef.params_schema.forEach(p => {
+                    if (p.type === 'checkbox') {
+                        params[p.name] = formData.has(p.name);
+                    } else {
+                        params[p.name] = formData.get(p.name);
+                    }
+                });
+            }
         }
 
         if (ruleId) { // Editing existing rule
@@ -372,12 +375,9 @@ document.addEventListener('DOMContentLoaded', () => {
             if (rule.type) { // It's a single rule, update its params
                  rule.params = params;
             }
-            // Groups are not editable from here, so no 'else' needed.
         } else { // Adding new rule or group
             const newRule = {
                 id: newId(),
-                params: null,
-                value: null,
                 order: field.rules.length + 1
             };
 
