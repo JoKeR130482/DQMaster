@@ -39,6 +39,7 @@ document.addEventListener('DOMContentLoaded', () => {
         ruleEditorForm: document.getElementById('rule-editor-form'),
         cancelRuleModalBtn: document.getElementById('cancel-rule-modal-btn'),
         saveRuleBtn: document.getElementById('save-rule-btn'),
+        autoRevalidateToggle: document.getElementById('auto-revalidate-toggle'),
     };
 
     // --- 3. API HELPERS ---
@@ -108,6 +109,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (!state.project) return;
+
+        dom.autoRevalidateToggle.checked = state.project.auto_revalidate ?? true;
 
         dom.projectNameHeader.innerHTML = `
             <div>
@@ -709,13 +712,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
             showNotification(`Слово «${word}» добавлено в словарь.`, 'success');
 
-            // 🔁 Запускаем повторную валидацию проекта
-            await handleValidate();
+            // 🔁 Запускаем повторную валидацию проекта, если включена настройка
+            if (state.project.auto_revalidate) {
+                await handleValidate();
+            }
 
         } catch (err) {
             showError(`Ошибка при добавлении в словарь: ${err.message}`);
         }
     });
+
+    dom.autoRevalidateToggle.addEventListener('change', (e) => {
+        if (!state.project) return;
+        state.project.auto_revalidate = e.target.checked;
+        handleSaveProject(); // Сохраняем изменение настройки
+    });
+
     // Modal listeners
     dom.ruleEditorForm.addEventListener('submit', handleSaveRule);
     dom.closeRuleModalBtn.addEventListener('click', closeRuleModal);
