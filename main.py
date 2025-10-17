@@ -24,18 +24,31 @@ BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 RULES_DIR = BASE_DIR / "rules"
 PROJECTS_DIR = BASE_DIR / "projects"
+RULE_GROUPS_PATH = BASE_DIR / "rule_groups.json"
 RULE_REGISTRY = {}
+RULE_GROUPS_REGISTRY = {}
 
 # ==============================================================================
 # 2. Pydantic Models (New Hierarchical Structure)
 # ==============================================================================
 
+from pydantic import root_validator
+
 class Rule(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    type: str
-    value: Optional[str] = None
+    type: Optional[str] = None # For a single rule
+    group_id: Optional[str] = None # For a rule group
+    value: Optional[str] = None # Deprecated, but kept for compatibility
     params: Optional[Dict[str, Any]] = None
     order: int
+
+    @root_validator(pre=True)
+    def check_type_or_group_id_exists(cls, values):
+        if 'type' not in values and 'group_id' not in values:
+            raise ValueError('Either "type" or "group_id" must be provided.')
+        if 'type' in values and 'group_id' in values:
+            raise ValueError('Cannot provide both "type" and "group_id".')
+        return values
 
 class FieldSchema(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -54,6 +67,16 @@ class FileSchema(BaseModel):
     name: str # Original filename
     saved_name: str # UUID-based filename on disk
     sheets: List[SheetSchema] = []
+
+class RuleInGroup(BaseModel):
+    id: str # Rule ID, e.g., "is_empty"
+    params: Optional[Dict[str, Any]] = None
+
+class RuleGroup(BaseModel):
+    id: str = Field(default_factory=lambda: f"grp_{uuid.uuid4()}")
+    name: str
+    logic: str # "AND" or "OR"
+    rules: List[RuleInGroup] = []
 
 class Project(BaseModel):
     id: str
@@ -136,6 +159,30 @@ def load_rules():
             except Exception as e:
                 print(f"Error loading rule from {filename}: {e}")
 
+def read_rule_groups():
+    """Loads rule groups from the JSON file into the registry."""
+    if not RULE_GROUPS_PATH.exists():
+        return
+    try:
+        groups_data = json.loads(RULE_GROUPS_PATH.read_text(encoding="utf-8"))
+        RULE_GROUPS_REGISTRY.clear()
+        for group_dict in groups_data:
+            group = RuleGroup(**group_dict)
+            RULE_GROUPS_REGISTRY[group.id] = group
+    except (json.JSONDecodeError, ValidationError) as e:
+        print(f"Error reading or parsing rule_groups.json: {e}")
+
+def write_rule_groups():
+    """Saves the current state of the rule groups registry to the JSON file."""
+    try:
+        if not RULE_GROUPS_PATH.exists():
+            RULE_GROUPS_PATH.touch()
+        groups_list = [group.model_dump() for group in RULE_GROUPS_REGISTRY.values()]
+        RULE_GROUPS_PATH.write_text(json.dumps(groups_list, indent=2, ensure_ascii=False), encoding="utf-8")
+    except IOError as e:
+        print(f"Error writing to rule_groups.json: {e}")
+
+
 # ==============================================================================
 # 4. API Endpoints
 # ==============================================================================
@@ -181,17 +228,12 @@ async def get_project_details(project_id: str):
     return project
 
 @app.put("/api/projects/{project_id}", response_model=Project)
-async def update_full_project(project_id: str, project_update: Project):
+async def update_full_project(project_id: str, project_update: FullProjectUpdateRequest):
     project_dir = PROJECTS_DIR / project_id
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail="Project not found")
-
-    # Ensure the project ID is not changed
     project_update.id = project_id
-
-    # Write the entire updated project data
     write_project(project_id, project_update)
-
     return project_update
 
 @app.patch("/api/projects/{project_id}", response_model=Project)
@@ -239,6 +281,35 @@ async def upload_file_to_project(project_id: str, file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Could not process Excel file: {e}")
 
+def _validate_group(value: Any, group: RuleGroup) -> dict:
+    """Helper to validate a single value against a rule group."""
+    results = []
+    for rule_ref in group.rules:
+        rule_def = RULE_REGISTRY.get(rule_ref.id)
+        if not rule_def:
+            continue
+
+        validator = rule_def["validator"]
+        params = rule_ref.params or {}
+
+        result = validator(value, params=params) if 'params' in inspect.signature(validator).parameters else validator(value)
+
+        is_valid = result if isinstance(result, bool) else result.get("is_valid", False)
+        results.append(is_valid)
+
+    if group.logic == "AND":
+        # Error if ALL rules are broken (all are invalid)
+        is_error = all(not r for r in results)
+    else:  # OR
+        # Error if ANY rule is broken (at least one is invalid)
+        is_error = any(not r for r in results)
+
+    return {
+        "is_valid": not is_error,
+        "errors": group.name if is_error else None
+    }
+
+
 def _run_validation_for_project(project: Project) -> dict:
     """
     Helper function to run validation for a given project.
@@ -270,6 +341,25 @@ def _run_validation_for_project(project: Project) -> dict:
                         continue
 
                     for rule_config in sorted(field_schema.rules, key=lambda r: r.order):
+                        # --- Handle Rule Groups ---
+                        if rule_config.group_id:
+                            group = RULE_GROUPS_REGISTRY.get(rule_config.group_id)
+                            if not group:
+                                continue
+
+                            for index, value in df[field_schema.name].items():
+                                result = _validate_group(value, group)
+                                if not result["is_valid"]:
+                                    all_errors.append({
+                                        "file_name": file_schema.name, "sheet_name": sheet_schema.name,
+                                        "field_name": field_schema.name, "is_required": field_schema.is_required,
+                                        "row": index + 2, "error_type": result["errors"],
+                                        "value": str(value).replace('"', '&quot;') if pd.notna(value) else "ПУСТО",
+                                        "details": None # Groups don't provide word-level details
+                                    })
+                            continue
+
+                        # --- Handle Single Rules ---
                         rule_def = RULE_REGISTRY.get(rule_config.type)
                         if not rule_def:
                             continue
@@ -279,7 +369,6 @@ def _run_validation_for_project(project: Project) -> dict:
                         formatter = rule_def.get("formatter")
                         rule_name = formatter(params) if formatter and params else rule_def["name"]
 
-                        # Process whole column at once if rule supports it
                         if rule_def.get("needs_column_access"):
                             validity_series = validator(df[field_schema.name])
                             for index, is_valid in validity_series.items():
@@ -293,7 +382,6 @@ def _run_validation_for_project(project: Project) -> dict:
                                     })
                             continue
 
-                        # Process cell by cell
                         for index, value in df[field_schema.name].items():
                             result = validator(value, params=params) if 'params' in inspect.signature(validator).parameters else validator(value)
                             is_valid = False
@@ -307,12 +395,9 @@ def _run_validation_for_project(project: Project) -> dict:
 
                             if not is_valid:
                                 error_entry = {
-                                    "file_name": file_schema.name,
-                                    "sheet_name": sheet_schema.name,
-                                    "field_name": field_schema.name,
-                                    "is_required": field_schema.is_required,
-                                    "row": index + 2,
-                                    "error_type": rule_name,
+                                    "file_name": file_schema.name, "sheet_name": sheet_schema.name,
+                                    "field_name": field_schema.name, "is_required": field_schema.is_required,
+                                    "row": index + 2, "error_type": rule_name,
                                     "value": str(value).replace('"', '&quot;') if pd.notna(value) else "ПУСТО",
                                     "details": details
                                 }
@@ -338,10 +423,18 @@ def _run_validation_for_project(project: Project) -> dict:
             except Exception:
                 sheet_total_rows = 0 # Cannot read sheet, assume 0 rows
 
-            all_applicable_rule_names = {
-                (RULE_REGISTRY.get(r_conf.type)["formatter"](r_conf.params) if RULE_REGISTRY.get(r_conf.type, {}).get("formatter") and r_conf.params else RULE_REGISTRY.get(r_conf.type, {}).get("name"))
-                for f in sheet_schema.fields for r_conf in f.rules if RULE_REGISTRY.get(r_conf.type)
-            }
+            all_applicable_rule_names = set()
+            for f in sheet_schema.fields:
+                for r_conf in f.rules:
+                    if r_conf.type and RULE_REGISTRY.get(r_conf.type):
+                        rule_def = RULE_REGISTRY.get(r_conf.type)
+                        formatter = rule_def.get("formatter")
+                        rule_name = formatter(r_conf.params) if formatter and r_conf.params else rule_def.get("name")
+                        if rule_name:
+                            all_applicable_rule_names.add(rule_name)
+                    elif r_conf.group_id and RULE_GROUPS_REGISTRY.get(r_conf.group_id):
+                        group = RULE_GROUPS_REGISTRY.get(r_conf.group_id)
+                        all_applicable_rule_names.add(group.name)
 
             sheet_errors = [e for e in all_errors if e["file_name"] == file_schema.name and e["sheet_name"] == sheet_schema.name]
             summary_list = []
@@ -494,6 +587,36 @@ async def remove_word_from_dictionary(word: str, current_words: List[str] = Depe
         RULE_REGISTRY["spell_check"]["module"].reload_custom_dictionary()
     return {"message": "Word removed successfully."}
 
+# --- Rule Groups ---
+@app.get("/api/rule-groups", response_model=List[RuleGroup])
+async def get_rule_groups():
+    return list(RULE_GROUPS_REGISTRY.values())
+
+@app.post("/api/rule-groups", response_model=RuleGroup, status_code=201)
+async def create_rule_group(group: RuleGroup):
+    if group.id in RULE_GROUPS_REGISTRY:
+        raise HTTPException(status_code=409, detail="Rule group with this ID already exists.")
+    RULE_GROUPS_REGISTRY[group.id] = group
+    write_rule_groups()
+    return group
+
+@app.put("/api/rule-groups/{group_id}", response_model=RuleGroup)
+async def update_rule_group(group_id: str, group_update: RuleGroup):
+    if group_id not in RULE_GROUPS_REGISTRY:
+        raise HTTPException(status_code=404, detail="Rule group not found.")
+    group_update.id = group_id # Ensure ID is not changed
+    RULE_GROUPS_REGISTRY[group_id] = group_update
+    write_rule_groups()
+    return group_update
+
+@app.delete("/api/rule-groups/{group_id}", status_code=204)
+async def delete_rule_group(group_id: str):
+    if group_id not in RULE_GROUPS_REGISTRY:
+        raise HTTPException(status_code=404, detail="Rule group not found.")
+    del RULE_GROUPS_REGISTRY[group_id]
+    write_rule_groups()
+    return
+
 # --- Rule Library ---
 @app.get("/api/rules")
 async def get_all_rules():
@@ -531,6 +654,10 @@ async def read_rules_page():
 async def read_dictionary_page():
     return FileResponse(STATIC_DIR / "dictionary.html")
 
+@app.get("/rule-groups")
+async def read_rule_groups_page():
+    return FileResponse(STATIC_DIR / "rule_groups.html")
+
 # ==============================================================================
 # 6. Startup Logic
 # ==============================================================================
@@ -540,3 +667,4 @@ async def startup_event():
     RULES_DIR.mkdir(exist_ok=True)
     PROJECTS_DIR.mkdir(exist_ok=True)
     load_rules()
+    read_rule_groups()
