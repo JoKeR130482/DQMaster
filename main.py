@@ -62,6 +62,7 @@ class Project(BaseModel):
     created_at: str
     updated_at: str
     files: List[FileSchema] = []
+    auto_revalidate: bool = True
 
 # --- API Request/Response Models ---
 
@@ -180,12 +181,17 @@ async def get_project_details(project_id: str):
     return project
 
 @app.put("/api/projects/{project_id}", response_model=Project)
-async def update_full_project(project_id: str, project_update: FullProjectUpdateRequest):
+async def update_full_project(project_id: str, project_update: Project):
     project_dir = PROJECTS_DIR / project_id
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail="Project not found")
+
+    # Ensure the project ID is not changed
     project_update.id = project_id
+
+    # Write the entire updated project data
     write_project(project_id, project_update)
+
     return project_update
 
 @app.patch("/api/projects/{project_id}", response_model=Project)
