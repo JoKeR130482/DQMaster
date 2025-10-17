@@ -32,17 +32,17 @@
     <!-- Модальное окно для создания/редактирования группы -->
     <div id="group-editor-modal" class="modal-overlay" style="display: none;">
         <div class="modal-content">
-            <div class="modal-header">
-                <h3 id="group-modal-title">Создать новую группу</h3>
-                <button id="close-group-modal-btn" class="btn btn-icon"><i data-lucide="x"></i></button>
-            </div>
-            <div class="modal-body">
-                <form id="group-editor-form">
+            <form id="group-editor-form">
+                <div class="modal-header">
+                    <h3 id="group-modal-title">Создать новую группу</h3>
+                    <button id="close-group-modal-btn" type="button" class="btn btn-icon"><i data-lucide="x"></i></button>
+                </div>
+                <div class="modal-body">
                     <!-- Содержимое формы будет здесь -->
-                </form>
+                </div>
                 <div class="modal-footer">
                     <button id="cancel-group-modal-btn" type="button" class="btn btn-secondary">Отмена</button>
-                    <button id="save-group-btn" type="submit" class="btn btn-primary">Сохранить</button>
+                    <button id="save-group-btn" type="submit" class="btn btn-primary">Сохранить группу</button>
                 </div>
             </form>
         </div>

@@ -366,6 +366,57 @@ body > .main-container > .page-header { padding: 0; box-shadow: none; background
     flex-shrink: 0;
 }
 
+/* Стили для формы группы */
+#group-editor-form .form-group {
+    margin-bottom: 1.5rem;
+}
+
+#group-editor-form .radio-group {
+    display: flex;
+    gap: 1rem;
+    flex-direction: column;
+}
+
+#group-editor-form .radio-group label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+}
+
+#group-editor-form .radio-group input[type="radio"] {
+    accent-color: var(--blue-600);
+}
+
+#group-editor-form .rules-in-group-list {
+    border: 1px solid var(--slate-200);
+    border-radius: var(--radius-lg);
+    padding: 0.75rem;
+    min-height: 80px;
+    background: var(--slate-50);
+    margin-top: 0.5rem;
+}
+
+#group-editor-form .rule-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem;
+    background: white;
+    border: 1px solid var(--slate-200);
+    border-radius: var(--radius-md);
+    margin-bottom: 0.5rem;
+}
+
+#group-editor-form .rule-item:last-child {
+    margin-bottom: 0;
+}
+
+#group-editor-form .rule-actions button {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.8rem;
+}
+
 /* --- 9. Modal Styles --- */
 .modal-overlay {
     position: fixed;
