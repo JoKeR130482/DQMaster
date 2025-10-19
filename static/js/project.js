@@ -599,8 +599,16 @@ document.addEventListener('DOMContentLoaded', () => {
         } else if (target.closest('.edit-rule-btn')) {
             openRuleModal({ fileId, sheetId, fieldId, ruleId });
         } else if (target.closest('.remove-rule-btn')) {
-            const { field } = findElements([fileId, sheetId, fieldId, ruleId]);
-            if(field) { field.rules = field.rules.filter(r => r.id !== ruleId); modified = true; }
+            const { field } = findElements([fileId, sheetId, fieldId]);
+            if(field) {
+                field.rules = field.rules.filter(r => r.id !== ruleId);
+                // Важно! После удаления необходимо пересчитать `order` для всех оставшихся правил,
+                // чтобы избежать "дыр" в последовательности, которые могут вызвать ошибку на бэкенде.
+                field.rules.forEach((rule, index) => {
+                    rule.order = index + 1;
+                });
+                modified = true;
+            }
         } else if (target.closest('.move-rule-up-btn') || target.closest('.move-rule-down-btn')) {
             const { field } = findElements([fileId, sheetId, fieldId, ruleId]);
             if(field) {
@@ -624,10 +632,32 @@ document.addEventListener('DOMContentLoaded', () => {
     async function handleSaveProject() {
         try {
             const response = await api.saveProject(state.project);
-            if (!response.ok) throw new Error((await response.json()).detail);
+            if (!response.ok) {
+                const errorData = await response.json();
+                // Throw the actual error data, not just a message.
+                // This allows the catch block to inspect the structure.
+                throw errorData.detail || errorData;
+            }
             showNotification("Проект успешно сохранен!", 'success');
         } catch (error) {
-            showError(`Ошибка сохранения: ${error.message}`);
+            console.error("Full save error:", error); // Log the full error object for debugging.
+            let errorMessage = "Неизвестная ошибка";
+
+            if (typeof error === 'string') {
+                errorMessage = error;
+            } else if (Array.isArray(error)) {
+                // Handle FastAPI validation errors (which are arrays of objects).
+                errorMessage = error.map(e => `Поле '${e.loc.join(' → ')}': ${e.msg}`).join('\n');
+            } else if (error.message) {
+                // Handle standard JS Error objects.
+                errorMessage = error.message;
+            } else if (typeof error === 'object' && error !== null) {
+                // Fallback for other kinds of objects.
+                errorMessage = JSON.stringify(error, null, 2);
+            }
+
+            // Using textContent, so newline characters will be preserved if the CSS allows.
+            showError(`Ошибка сохранения:\n${errorMessage}`);
         }
     }
 
