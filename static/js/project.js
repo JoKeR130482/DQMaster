@@ -247,15 +247,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function renderRuleEditor() {
-        const { ruleId, type: selectedRuleType } = state.editingRuleContext;
+        const { ruleId } = state.editingRuleContext;
         const form = dom.ruleEditorForm;
-        form.innerHTML = '';
+        form.innerHTML = ''; // Очищаем всю форму один раз
 
         const rule = ruleId ? findElements(Object.values(state.editingRuleContext)).rule : null;
         dom.ruleModalTitle.textContent = ruleId ? 'Настроить правило' : 'Добавить новое правило';
 
-        let schema = null;
-
+        // --- 1. Создаем HTML для селекта и контейнера параметров ---
         const ruleTypeSelectHtml = `
             <div class="form-group">
                 <label for="rule-type-select">Тип правила или группа</label>
@@ -269,54 +268,62 @@ document.addEventListener('DOMContentLoaded', () => {
                     </optgroup>
                 </select>
             </div>
+            <div id="rule-params-container"></div>
         `;
         form.insertAdjacentHTML('beforeend', ruleTypeSelectHtml);
 
-        // Logic for showing params schema only for single rules
-        const selectedValue = form.querySelector('#rule-type-select').value;
-        if (selectedValue && selectedValue.startsWith('rule:')) {
-            const ruleId = selectedValue.split(':')[1];
-            const ruleDef = state.availableRules.find(r => r.id === ruleId);
-            schema = ruleDef ? ruleDef.params_schema : null;
-        }
+        // --- 2. Функция для отрисовки только параметров ---
+        const renderParams = (selectedValue) => {
+            const paramsContainer = form.querySelector('#rule-params-container');
+            paramsContainer.innerHTML = ''; // Очищаем только контейнер параметров
 
-        if (schema) {
-            const currentParams = rule ? rule.params : {};
-            schema.forEach(param => {
-                const value = currentParams[param.name] ?? param.default;
-                let fieldHtml = '';
+            let schema = null;
+            if (selectedValue && selectedValue.startsWith('rule:')) {
+                const selectedRuleId = selectedValue.split(':')[1];
+                const ruleDef = state.availableRules.find(r => r.id === selectedRuleId);
+                schema = ruleDef ? ruleDef.params_schema : null;
+            }
 
-                if (param.type === 'checkbox') {
-                    // Use the dedicated checkbox group class for proper styling
-                    fieldHtml = `
-                        <div class="form-group-checkbox">
-                            <input type="checkbox" id="param-${param.name}" name="${param.name}" ${value ? 'checked' : ''}>
-                            <label for="param-${param.name}">${param.label}</label>
-                        </div>`;
-                } else {
-                    // Standard form group for other types
-                    fieldHtml = `<div class="form-group">`;
-                    fieldHtml += `<label for="param-${param.name}">${param.label}</label>`;
-                    if (param.type === 'select') {
-                        fieldHtml += `<select id="param-${param.name}" name="${param.name}">`;
-                        param.options.forEach(opt => {
-                            fieldHtml += `<option value="${opt.value}" ${opt.value === value ? 'selected' : ''}>${opt.label}</option>`;
-                        });
-                        fieldHtml += `</select>`;
-                    } else { // text
-                        fieldHtml += `<input type="text" id="param-${param.name}" name="${param.name}" value="${value || ''}">`;
+            if (schema) {
+                const currentParams = rule ? rule.params : {};
+                schema.forEach(param => {
+                    const value = currentParams[param.name] ?? param.default;
+                    let fieldHtml = '';
+
+                    if (param.type === 'checkbox') {
+                        fieldHtml = `
+                            <div class="form-group-checkbox">
+                                <input type="checkbox" id="param-${param.name}" name="${param.name}" ${value ? 'checked' : ''}>
+                                <label for="param-${param.name}">${param.label}</label>
+                            </div>`;
+                    } else {
+                        fieldHtml = `<div class="form-group">`;
+                        fieldHtml += `<label for="param-${param.name}">${param.label}</label>`;
+                        if (param.type === 'select') {
+                            fieldHtml += `<select id="param-${param.name}" name="${param.name}">`;
+                            param.options.forEach(opt => {
+                                fieldHtml += `<option value="${opt.value}" ${opt.value === value ? 'selected' : ''}>${opt.label}</option>`;
+                            });
+                            fieldHtml += `</select>`;
+                        } else {
+                            fieldHtml += `<input type="text" id="param-${param.name}" name="${param.name}" value="${value || ''}">`;
+                        }
+                        fieldHtml += `</div>`;
                     }
-                    fieldHtml += `</div>`;
-                }
-                form.insertAdjacentHTML('beforeend', fieldHtml);
-            });
-        }
+                    paramsContainer.insertAdjacentHTML('beforeend', fieldHtml);
+                });
+            }
+        };
 
+        // --- 3. Первичный рендер параметров и установка обработчика ---
         const ruleTypeSelect = form.querySelector('#rule-type-select');
-        if (!rule) { // Only allow changing type for new rules
+
+        // Сразу отрисовываем параметры для уже существующего правила
+        renderParams(ruleTypeSelect.value);
+
+        if (!rule) { // Вешаем обработчик только для новых правил
             ruleTypeSelect.addEventListener('change', () => {
-                state.editingRuleContext.type = ruleTypeSelect.value;
-                renderRuleEditor(); // Re-render modal with new schema
+                renderParams(ruleTypeSelect.value);
             });
         }
     }
