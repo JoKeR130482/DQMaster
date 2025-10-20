@@ -379,20 +379,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (ruleId) { // Editing existing rule
             const rule = field.rules.find(r => r.id === ruleId);
-            if (rule.type) { // It's a single rule, update its params
+            // Обновляем параметры только если это обычное правило (а не группа)
+            if (rule && rule.type) {
                  rule.params = params;
             }
         } else { // Adding new rule or group
-            const newRule = {
+            let newRule;
+            const commonProps = {
                 id: newId(),
-                order: field.rules.length + 1
+                order: field.rules.length + 1,
             };
 
             if (itemType === 'rule') {
-                newRule.type = itemId;
-                newRule.params = params;
+                newRule = {
+                    ...commonProps,
+                    type: itemId,
+                    params: params,
+                };
             } else { // 'group'
-                newRule.group_id = itemId;
+                newRule = {
+                    ...commonProps,
+                    group_id: itemId,
+                    // type и params здесь быть не должно
+                };
             }
             field.rules.push(newRule);
         }
