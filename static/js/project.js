@@ -258,7 +258,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const ruleTypeSelectHtml = `
             <div class="form-group">
                 <label for="rule-type-select">Тип правила или группа</label>
-                <select id="rule-type-select" name="type_or_group" ${rule ? 'disabled' : ''}>
+                <select id="rule-type-select" name="type_or_group">
                     <option value="">-- Выберите --</option>
                     <optgroup label="Правила">
                         ${state.availableRules.map(r => `<option value="rule:${r.id}" ${rule && rule.type === r.id ? 'selected' : ''}>${r.name}</option>`).join('')}
@@ -363,8 +363,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const [itemType, itemId] = typeOrGroup.split(':');
 
-        const params = {};
-        if (itemType === 'rule') {
+        let newRule;
+
+        if (itemType === 'group') {
+            newRule = {
+                id: ruleId || newId(),
+                group_id: itemId,
+                order: ruleId ? field.rules.find(r => r.id === ruleId)?.order : field.rules.length + 1
+            };
+        } else {
+            const params = {};
             const ruleDef = state.availableRules.find(r => r.id === itemId);
             if (ruleDef && ruleDef.params_schema) {
                 ruleDef.params_schema.forEach(p => {
@@ -375,32 +383,23 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 });
             }
+            newRule = {
+                id: ruleId || newId(),
+                type: itemId,
+                params: params,
+                order: ruleId ? field.rules.find(r => r.id === ruleId)?.order : field.rules.length + 1
+            };
         }
 
-        // Создаем "чистый" объект правила, неважно, новое оно или редактируемое
-        const newRuleData = (itemType === 'rule')
-            ? { type: itemId, params: params }
-            : { group_id: itemId };
-
-        if (ruleId) { // Editing existing rule
+        if (ruleId) {
             const index = field.rules.findIndex(r => r.id === ruleId);
             if (index !== -1) {
-                // Полностью заменяем объект, сохраняя его `id` и `order`
-                const existingRule = field.rules[index];
-                field.rules[index] = {
-                    ...newRuleData,
-                    id: existingRule.id,
-                    order: existingRule.order,
-                };
+                field.rules[index] = newRule;
             }
-        } else { // Adding new rule or group
-            const newRule = {
-                ...newRuleData,
-                id: newId(),
-                order: field.rules.length + 1,
-            };
+        } else {
             field.rules.push(newRule);
         }
+
         closeRuleModal();
         await handleSaveProject();
         render(); // Re-render main UI
