@@ -270,7 +270,8 @@ document.addEventListener('DOMContentLoaded', () => {
             dom.addDescriptionInput.value = '';
 
             showNotification("Проект успешно создан.");
-            render();
+            // Перенаправляем пользователя на страницу нового проекта
+            window.location.href = `/projects/${newProject.id}`;
         } catch (error) {
             showNotification(`Ошибка создания проекта: ${error.message}`, 'error');
         }

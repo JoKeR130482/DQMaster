@@ -321,11 +321,11 @@ document.addEventListener('DOMContentLoaded', () => {
         // Сразу отрисовываем параметры для уже существующего правила
         renderParams(ruleTypeSelect.value);
 
-        if (!rule) { // Вешаем обработчик только для новых правил
-            ruleTypeSelect.addEventListener('change', () => {
-                renderParams(ruleTypeSelect.value);
-            });
-        }
+        // Вешаем обработчик для ВСЕХ случаев (новые и существующие правила),
+        // чтобы можно было менять тип существующего правила.
+        ruleTypeSelect.addEventListener('change', () => {
+            renderParams(ruleTypeSelect.value);
+        });
     }
 
     function openRuleModal(context) { // context = { fileId, sheetId, fieldId, ruleId? }
@@ -363,14 +363,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const [itemType, itemId] = typeOrGroup.split(':');
 
-        let newRule;
-
+        let newRuleData;
         if (itemType === 'group') {
-            newRule = {
-                id: ruleId || newId(),
-                group_id: itemId,
-                order: ruleId ? field.rules.find(r => r.id === ruleId)?.order : field.rules.length + 1
-            };
+            newRuleData = { group_id: itemId };
         } else {
             const params = {};
             const ruleDef = state.availableRules.find(r => r.id === itemId);
@@ -383,26 +378,31 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 });
             }
-            newRule = {
-                id: ruleId || newId(),
-                type: itemId,
-                params: params,
-                order: ruleId ? field.rules.find(r => r.id === ruleId)?.order : field.rules.length + 1
-            };
+            newRuleData = { type: itemId, params: params };
         }
 
         if (ruleId) {
             const index = field.rules.findIndex(r => r.id === ruleId);
             if (index !== -1) {
-                field.rules[index] = newRule;
+                const existingRule = field.rules[index];
+                field.rules[index] = {
+                    id: existingRule.id,
+                    order: existingRule.order,
+                    ...newRuleData,
+                };
             }
         } else {
+            const newRule = {
+                ...newRuleData,
+                id: newId(),
+                order: field.rules.length + 1,
+            };
             field.rules.push(newRule);
         }
 
-        closeRuleModal();
+        closeRuleModal(); // Already calls render()
         await handleSaveProject();
-        render(); // Re-render main UI
+        // The second render() was redundant and caused race conditions with Playwright.
     }
 
     /**
