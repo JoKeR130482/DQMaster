@@ -377,32 +377,28 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
+        // Создаем "чистый" объект правила, неважно, новое оно или редактируемое
+        const newRuleData = (itemType === 'rule')
+            ? { type: itemId, params: params }
+            : { group_id: itemId };
+
         if (ruleId) { // Editing existing rule
-            const rule = field.rules.find(r => r.id === ruleId);
-            // Обновляем параметры только если это обычное правило (а не группа)
-            if (rule && rule.type) {
-                 rule.params = params;
+            const index = field.rules.findIndex(r => r.id === ruleId);
+            if (index !== -1) {
+                // Полностью заменяем объект, сохраняя его `id` и `order`
+                const existingRule = field.rules[index];
+                field.rules[index] = {
+                    ...newRuleData,
+                    id: existingRule.id,
+                    order: existingRule.order,
+                };
             }
         } else { // Adding new rule or group
-            let newRule;
-            const commonProps = {
+            const newRule = {
+                ...newRuleData,
                 id: newId(),
                 order: field.rules.length + 1,
             };
-
-            if (itemType === 'rule') {
-                newRule = {
-                    ...commonProps,
-                    type: itemId,
-                    params: params,
-                };
-            } else { // 'group'
-                newRule = {
-                    ...commonProps,
-                    group_id: itemId,
-                    // type и params здесь быть не должно
-                };
-            }
             field.rules.push(newRule);
         }
         closeRuleModal();
