@@ -5,22 +5,29 @@ document.addEventListener('DOMContentLoaded', () => {
     const searchInput = document.getElementById('searchInput');
     const sortByNameBtn = document.getElementById('sortByName');
     const sortByNameDescBtn = document.getElementById('sortByNameDesc');
+    const showGroupsOnlyBtn = document.getElementById('show-groups-only-btn');
 
-    let allRules = []; // Cache for all rules fetched from the server
+    let allRules = [];
+    let allGroups = [];
+    let showGroupsOnly = false;
 
     // --- Data Fetching ---
-    const fetchRules = async () => {
+    const fetchData = async () => {
         loadingSpinner.style.display = 'block';
         errorContainer.style.display = 'none';
         try {
-            const response = await fetch('/api/rules');
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+            const [rulesRes, groupsRes] = await Promise.all([
+                fetch('/api/rules'),
+                fetch('/api/rule-groups')
+            ]);
+            if (!rulesRes.ok || !groupsRes.ok) {
+                throw new Error('Network response was not ok');
             }
-            allRules = await response.json();
-            renderRules(allRules);
+            allRules = await rulesRes.json();
+            allGroups = await groupsRes.json();
+            render();
         } catch (error) {
-            errorContainer.textContent = `Не удалось загрузить правила: ${error.message}`;
+            errorContainer.textContent = `Не удалось загрузить данные: ${error.message}`;
             errorContainer.style.display = 'block';
         } finally {
             loadingSpinner.style.display = 'none';
@@ -28,44 +35,67 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // --- Rendering ---
-    const renderRules = (rules) => {
-        rulesListContainer.innerHTML = ''; // Clear previous content
-        if (rules.length === 0) {
-            rulesListContainer.innerHTML = '<p>Правила не найдены.</p>';
+    const render = () => {
+        rulesListContainer.innerHTML = '';
+        const searchTerm = searchInput.value.toLowerCase();
+
+        let itemsToShow = showGroupsOnly
+            ? allGroups.map(g => ({ ...g, is_group: true }))
+            : [...allRules, ...allGroups.map(g => ({ ...g, is_group: true }))];
+
+        const filteredItems = itemsToShow.filter(item =>
+            item.name.toLowerCase().includes(searchTerm) ||
+            (item.description && item.description.toLowerCase().includes(searchTerm))
+        );
+
+        if (filteredItems.length === 0) {
+            rulesListContainer.innerHTML = '<p>Ничего не найдено.</p>';
             return;
         }
-        rules.forEach(rule => {
-            const ruleElement = document.createElement('div');
-            ruleElement.className = 'rule-card';
-            ruleElement.innerHTML = `
-                <h3 class="rule-name">${rule.name}</h3>
-                <p class="rule-description">${rule.description}</p>
-                <code class="rule-id">ID: ${rule.id}</code>
-            `;
-            rulesListContainer.appendChild(ruleElement);
+
+        filteredItems.forEach(item => {
+            const card = document.createElement('div');
+            card.className = 'rule-card';
+            if (item.is_group) {
+                card.innerHTML = `
+                    <h3 class="rule-name">${item.name} <span class="badge" style="background-color: #e0e7ff; color: #4338ca; padding: 2px 6px; border-radius: 4px; font-size: 0.8em;">Группа</span></h3>
+                    <p class="rule-description">Логика: <strong>${item.logic}</strong>. Правил: ${item.rules.length}</p>
+                    <code class="rule-id">ID: ${item.id}</code>
+                `;
+            } else {
+                card.innerHTML = `
+                    <h3 class="rule-name">${item.name}</h3>
+                    <p class="rule-description">${item.description}</p>
+                    <code class="rule-id">ID: ${item.id}</code>
+                `;
+            }
+            rulesListContainer.appendChild(card);
         });
     };
 
-    // --- Event Listeners for Sorting and Filtering ---
-    searchInput.addEventListener('input', (e) => {
-        const searchTerm = e.target.value.toLowerCase();
-        const filteredRules = allRules.filter(rule =>
-            rule.name.toLowerCase().includes(searchTerm) ||
-            rule.description.toLowerCase().includes(searchTerm)
-        );
-        renderRules(filteredRules);
+    // --- Event Listeners ---
+    searchInput.addEventListener('input', render);
+
+    showGroupsOnlyBtn.addEventListener('click', () => {
+        showGroupsOnly = !showGroupsOnly;
+        showGroupsOnlyBtn.textContent = showGroupsOnly ? 'Показать все' : 'Показать только группы';
+        render();
     });
 
     sortByNameBtn.addEventListener('click', () => {
-        const sortedRules = [...allRules].sort((a, b) => a.name.localeCompare(b.name));
-        renderRules(sortedRules);
+        const sorter = (a, b) => a.name.localeCompare(b.name);
+        allRules.sort(sorter);
+        allGroups.sort(sorter);
+        render();
     });
 
     sortByNameDescBtn.addEventListener('click', () => {
-        const sortedRules = [...allRules].sort((a, b) => b.name.localeCompare(a.name));
-        renderRules(sortedRules);
+        const sorter = (a, b) => b.name.localeCompare(a.name);
+        allRules.sort(sorter);
+        allGroups.sort(sorter);
+        render();
     });
 
     // --- Initial Load ---
-    fetchRules();
+    fetchData();
 });

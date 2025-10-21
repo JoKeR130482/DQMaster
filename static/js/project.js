@@ -4,6 +4,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let state = {
         project: null,
         availableRules: [],
+        availableGroups: [],
         isLoading: true,
         error: null,
         showUploadForm: false,
@@ -39,12 +40,14 @@ document.addEventListener('DOMContentLoaded', () => {
         ruleEditorForm: document.getElementById('rule-editor-form'),
         cancelRuleModalBtn: document.getElementById('cancel-rule-modal-btn'),
         saveRuleBtn: document.getElementById('save-rule-btn'),
+        autoRevalidateToggle: document.getElementById('auto-revalidate-toggle'),
     };
 
     // --- 3. API HELPERS ---
     const api = {
         getProject: () => fetch(`/api/projects/${projectId}`),
         getRules: () => fetch('/api/rules'),
+        getRuleGroups: () => fetch('/api/rule-groups'),
         saveProject: (projectData) => fetch(`/api/projects/${projectId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -68,26 +71,29 @@ document.addEventListener('DOMContentLoaded', () => {
         dom.errorContainer.textContent = message;
         dom.errorContainer.style.display = 'block';
     };
-    const newId = () => `id_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const newId = () => 'id_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 10);
 
-    function highlightMisspelledWords(text, errors) {
-        if (typeof text !== 'string' || !Array.isArray(errors) || errors.length === 0) {
-            return text;
+    const escapeHTML = (str) => {
+        if (typeof str !== 'string') return str;
+        return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+    };
+
+    function highlightMisspelledWords(escapedText, errors) {
+        if (!Array.isArray(errors) || errors.length === 0) {
+            return escapedText;
         }
-        // Escape HTML to prevent XSS
-        const escapedText = text
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;");
-
-        // Создаём регулярку с флагом 'i' (case-insensitive)
         const escapedErrors = errors.map(e =>
-            e.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')
+            String(e).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
         );
-        const errorsRegex = new RegExp(`\\b(${escapedErrors.join('|')})\\b`, 'gi');
+        // Используем Unicode-совместимые границы слов:
+        // (?<!\p{L}) — отрицательный просмотр назад: не буква перед
+        // (?!\p{L})  — отрицательный просмотр вперёд: не буква после
+        // Флаг 'u' обязателен для поддержки \p{L}
+        const pattern = `(?<!\\p{L})(${escapedErrors.join('|')})(?!\\p{L})`;
+        const errorsRegex = new RegExp(pattern, 'gui');
 
         return escapedText.replace(errorsRegex, (match) =>
-            `<span class="misspelled-word" title="Орфографическая ошибка">${match}</span>`
+            `<span class="misspelled-word" title="Двойной клик — добавить в словарь">${match}</span>`
         );
     }
 
@@ -105,6 +111,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (!state.project) return;
+
+        dom.autoRevalidateToggle.checked = state.project.auto_revalidate ?? true;
 
         dom.projectNameHeader.innerHTML = `
             <div>
@@ -208,6 +216,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function formatRuleName(rule) {
+        if (rule.group_id) {
+            const group = state.availableGroups.find(g => g.id === rule.group_id);
+            return group ? `Группа: ${group.name}` : `Неизвестная группа: ${rule.group_id}`;
+        }
+
         const ruleDef = state.availableRules.find(r => r.id === rule.type);
         if (!ruleDef) return rule.type;
 
@@ -234,70 +247,85 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function renderRuleEditor() {
-        const { ruleId, type: selectedRuleType } = state.editingRuleContext;
+        const { ruleId } = state.editingRuleContext;
         const form = dom.ruleEditorForm;
-        form.innerHTML = '';
+        form.innerHTML = ''; // Очищаем всю форму один раз
 
         const rule = ruleId ? findElements(Object.values(state.editingRuleContext)).rule : null;
         dom.ruleModalTitle.textContent = ruleId ? 'Настроить правило' : 'Добавить новое правило';
 
-        let schema = null;
-
+        // --- 1. Создаем HTML для селекта и контейнера параметров ---
         const ruleTypeSelectHtml = `
             <div class="form-group">
-                <label for="rule-type-select">Тип правила</label>
-                <select id="rule-type-select" name="type" ${rule ? 'disabled' : ''}>
-                    <option value="">-- Выберите правило --</option>
-                    ${state.availableRules.map(r => `<option value="${r.id}" ${r.id === selectedRuleType ? 'selected' : ''}>${r.name}</option>`).join('')}
+                <label for="rule-type-select">Тип правила или группа</label>
+                <select id="rule-type-select" name="type_or_group">
+                    <option value="">-- Выберите --</option>
+                    <optgroup label="Правила">
+                        ${state.availableRules.map(r => `<option value="rule:${r.id}" ${rule && rule.type === r.id ? 'selected' : ''}>${r.name}</option>`).join('')}
+                    </optgroup>
+                    <optgroup label="Группы правил">
+                        ${state.availableGroups.map(g => `<option value="group:${g.id}" ${rule && rule.group_id === g.id ? 'selected' : ''}>${g.name}</option>`).join('')}
+                    </optgroup>
                 </select>
             </div>
+            <div id="rule-params-container"></div>
         `;
         form.insertAdjacentHTML('beforeend', ruleTypeSelectHtml);
 
-        if (selectedRuleType) {
-            const ruleDef = state.availableRules.find(r => r.id === selectedRuleType);
-            schema = ruleDef ? ruleDef.params_schema : null;
-        }
+        // --- 2. Функция для отрисовки только параметров ---
+        const renderParams = (selectedValue) => {
+            const paramsContainer = form.querySelector('#rule-params-container');
+            paramsContainer.innerHTML = ''; // Очищаем только контейнер параметров
 
-        if (schema) {
-            const currentParams = rule ? rule.params : {};
-            schema.forEach(param => {
-                const value = currentParams[param.name] ?? param.default;
-                let fieldHtml = '';
+            let schema = null;
+            if (selectedValue && selectedValue.startsWith('rule:')) {
+                const selectedRuleId = selectedValue.split(':')[1];
+                const ruleDef = state.availableRules.find(r => r.id === selectedRuleId);
+                schema = ruleDef ? ruleDef.params_schema : null;
+            }
 
-                if (param.type === 'checkbox') {
-                    // Use the dedicated checkbox group class for proper styling
-                    fieldHtml = `
-                        <div class="form-group-checkbox">
-                            <input type="checkbox" id="param-${param.name}" name="${param.name}" ${value ? 'checked' : ''}>
-                            <label for="param-${param.name}">${param.label}</label>
-                        </div>`;
-                } else {
-                    // Standard form group for other types
-                    fieldHtml = `<div class="form-group">`;
-                    fieldHtml += `<label for="param-${param.name}">${param.label}</label>`;
-                    if (param.type === 'select') {
-                        fieldHtml += `<select id="param-${param.name}" name="${param.name}">`;
-                        param.options.forEach(opt => {
-                            fieldHtml += `<option value="${opt.value}" ${opt.value === value ? 'selected' : ''}>${opt.label}</option>`;
-                        });
-                        fieldHtml += `</select>`;
-                    } else { // text
-                        fieldHtml += `<input type="text" id="param-${param.name}" name="${param.name}" value="${value || ''}">`;
+            if (schema) {
+                const currentParams = rule ? rule.params : {};
+                schema.forEach(param => {
+                    const value = currentParams[param.name] ?? param.default;
+                    let fieldHtml = '';
+
+                    if (param.type === 'checkbox') {
+                        fieldHtml = `
+                            <div class="form-group-checkbox">
+                                <input type="checkbox" id="param-${param.name}" name="${param.name}" ${value ? 'checked' : ''}>
+                                <label for="param-${param.name}">${param.label}</label>
+                            </div>`;
+                    } else {
+                        fieldHtml = `<div class="form-group">`;
+                        fieldHtml += `<label for="param-${param.name}">${param.label}</label>`;
+                        if (param.type === 'select') {
+                            fieldHtml += `<select id="param-${param.name}" name="${param.name}">`;
+                            param.options.forEach(opt => {
+                                fieldHtml += `<option value="${opt.value}" ${opt.value === value ? 'selected' : ''}>${opt.label}</option>`;
+                            });
+                            fieldHtml += `</select>`;
+                        } else {
+                            fieldHtml += `<input type="text" id="param-${param.name}" name="${param.name}" value="${value || ''}">`;
+                        }
+                        fieldHtml += `</div>`;
                     }
-                    fieldHtml += `</div>`;
-                }
-                form.insertAdjacentHTML('beforeend', fieldHtml);
-            });
-        }
+                    paramsContainer.insertAdjacentHTML('beforeend', fieldHtml);
+                });
+            }
+        };
 
+        // --- 3. Первичный рендер параметров и установка обработчика ---
         const ruleTypeSelect = form.querySelector('#rule-type-select');
-        if (!rule) { // Only allow changing type for new rules
-            ruleTypeSelect.addEventListener('change', () => {
-                state.editingRuleContext.type = ruleTypeSelect.value;
-                renderRuleEditor(); // Re-render modal with new schema
-            });
-        }
+
+        // Сразу отрисовываем параметры для уже существующего правила
+        renderParams(ruleTypeSelect.value);
+
+        // Вешаем обработчик для ВСЕХ случаев (новые и существующие правила),
+        // чтобы можно было менять тип существующего правила.
+        ruleTypeSelect.addEventListener('change', () => {
+            renderParams(ruleTypeSelect.value);
+        });
     }
 
     function openRuleModal(context) { // context = { fileId, sheetId, fieldId, ruleId? }
@@ -326,40 +354,61 @@ document.addEventListener('DOMContentLoaded', () => {
         const formData = new FormData(dom.ruleEditorForm);
         const { fileId, sheetId, fieldId, ruleId } = state.editingRuleContext;
         const { field } = findElements([fileId, sheetId, fieldId]);
+        const typeOrGroup = formData.get('type_or_group');
 
-        const type = formData.get('type');
-        if (!type) {
-            showNotification('Необходимо выбрать тип правила.', 'error');
+        if (!typeOrGroup) {
+            showNotification('Необходимо выбрать правило или группу.', 'error');
             return;
         }
 
-        const ruleDef = state.availableRules.find(r => r.id === type);
-        const params = {};
-        if (ruleDef && ruleDef.params_schema) {
-            ruleDef.params_schema.forEach(p => {
-                if (p.type === 'checkbox') {
-                    params[p.name] = formData.has(p.name);
-                } else {
-                    params[p.name] = formData.get(p.name);
-                }
-            });
+        const [itemType, itemId] = typeOrGroup.split(':');
+
+        // --- СОЗДАЁМ ЧИСТЫЙ ОБЪЕКТ БЕЗ ЛИШНИХ ПОЛЕЙ ---
+        let newRule;
+        if (itemType === 'group') {
+            // Только group_id — НИКАКОГО type и params!
+            newRule = {
+                id: ruleId || newId(),
+                group_id: itemId,
+                order: ruleId
+                    ? field.rules.find(r => r.id === ruleId)?.order ?? field.rules.length + 1
+                    : field.rules.length + 1
+            };
+        } else {
+            // Только type и params — НИКАКОГО group_id!
+            const params = {};
+            const ruleDef = state.availableRules.find(r => r.id === itemId);
+            if (ruleDef && ruleDef.params_schema) {
+                ruleDef.params_schema.forEach(p => {
+                    if (p.type === 'checkbox') {
+                        params[p.name] = formData.get(p.name) === 'on';
+                    } else {
+                        params[p.name] = formData.get(p.name) || null;
+                    }
+                });
+            }
+            newRule = {
+                id: ruleId || newId(),
+                type: itemId,
+                params: Object.keys(params).length > 0 ? params : null,
+                order: ruleId
+                    ? field.rules.find(r => r.id === ruleId)?.order ?? field.rules.length + 1
+                    : field.rules.length + 1
+            };
         }
 
-        if (ruleId) { // Editing existing rule
-            const rule = field.rules.find(r => r.id === ruleId);
-            rule.params = params;
-        } else { // Adding new rule
-            field.rules.push({
-                id: newId(),
-                type: type,
-                params: params,
-                value: null, // Deprecate 'value'
-                order: field.rules.length + 1
-            });
+        // --- ЗАМЕНЯЕМ ПРАВИЛО В МАССИВЕ ---
+        if (ruleId) {
+            const index = field.rules.findIndex(r => r.id === ruleId);
+            if (index !== -1) {
+                field.rules[index] = newRule; // ПОЛНАЯ ЗАМЕНА — НЕТ СТАРЫХ ПОЛЕЙ!
+            }
+        } else {
+            field.rules.push(newRule);
         }
+
         closeRuleModal();
         await handleSaveProject();
-        render(); // Re-render main UI
     }
 
     /**
@@ -400,15 +449,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     <tbody>
                         ${required_field_errors.map(err => {
                             const valueCellContent = (err.details && Array.isArray(err.details))
-                                ? highlightMisspelledWords(err.value, err.details)
-                                : (err.value || '');
+                                ? highlightMisspelledWords(escapeHTML(String(err.value ?? '')), err.details)
+                                : escapeHTML(String(err.value ?? ''));
                             return `
                                 <tr>
-                                    <td>${err.file_name}</td>
-                                    <td>${err.sheet_name}</td>
-                                    <td>${err.field_name}</td>
+                                    <td>${escapeHTML(err.file_name)}</td>
+                                    <td>${escapeHTML(err.sheet_name)}</td>
+                                    <td>${escapeHTML(err.field_name)}</td>
                                     <td>${err.row}</td>
-                                    <td>${err.error_type}</td>
+                                    <td>${escapeHTML(err.error_type)}</td>
                                     <td>${valueCellContent}</td>
                                 </tr>`;
                         }).join('')}
@@ -443,9 +492,9 @@ document.addEventListener('DOMContentLoaded', () => {
                                                 <tbody>
                                                 ${summary.detailed_errors.map(err => {
                                                     const valueCellContent = (err.details && Array.isArray(err.details))
-                                                        ? highlightMisspelledWords(err.value, err.details)
-                                                        : (err.value || '');
-                                                    return `<tr><td>${err.row}</td><td>${err.field_name}</td><td>${valueCellContent}</td></tr>`;
+                                                        ? highlightMisspelledWords(escapeHTML(String(err.value ?? '')), err.details)
+                                                        : escapeHTML(String(err.value ?? ''));
+                                                    return `<tr><td>${err.row}</td><td>${escapeHTML(err.field_name)}</td><td>${valueCellContent}</td></tr>`;
                                                 }).join('')}
                                                 </tbody>
                                             </table>
@@ -504,8 +553,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- 6. EVENT HANDLERS & LOGIC ---
-    function handleResultsClick(e) {
-        console.log("--- CLICK: handleResultsClick() CALLED ---");
+    async function handleResultsClick(e) {
+        // 2. Handle click on golden record stats
         const requiredStat = e.target.closest('#required-errors-stat.clickable');
         if (requiredStat) {
             state.showRequiredErrorsDetails = !state.showRequiredErrorsDetails;
@@ -513,6 +562,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
+        // 3. Handle click on summary row to see details
         const summaryRow = e.target.closest('.summary-row.clickable');
         if (summaryRow) {
             const detailsKey = summaryRow.dataset.detailsKey;
@@ -566,8 +616,16 @@ document.addEventListener('DOMContentLoaded', () => {
         } else if (target.closest('.edit-rule-btn')) {
             openRuleModal({ fileId, sheetId, fieldId, ruleId });
         } else if (target.closest('.remove-rule-btn')) {
-            const { field } = findElements([fileId, sheetId, fieldId, ruleId]);
-            if(field) { field.rules = field.rules.filter(r => r.id !== ruleId); modified = true; }
+            const { field } = findElements([fileId, sheetId, fieldId]);
+            if(field) {
+                field.rules = field.rules.filter(r => r.id !== ruleId);
+                // Важно! После удаления необходимо пересчитать `order` для всех оставшихся правил,
+                // чтобы избежать "дыр" в последовательности, которые могут вызвать ошибку на бэкенде.
+                field.rules.forEach((rule, index) => {
+                    rule.order = index + 1;
+                });
+                modified = true;
+            }
         } else if (target.closest('.move-rule-up-btn') || target.closest('.move-rule-down-btn')) {
             const { field } = findElements([fileId, sheetId, fieldId, ruleId]);
             if(field) {
@@ -591,10 +649,32 @@ document.addEventListener('DOMContentLoaded', () => {
     async function handleSaveProject() {
         try {
             const response = await api.saveProject(state.project);
-            if (!response.ok) throw new Error((await response.json()).detail);
+            if (!response.ok) {
+                const errorData = await response.json();
+                // Throw the actual error data, not just a message.
+                // This allows the catch block to inspect the structure.
+                throw errorData.detail || errorData;
+            }
             showNotification("Проект успешно сохранен!", 'success');
         } catch (error) {
-            showError(`Ошибка сохранения: ${error.message}`);
+            console.error("Full save error:", error); // Log the full error object for debugging.
+            let errorMessage = "Неизвестная ошибка";
+
+            if (typeof error === 'string') {
+                errorMessage = error;
+            } else if (Array.isArray(error)) {
+                // Handle FastAPI validation errors (which are arrays of objects).
+                errorMessage = error.map(e => `Поле '${e.loc.join(' → ')}': ${e.msg}`).join('\n');
+            } else if (error.message) {
+                // Handle standard JS Error objects.
+                errorMessage = error.message;
+            } else if (typeof error === 'object' && error !== null) {
+                // Fallback for other kinds of objects.
+                errorMessage = JSON.stringify(error, null, 2);
+            }
+
+            // Using textContent, so newline characters will be preserved if the CSS allows.
+            showError(`Ошибка сохранения:\n${errorMessage}`);
         }
     }
 
@@ -638,18 +718,21 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- 7. INITIALIZATION ---
     async function init() {
         try {
-            const [projectRes, rulesRes, resultsRes] = await Promise.all([
+            const [projectRes, rulesRes, groupsRes, resultsRes] = await Promise.all([
                 api.getProject(),
                 api.getRules(),
+                api.getRuleGroups(),
                 api.getResults() // Попытаемся загрузить последние результаты
             ]);
 
             // Основные данные проекта и правил обязательны
             if (!projectRes.ok) throw new Error((await projectRes.json()).detail);
             if (!rulesRes.ok) throw new Error('Failed to load rules');
+            if (!groupsRes.ok) throw new Error('Failed to load rule groups');
 
             state.project = await projectRes.json();
             state.availableRules = await rulesRes.json();
+            state.availableGroups = await groupsRes.json();
 
             // Результаты проверки не обязательны, обрабатываем их отдельно
             if (resultsRes.ok) {
@@ -674,6 +757,53 @@ document.addEventListener('DOMContentLoaded', () => {
     dom.fileInput.addEventListener('change', handleFileUpload);
     dom.filesListContainer.addEventListener('click', handleWorkspaceClick);
     dom.resultsContainer.addEventListener('click', handleResultsClick);
+    dom.resultsContainer.addEventListener('dblclick', async (e) => {
+        const misspelledSpan = e.target.closest('.misspelled-word');
+        if (!misspelledSpan) return;
+
+        const word = misspelledSpan.textContent.trim();
+        if (!word) return;
+
+        if (!confirm(`Добавить слово «${word}» в пользовательский словарь?`)) return;
+
+        try {
+            const response = await fetch('/api/dictionary', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ word })
+            });
+
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.detail || 'Не удалось добавить слово');
+            }
+
+            // Убираем подчёркивание у этого слова во всём документе
+            document.querySelectorAll(`.misspelled-word`).forEach(span => {
+                if (span.textContent.trim().toLowerCase() === word.toLowerCase()) {
+                    const textNode = document.createTextNode(span.textContent);
+                    span.replaceWith(textNode);
+                }
+            });
+
+            showNotification(`Слово «${word}» добавлено в словарь.`, 'success');
+
+            // 🔁 Запускаем повторную валидацию проекта, если включена настройка
+            if (state.project.auto_revalidate) {
+                await handleValidate();
+            }
+
+        } catch (err) {
+            showError(`Ошибка при добавлении в словарь: ${err.message}`);
+        }
+    });
+
+    dom.autoRevalidateToggle.addEventListener('change', (e) => {
+        if (!state.project) return;
+        state.project.auto_revalidate = e.target.checked;
+        handleSaveProject(); // Сохраняем изменение настройки
+    });
+
     // Modal listeners
     dom.ruleEditorForm.addEventListener('submit', handleSaveRule);
     dom.closeRuleModalBtn.addEventListener('click', closeRuleModal);

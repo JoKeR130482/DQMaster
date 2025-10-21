@@ -1,0 +1,45 @@
+{
+  "id": "ae7ded37-0cff-49cd-9f92-fd84d4ecfe80",
+  "name": "Тестовый проект для проверки логики правил",
+  "description": "",
+  "created_at": "2025-10-21T06:35:15.612645",
+  "updated_at": "2025-10-21T06:35:16.236768",
+  "files": [
+    {
+      "id": "ae24888e-a6d6-47da-9bb9-95006295ab38",
+      "name": "test_data_rules.xlsx",
+      "saved_name": "8a20794d-f5a1-4188-b25e-623486a3189b.xlsx",
+      "sheets": [
+        {
+          "id": "66ea0231-e125-4ba4-84b9-e75294934b7d",
+          "name": "Sheet1",
+          "is_active": true,
+          "fields": [
+            {
+              "id": "137875e2-0163-4821-a8bf-9b70ed16a654",
+              "name": "Колонка1",
+              "is_required": false,
+              "rules": [
+                {
+                  "id": "id_mh06wrk0_wm34ielb",
+                  "type": "is_empty",
+                  "group_id": null,
+                  "value": null,
+                  "params": null,
+                  "order": 1
+                }
+              ]
+            },
+            {
+              "id": "580984a1-f658-4cfd-82b6-370a24d07394",
+              "name": "Колонка2",
+              "is_required": false,
+              "rules": []
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "auto_revalidate": true
+}
