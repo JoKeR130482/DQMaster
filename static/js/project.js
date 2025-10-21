@@ -356,7 +356,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const { field } = findElements([fileId, sheetId, fieldId]);
         const typeOrGroup = formData.get('type_or_group');
 
-        const typeOrGroup = formData.get('type_or_group');
         if (!typeOrGroup) {
             showNotification('Необходимо выбрать правило или группу.', 'error');
             return;
@@ -364,46 +363,52 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const [itemType, itemId] = typeOrGroup.split(':');
 
-        let newRuleData;
+        // --- СОЗДАЁМ ЧИСТЫЙ ОБЪЕКТ БЕЗ ЛИШНИХ ПОЛЕЙ ---
+        let newRule;
         if (itemType === 'group') {
-            newRuleData = { group_id: itemId };
+            // Только group_id — НИКАКОГО type и params!
+            newRule = {
+                id: ruleId || newId(),
+                group_id: itemId,
+                order: ruleId
+                    ? field.rules.find(r => r.id === ruleId)?.order ?? field.rules.length + 1
+                    : field.rules.length + 1
+            };
         } else {
+            // Только type и params — НИКАКОГО group_id!
             const params = {};
             const ruleDef = state.availableRules.find(r => r.id === itemId);
             if (ruleDef && ruleDef.params_schema) {
                 ruleDef.params_schema.forEach(p => {
                     if (p.type === 'checkbox') {
-                        params[p.name] = formData.has(p.name);
+                        params[p.name] = formData.get(p.name) === 'on';
                     } else {
-                        params[p.name] = formData.get(p.name);
+                        params[p.name] = formData.get(p.name) || null;
                     }
                 });
             }
-            newRuleData = { type: itemId, params: params };
+            newRule = {
+                id: ruleId || newId(),
+                type: itemId,
+                params: Object.keys(params).length > 0 ? params : null,
+                order: ruleId
+                    ? field.rules.find(r => r.id === ruleId)?.order ?? field.rules.length + 1
+                    : field.rules.length + 1
+            };
         }
 
+        // --- ЗАМЕНЯЕМ ПРАВИЛО В МАССИВЕ ---
         if (ruleId) {
             const index = field.rules.findIndex(r => r.id === ruleId);
             if (index !== -1) {
-                const existingRule = field.rules[index];
-                field.rules[index] = {
-                    id: existingRule.id,
-                    order: existingRule.order,
-                    ...newRuleData,
-                };
+                field.rules[index] = newRule; // ПОЛНАЯ ЗАМЕНА — НЕТ СТАРЫХ ПОЛЕЙ!
             }
         } else {
-            const newRule = {
-                ...newRuleData,
-                id: newId(),
-                order: field.rules.length + 1,
-            };
             field.rules.push(newRule);
         }
 
-        closeRuleModal(); // Already calls render()
+        closeRuleModal();
         await handleSaveProject();
-        // The second render() was redundant and caused race conditions with Playwright.
     }
 
     /**
