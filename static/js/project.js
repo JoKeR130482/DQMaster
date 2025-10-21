@@ -71,7 +71,7 @@ document.addEventListener('DOMContentLoaded', () => {
         dom.errorContainer.textContent = message;
         dom.errorContainer.style.display = 'block';
     };
-    const newId = () => `id_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const newId = () => 'id_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 10);
 
     const escapeHTML = (str) => {
         if (typeof str !== 'string') return str;
@@ -354,6 +354,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const formData = new FormData(dom.ruleEditorForm);
         const { fileId, sheetId, fieldId, ruleId } = state.editingRuleContext;
         const { field } = findElements([fileId, sheetId, fieldId]);
+        const typeOrGroup = formData.get('type_or_group');
 
         const typeOrGroup = formData.get('type_or_group');
         if (!typeOrGroup) {
