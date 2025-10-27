@@ -2,37 +2,33 @@ import os
 import re
 import pandas as pd
 from spellchecker import SpellChecker
+import asyncio
+from typing import Optional
 
 RULE_NAME = "Проверка орфографии"
 RULE_DESC = "Значение содержит слова с орфографическими ошибками"
-IS_CONFIGURABLE = False # Это правило не имеет настраиваемых параметров
+IS_CONFIGURABLE = False
 
-# --- Глобальные переменные ---
-spell = SpellChecker(language='ru')
+spell: Optional[SpellChecker] = None
 custom_dictionary_path = os.path.join(os.path.dirname(__file__), '..', 'custom_dictionary.txt')
 WORD_REGEX = re.compile(r'[а-яА-ЯёЁ]+')
 
-def reload_custom_dictionary():
-    """
-    Перезагружает пользовательский словарь.
-    """
-    global spell
-    spell = SpellChecker(language='ru')
+def _load_dictionary_sync() -> SpellChecker:
+    new_spell = SpellChecker(language='ru')
     if os.path.exists(custom_dictionary_path):
-        spell.word_frequency.load_text_file(custom_dictionary_path)
-    print("DEBUG: Custom dictionary for spell_check reloaded.")
+        new_spell.word_frequency.load_text_file(custom_dictionary_path)
+    return new_spell
 
+async def reload_custom_dictionary():
+    global spell
+    loop = asyncio.get_running_loop()
+    spell = await loop.run_in_executor(None, _load_dictionary_sync)
+    print("DEBUG: Custom dictionary for spell_check reloaded asynchronously via direct import.")
 
-# --- Логика валидации ---
 def validate(value):
-    """
-    Проверяет орфографию каждого слова в строке.
-    Возвращает словарь:
-    {
-        "is_valid": bool,
-        "errors": list[str] | None
-    }
-    """
+    if spell is None:
+        return {"is_valid": True, "errors": None}
+
     if pd.isna(value) or not isinstance(value, str) or not value.strip():
         return {"is_valid": True, "errors": None}
 
@@ -56,6 +52,3 @@ def validate(value):
         return {"is_valid": False, "errors": misspelled_original_case}
 
     return {"is_valid": True, "errors": None}
-
-# --- Инициализация при первом импорте ---
-reload_custom_dictionary()
