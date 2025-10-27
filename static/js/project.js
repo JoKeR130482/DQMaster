@@ -452,7 +452,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                     <td>${escapeHTML(err.field_name)}</td>
                                     <td>${err.row}</td>
                                     <td>${escapeHTML(err.error_type)}</td>
-                                    <td>${valueCellContent}</td>
+                                    <td class="value-cell">${valueCellContent}</td>
                                 </tr>`;
                         }).join('')}
                     </tbody>
