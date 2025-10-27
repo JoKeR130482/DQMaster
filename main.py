@@ -36,17 +36,17 @@ from pydantic import root_validator
 
 class Rule(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    type: Optional[str] = None
-    group_id: Optional[str] = None
-    value: Optional[str] = None
+    type: Optional[str] = None # For a single rule
+    group_id: Optional[str] = None # For a rule group
+    value: Optional[str] = None # Deprecated, but kept for compatibility
     params: Optional[Dict[str, Any]] = None
     order: int
 
     @root_validator(pre=True)
     def check_type_or_group_id_exists(cls, values):
-        if values.get('type') is None and values.get('group_id') is None:
+        if 'type' not in values and 'group_id' not in values:
             raise ValueError('Either "type" or "group_id" must be provided.')
-        if values.get('type') is not None and values.get('group_id') is not None:
+        if 'type' in values and 'group_id' in values:
             raise ValueError('Cannot provide both "type" and "group_id".')
         return values
 
@@ -354,7 +354,7 @@ def _run_validation_for_project(project: Project) -> dict:
                                         "file_name": file_schema.name, "sheet_name": sheet_schema.name,
                                         "field_name": field_schema.name, "is_required": field_schema.is_required,
                                         "row": index + 2, "error_type": result["errors"],
-                                        "value": str(value).replace('"', '&quot;') if pd.notna(value) else "ПУСТО",
+                                        "value": str(value) if pd.notna(value) else "ПУСТО",
                                         "details": None # Groups don't provide word-level details
                                     })
                             continue
@@ -378,7 +378,7 @@ def _run_validation_for_project(project: Project) -> dict:
                                         "file_name": file_schema.name, "sheet_name": sheet_schema.name,
                                         "field_name": field_schema.name, "is_required": field_schema.is_required,
                                         "row": index + 2, "error_type": rule_name,
-                                        "value": str(value).replace('"', '&quot;') if pd.notna(value) else "ПУСТО"
+                                        "value": str(value) if pd.notna(value) else "ПУСТО"
                                     })
                             continue
 
@@ -398,7 +398,7 @@ def _run_validation_for_project(project: Project) -> dict:
                                     "file_name": file_schema.name, "sheet_name": sheet_schema.name,
                                     "field_name": field_schema.name, "is_required": field_schema.is_required,
                                     "row": index + 2, "error_type": rule_name,
-                                    "value": str(value).replace('"', '&quot;') if pd.notna(value) else "ПУСТО",
+                                    "value": str(value) if pd.notna(value) else "ПУСТО",
                                     "details": details
                                 }
                                 all_errors.append(error_entry)
