@@ -9,6 +9,7 @@ import shutil
 import pandas as pd
 import io
 import json
+import asyncio
 
 from fastapi import Depends, FastAPI, File, UploadFile, HTTPException
 from fastapi.responses import FileResponse
@@ -27,6 +28,7 @@ PROJECTS_DIR = BASE_DIR / "projects"
 RULE_GROUPS_PATH = BASE_DIR / "rule_groups.json"
 RULE_REGISTRY = {}
 RULE_GROUPS_REGISTRY = {}
+VALIDATION_STATUS = {}
 
 # ==============================================================================
 # 2. Pydantic Models (New Hierarchical Structure)
@@ -106,6 +108,17 @@ class ProjectPartialUpdateRequest(BaseModel):
 
 class FullProjectUpdateRequest(Project):
     pass
+
+class ValidationStatus(BaseModel):
+    is_running: bool
+    current_file: str = ""
+    current_sheet: str = ""
+    current_field: str = ""
+    current_rule: str = ""
+    processed_rows: int = 0
+    total_rows: int = 0
+    percentage: float = 0.0
+    message: str = ""
 
 # ==============================================================================
 # 3. Helper Functions
@@ -310,16 +323,47 @@ def _validate_group(value: Any, group: RuleGroup) -> dict:
     }
 
 
-def _run_validation_for_project(project: Project) -> dict:
-    """
-    Helper function to run validation for a given project.
-    This contains the core logic for processing files, sheets, and rules.
-    """
+async def _run_validation_async(project_id: str):
+    """Асинхронная функция для выполнения валидации."""
+    project = read_project(project_id)
+    if not project:
+        VALIDATION_STATUS[project_id]["is_running"] = False
+        VALIDATION_STATUS[project_id]["message"] = "Проект не найден"
+        return
+
+    # Сначала рассчитаем общее количество строк для прогресса
+    total_rows = 0
     project_files_dir = PROJECTS_DIR / project.id / "files"
-    project_total_rows = 0
+    for file_schema in project.files:
+        file_path = project_files_dir / file_schema.saved_name
+        if not file_path.exists():
+            continue
+        try:
+            xls = pd.ExcelFile(file_path)
+            # Correctly find the file_schema in the project to access its sheets
+            current_file_schema = next((f for f in project.files if f.id == file_schema.id), None)
+            if not current_file_schema:
+                continue
+            for sheet_schema in current_file_schema.sheets:
+                if not sheet_schema.is_active:
+                    continue
+                df = pd.read_excel(xls, sheet_name=sheet_schema.name)
+                total_rows += len(df)
+        except Exception as e:
+            print(f"Error calculating total rows for {file_schema.name}: {e}")
+
+    # Обновим статус
+    VALIDATION_STATUS[project_id]["total_rows"] = total_rows
+    VALIDATION_STATUS[project_id]["message"] = f"Начинаем проверку {len(project.files)} файлов..."
+
+    # Теперь выполняем саму валидацию
     all_errors = []
+    processed_rows = 0
 
     for file_schema in project.files:
+        VALIDATION_STATUS[project_id]["current_file"] = file_schema.name
+        VALIDATION_STATUS[project_id]["message"] = f"Обработка файла: {file_schema.name}"
+
         file_path = project_files_dir / file_schema.saved_name
         if not file_path.exists():
             continue
@@ -328,25 +372,41 @@ def _run_validation_for_project(project: Project) -> dict:
             if not sheet_schema.is_active:
                 continue
 
+            VALIDATION_STATUS[project_id]["current_sheet"] = sheet_schema.name
+            VALIDATION_STATUS[project_id]["message"] = f"Обработка листа: {sheet_schema.name} ({file_schema.name})"
+
             try:
                 df = pd.read_excel(file_path, sheet_name=sheet_schema.name)
                 sheet_total_rows = len(df)
                 if sheet_total_rows == 0:
                     continue
 
-                project_total_rows += sheet_total_rows
-
                 for field_schema in sheet_schema.fields:
                     if field_schema.name not in df.columns:
                         continue
 
                     for rule_config in sorted(field_schema.rules, key=lambda r: r.order):
-                        # --- Handle Rule Groups ---
+                        # Обновляем текущее правило
+                        rule_name = "Неизвестное правило"
+                        if rule_config.group_id:
+                            group = RULE_GROUPS_REGISTRY.get(rule_config.group_id)
+                            if group:
+                                rule_name = f"Группа: {group.name}"
+                        else:
+                            rule_def = RULE_REGISTRY.get(rule_config.type)
+                            if rule_def:
+                                formatter = rule_def.get("formatter")
+                                rule_name = formatter(rule_config.params) if formatter and rule_config.params else rule_def["name"]
+
+                        VALIDATION_STATUS[project_id]["current_field"] = field_schema.name
+                        VALIDATION_STATUS[project_id]["current_rule"] = rule_name
+                        VALIDATION_STATUS[project_id]["message"] = f"Проверка поля '{field_schema.name}' по правилу '{rule_name}' ({sheet_schema.name})"
+
+                        # --- Здесь идет основная логика валидации ---
                         if rule_config.group_id:
                             group = RULE_GROUPS_REGISTRY.get(rule_config.group_id)
                             if not group:
                                 continue
-
                             for index, value in df[field_schema.name].items():
                                 result = _validate_group(value, group)
                                 if not result["is_valid"]:
@@ -355,19 +415,15 @@ def _run_validation_for_project(project: Project) -> dict:
                                         "field_name": field_schema.name, "is_required": field_schema.is_required,
                                         "row": index + 2, "error_type": result["errors"],
                                         "value": str(value) if pd.notna(value) else "ПУСТО",
-                                        "details": None # Groups don't provide word-level details
+                                        "details": None
                                     })
                             continue
 
-                        # --- Handle Single Rules ---
                         rule_def = RULE_REGISTRY.get(rule_config.type)
                         if not rule_def:
                             continue
-
                         validator = rule_def["validator"]
                         params = rule_config.params or {}
-                        formatter = rule_def.get("formatter")
-                        rule_name = formatter(params) if formatter and params else rule_def["name"]
 
                         if rule_def.get("needs_column_access"):
                             validity_series = validator(df[field_schema.name])
@@ -386,13 +442,11 @@ def _run_validation_for_project(project: Project) -> dict:
                             result = validator(value, params=params) if 'params' in inspect.signature(validator).parameters else validator(value)
                             is_valid = False
                             details = None
-
                             if isinstance(result, bool):
                                 is_valid = result
                             elif isinstance(result, dict):
                                 is_valid = result.get("is_valid", False)
                                 details = result.get("errors")
-
                             if not is_valid:
                                 error_entry = {
                                     "file_name": file_schema.name, "sheet_name": sheet_schema.name,
@@ -403,11 +457,16 @@ def _run_validation_for_project(project: Project) -> dict:
                                 }
                                 all_errors.append(error_entry)
 
+                # Обновляем общее количество обработанных строк
+                processed_rows += sheet_total_rows
+                VALIDATION_STATUS[project_id]["processed_rows"] = processed_rows
+                VALIDATION_STATUS[project_id]["percentage"] = (processed_rows / total_rows * 100) if total_rows > 0 else 0
+
             except Exception as e:
                 print(f"Error processing sheet {sheet_schema.name} in file {file_schema.name}: {e}")
                 continue
 
-    # --- Aggregation and Formatting ---
+    # После завершения всех проверок, формируем итоговый отчет
     required_field_errors = [e for e in all_errors if e["is_required"]]
     unique_error_row_keys = {f"{e['file_name']}-{e['sheet_name']}-{e['row']}" for e in required_field_errors}
 
@@ -421,7 +480,7 @@ def _run_validation_for_project(project: Project) -> dict:
                 df_sheet = pd.read_excel(PROJECTS_DIR / project.id / "files" / file_schema.saved_name, sheet_name=sheet_schema.name)
                 sheet_total_rows = len(df_sheet)
             except Exception:
-                sheet_total_rows = 0 # Cannot read sheet, assume 0 rows
+                sheet_total_rows = 0
 
             all_applicable_rule_names = set()
             for f in sheet_schema.fields:
@@ -430,8 +489,7 @@ def _run_validation_for_project(project: Project) -> dict:
                         rule_def = RULE_REGISTRY.get(r_conf.type)
                         formatter = rule_def.get("formatter")
                         rule_name = formatter(r_conf.params) if formatter and r_conf.params else rule_def.get("name")
-                        if rule_name:
-                            all_applicable_rule_names.add(rule_name)
+                        if rule_name: all_applicable_rule_names.add(rule_name)
                     elif r_conf.group_id and RULE_GROUPS_REGISTRY.get(r_conf.group_id):
                         group = RULE_GROUPS_REGISTRY.get(r_conf.group_id)
                         all_applicable_rule_names.add(group.name)
@@ -443,59 +501,71 @@ def _run_validation_for_project(project: Project) -> dict:
                 rule_errors = [e for e in sheet_errors if e["error_type"] == rule_name]
                 error_count = len(rule_errors)
                 summary_list.append({
-                    "rule_name": rule_name,
-                    "error_count": error_count,
+                    "rule_name": rule_name, "error_count": error_count,
                     "error_percentage": round((error_count / sheet_total_rows) * 100, 2) if sheet_total_rows > 0 else 0,
                     "detailed_errors": rule_errors
                 })
             summary_list.sort(key=lambda x: x['error_count'], reverse=True)
 
             sheet_error_row_keys = {e['row'] for e in sheet_errors}
-            sheet_error_rows_count = len(sheet_error_row_keys)
-            sheet_error_percentage = round((sheet_error_rows_count / sheet_total_rows) * 100, 2) if sheet_total_rows > 0 else 0
-
             sheet_summaries.append({
-                "sheet_name": sheet_schema.name,
-                "total_rows": sheet_total_rows,
-                "sheet_error_rows_count": sheet_error_rows_count,
-                "sheet_error_percentage": sheet_error_percentage,
+                "sheet_name": sheet_schema.name, "total_rows": sheet_total_rows,
+                "sheet_error_rows_count": len(sheet_error_row_keys),
+                "sheet_error_percentage": round((len(sheet_error_row_keys) / sheet_total_rows) * 100, 2) if sheet_total_rows > 0 else 0,
                 "rule_summaries": summary_list
             })
 
         if sheet_summaries:
-            file_results.append({
-                "file_name": file_schema.name,
-                "sheets": sheet_summaries
-            })
+            file_results.append({"file_name": file_schema.name, "sheets": sheet_summaries})
 
-    return {
-        "total_processed_rows": project_total_rows,
+    response_data = {
+        "total_processed_rows": total_rows,
         "required_field_error_rows_count": len(unique_error_row_keys),
         "required_field_errors": required_field_errors,
         "file_results": file_results,
         "validated_at": datetime.datetime.utcnow().isoformat()
     }
 
+    results_path = PROJECTS_DIR / project_id / "validation_result.json"
+    try:
+        results_path.write_text(json.dumps(response_data, indent=2, ensure_ascii=False), encoding="utf-8")
+    except IOError as e:
+        print(f"Failed to save validation results: {e}")
+
+    VALIDATION_STATUS[project_id]["is_running"] = False
+    VALIDATION_STATUS[project_id]["message"] = "Проверка завершена."
+    VALIDATION_STATUS[project_id]["percentage"] = 100.0
+
 
 @app.post("/api/projects/{project_id}/validate")
 async def validate_project_data(project_id: str):
     """
-    Validates all active sheets and fields in a project against the configured rules.
-    Saves the results to a JSON file and returns them.
+    Запускает валидацию и сразу возвращает ID задачи или начальное состояние.
     """
     project = read_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    response_data = _run_validation_for_project(project)
+    # Инициализируем статус проверки
+    VALIDATION_STATUS[project_id] = {
+        "is_running": True, "current_file": "", "current_sheet": "",
+        "current_field": "", "current_rule": "", "processed_rows": 0,
+        "total_rows": 0, "percentage": 0.0, "message": "Запуск проверки..."
+    }
 
-    results_path = PROJECTS_DIR / project_id / "validation_result.json"
-    try:
-        results_path.write_text(json.dumps(response_data, indent=2, ensure_ascii=False), encoding="utf-8")
-    except IOError as e:
-        raise HTTPException(status_code=500, detail=f"Failed to save validation results: {e}")
+    # Запускаем проверку в фоновом режиме
+    asyncio.create_task(_run_validation_async(project_id))
 
-    return response_data
+    return {"status": "started", "project_id": project_id}
+
+
+@app.get("/api/projects/{project_id}/validation-status", response_model=ValidationStatus)
+async def get_validation_status(project_id: str):
+    """Возвращает текущее состояние проверки."""
+    status = VALIDATION_STATUS.get(project_id, {
+        "is_running": False, "message": "Проверка не запущена."
+    })
+    return status
 
 @app.get("/api/projects/{project_id}/results")
 async def get_validation_results(project_id: str):

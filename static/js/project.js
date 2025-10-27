@@ -1,6 +1,7 @@
 document.addEventListener('DOMContentLoaded', () => {
     // --- 1. STATE & CONSTANTS ---
     const projectId = window.location.pathname.split('/').pop();
+    let validationPollingId = null;
     let state = {
         project: null,
         availableRules: [],
@@ -452,7 +453,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                     <td>${escapeHTML(err.field_name)}</td>
                                     <td>${err.row}</td>
                                     <td>${escapeHTML(err.error_type)}</td>
-                                    <td>${valueCellContent}</td>
+                                    <td class="value-cell">${valueCellContent}</td>
                                 </tr>`;
                         }).join('')}
                     </tbody>
@@ -678,15 +679,88 @@ document.addEventListener('DOMContentLoaded', () => {
         dom.summaryResults.innerHTML = '<div class="loading-spinner"></div>'; // Show loading indicator
         dom.detailedResults.innerHTML = '';
         state.validationResults = null;
+        state.showRequiredErrorsDetails = false; // Сбрасываем детали при новой проверке
 
         try {
             const response = await api.validate();
             if (!response.ok) throw new Error((await response.json()).detail);
-            state.validationResults = await response.json();
-            renderValidationResults();
+
+            // После запуска проверки, начинаем опрашивать её статус
+            startValidationPolling(projectId);
+
         } catch (error) {
             showError(`Ошибка валидации: ${error.message}`);
             dom.summaryResults.innerHTML = ''; // Clear loading indicator on error
+            stopValidationPolling();
+        }
+    }
+
+    function startValidationPolling(projectId) {
+        stopValidationPolling();
+        console.log('[DEBUG] Starting validation polling.');
+        validationPollingId = setInterval(async () => {
+            console.log('[DEBUG] Polling for status...');
+            try {
+                const response = await fetch(`/api/projects/${projectId}/validation-status`);
+                console.log(`[DEBUG] Poll response status: ${response.status}`);
+                if (!response.ok) throw new Error('Failed to get status');
+
+                const status = await response.json();
+                console.log('[DEBUG] Poll status received:', status);
+                updateValidationUI(status);
+
+                if (!status.is_running) {
+                    stopValidationPolling();
+                    console.log("[DEBUG] Polling stopped. Fetching final results...");
+                    loadAndRenderFinalResults(projectId);
+                }
+            } catch (error) {
+                console.error('[DEBUG] Polling error:', error);
+                stopValidationPolling();
+            }
+        }, 500);
+    }
+
+    function stopValidationPolling() {
+        if (validationPollingId) {
+            clearInterval(validationPollingId);
+            validationPollingId = null;
+        }
+    }
+
+    function updateValidationUI(status) {
+        // Показываем индикатор загрузки
+        dom.summaryResults.innerHTML = `
+            <div style="text-align: center; padding: 2rem;">
+                <div class="loading-spinner" style="margin: 0 auto;"></div>
+                <p><strong>Выполняется проверка...</strong></p>
+                <p>${status.message}</p>
+                <p>Файл: <strong>${status.current_file || '—'}</strong></p>
+                <p>Лист: <strong>${status.current_sheet || '—'}</strong></p>
+                <p>Поле: <strong>${status.current_field || '—'}</strong></p>
+                <p>Правило: <strong>${status.current_rule || '—'}</strong></p>
+                <div style="margin-top: 1rem;">
+                    <progress value="${status.percentage}" max="100" style="width: 100%; height: 10px;"></progress>
+                    <div style="display: flex; justify-content: space-between; margin-top: 0.25rem;">
+                        <span>${Math.round(status.processed_rows)} из ${status.total_rows} строк</span>
+                        <span>${status.percentage.toFixed(1)}%</span>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    async function loadAndRenderFinalResults(projectId) {
+        try {
+            const response = await fetch(`/api/projects/${projectId}/results`);
+            if (!response.ok) {
+                throw new Error('Не удалось загрузить результаты');
+            }
+            state.validationResults = await response.json();
+            renderValidationResults(); // Функция уже существует, она отрисует итоговые данные
+        } catch (error) {
+            showError(`Ошибка при загрузке результатов: ${error.message}`);
+            dom.summaryResults.innerHTML = '<div class="error-container">Не удалось загрузить результаты проверки.</div>';
         }
     }
 
