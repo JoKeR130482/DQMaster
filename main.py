@@ -36,17 +36,17 @@ from pydantic import root_validator
 
 class Rule(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    type: Optional[str] = None # For a single rule
-    group_id: Optional[str] = None # For a rule group
-    value: Optional[str] = None # Deprecated, but kept for compatibility
+    type: Optional[str] = None
+    group_id: Optional[str] = None
+    value: Optional[str] = None
     params: Optional[Dict[str, Any]] = None
     order: int
 
     @root_validator(pre=True)
     def check_type_or_group_id_exists(cls, values):
-        if 'type' not in values and 'group_id' not in values:
+        if values.get('type') is None and values.get('group_id') is None:
             raise ValueError('Either "type" or "group_id" must be provided.')
-        if 'type' in values and 'group_id' in values:
+        if values.get('type') is not None and values.get('group_id') is not None:
             raise ValueError('Cannot provide both "type" and "group_id".')
         return values
 
