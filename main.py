@@ -15,9 +15,6 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, ValidationError
 
-# Прямой импорт для надежности
-from rules.spell_check import reload_custom_dictionary as reload_spell_check_dictionary
-
 # ==============================================================================
 # 1. Globals & App Initialization
 # ==============================================================================
@@ -39,17 +36,17 @@ from pydantic import root_validator
 
 class Rule(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    type: Optional[str] = None # For a single rule
-    group_id: Optional[str] = None # For a rule group
-    value: Optional[str] = None # Deprecated, but kept for compatibility
+    type: Optional[str] = None
+    group_id: Optional[str] = None
+    value: Optional[str] = None
     params: Optional[Dict[str, Any]] = None
     order: int
 
     @root_validator(pre=True)
     def check_type_or_group_id_exists(cls, values):
-        if 'type' not in values and 'group_id' not in values:
+        if values.get('type') is None and values.get('group_id') is None:
             raise ValueError('Either "type" or "group_id" must be provided.')
-        if 'type' in values and 'group_id' in values:
+        if values.get('type') is not None and values.get('group_id') is not None:
             raise ValueError('Cannot provide both "type" and "group_id".')
         return values
 
@@ -142,21 +139,6 @@ def load_rules():
     if not RULES_DIR.exists(): return
     for filename in os.listdir(RULES_DIR):
         if filename.endswith(".py") and filename != "__init__.py":
-            # Исключаем spell_check.py из динамической загрузки
-            if filename == "spell_check.py":
-                from rules import spell_check
-                RULE_REGISTRY["spell_check"] = {
-                    "id": "spell_check",
-                    "name": spell_check.RULE_NAME,
-                    "description": spell_check.RULE_DESC,
-                    "validator": spell_check.validate,
-                    "is_configurable": spell_check.IS_CONFIGURABLE,
-                    "formatter": None,
-                    "params_schema": None,
-                    "needs_column_access": False,
-                }
-                continue
-
             try:
                 spec = importlib.util.spec_from_file_location(filename[:-3], RULES_DIR / filename)
                 if spec and spec.loader:
@@ -172,6 +154,7 @@ def load_rules():
                             "formatter": getattr(module, "format_name", None),
                             "params_schema": getattr(module, "PARAMS_SCHEMA", None),
                             "needs_column_access": getattr(module, "NEEDS_COLUMN_ACCESS", False),
+                            "module": module
                         }
             except Exception as e:
                 print(f"Error loading rule from {filename}: {e}")
@@ -546,7 +529,8 @@ async def add_word_to_dictionary(request: AddWordRequest, current_words: List[st
         raise HTTPException(status_code=400, detail="Word already exists in the dictionary.")
     with CUSTOM_DICT_PATH.open("a", encoding="utf-8") as f:
         f.write(f"\n{new_word}")
-    await reload_spell_check_dictionary()
+    if "spell_check" in RULE_REGISTRY:
+        RULE_REGISTRY["spell_check"]["module"].reload_custom_dictionary()
     return {"message": "Word added successfully."}
 
 class EditWordRequest(BaseModel):
@@ -584,7 +568,10 @@ async def edit_word_in_dictionary(old_word: str, request: EditWordRequest):
             updated_lines.append(line)
 
     CUSTOM_DICT_PATH.write_text("\n".join(updated_lines), encoding="utf-8")
-    await reload_spell_check_dictionary()
+
+    if "spell_check" in RULE_REGISTRY:
+        RULE_REGISTRY["spell_check"]["module"].reload_custom_dictionary()
+
     return {"message": "Word updated successfully."}
 
 @app.delete("/api/dictionary/{word}", status_code=200)
@@ -596,7 +583,8 @@ async def remove_word_from_dictionary(word: str, current_words: List[str] = Depe
         raise HTTPException(status_code=404, detail="Word not found in the dictionary.")
     updated_words = [w for w in current_words if w.lower() != word_to_delete]
     CUSTOM_DICT_PATH.write_text("\n".join(updated_words), encoding="utf-8")
-    await reload_spell_check_dictionary()
+    if "spell_check" in RULE_REGISTRY:
+        RULE_REGISTRY["spell_check"]["module"].reload_custom_dictionary()
     return {"message": "Word removed successfully."}
 
 # --- Rule Groups ---
@@ -680,4 +668,3 @@ async def startup_event():
     PROJECTS_DIR.mkdir(exist_ok=True)
     load_rules()
     read_rule_groups()
-    await reload_spell_check_dictionary()

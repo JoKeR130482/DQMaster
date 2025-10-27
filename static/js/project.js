@@ -363,19 +363,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const [itemType, itemId] = typeOrGroup.split(':');
 
-        // --- СОЗДАЁМ ЧИСТЫЙ ОБЪЕКТ БЕЗ ЛИШНИХ ПОЛЕЙ ---
-        let newRule;
+        // Создаем базовый объект для нового или обновляемого правила.
+        const baseRule = {
+            id: ruleId || newId(),
+            order: ruleId
+                ? field.rules.find(r => r.id === ruleId)?.order ?? field.rules.length + 1
+                : field.rules.length + 1,
+            type: null,
+            group_id: null,
+            params: null
+        };
+
         if (itemType === 'group') {
-            // Только group_id — НИКАКОГО type и params!
-            newRule = {
-                id: ruleId || newId(),
-                group_id: itemId,
-                order: ruleId
-                    ? field.rules.find(r => r.id === ruleId)?.order ?? field.rules.length + 1
-                    : field.rules.length + 1
-            };
+            baseRule.group_id = itemId;
         } else {
-            // Только type и params — НИКАКОГО group_id!
+            baseRule.type = itemId;
             const params = {};
             const ruleDef = state.availableRules.find(r => r.id === itemId);
             if (ruleDef && ruleDef.params_schema) {
@@ -387,24 +389,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 });
             }
-            newRule = {
-                id: ruleId || newId(),
-                type: itemId,
-                params: Object.keys(params).length > 0 ? params : null,
-                order: ruleId
-                    ? field.rules.find(r => r.id === ruleId)?.order ?? field.rules.length + 1
-                    : field.rules.length + 1
-            };
+            if(Object.keys(params).length > 0) {
+                baseRule.params = params;
+            }
         }
 
-        // --- ЗАМЕНЯЕМ ПРАВИЛО В МАССИВЕ ---
         if (ruleId) {
             const index = field.rules.findIndex(r => r.id === ruleId);
-            if (index !== -1) {
-                field.rules[index] = newRule; // ПОЛНАЯ ЗАМЕНА — НЕТ СТАРЫХ ПОЛЕЙ!
-            }
+            if (index !== -1) field.rules[index] = baseRule;
         } else {
-            field.rules.push(newRule);
+            field.rules.push(baseRule);
         }
 
         closeRuleModal();
