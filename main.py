@@ -546,6 +546,7 @@ async def validate_project_data(project_id: str):
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
+    # --- НАЧАЛО ИЗМЕНЕНИЙ ---
     # Явно инициализируем статус ПЕРЕД запуском фоновой задачи
     initial_status = {
         "is_running": True,
