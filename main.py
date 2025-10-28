@@ -331,6 +331,8 @@ async def _run_validation_async(project_id: str):
         VALIDATION_STATUS[project_id]["message"] = "Проект не найден"
         return
 
+    loop = asyncio.get_event_loop()
+
     # Сначала рассчитаем общее количество проверок для корректного прогресса
     total_rows = 0
     project_files_dir = PROJECTS_DIR / project.id / "files"
@@ -338,12 +340,13 @@ async def _run_validation_async(project_id: str):
         file_path = project_files_dir / file_schema.saved_name
         if not file_path.exists(): continue
         try:
-            xls = pd.ExcelFile(file_path)
+            # Выполняем блокирующие операции в отдельном потоке
+            xls = await loop.run_in_executor(None, pd.ExcelFile, file_path)
             current_file_schema = next((f for f in project.files if f.id == file_schema.id), None)
             if not current_file_schema: continue
             for sheet_schema in current_file_schema.sheets:
                 if not sheet_schema.is_active: continue
-                df = pd.read_excel(xls, sheet_name=sheet_schema.name)
+                df = await loop.run_in_executor(None, pd.read_excel, xls, sheet_schema.name)
                 if df.empty: continue
 
                 num_rules_for_sheet = sum(len(field.rules) for field in sheet_schema.fields)
@@ -374,7 +377,7 @@ async def _run_validation_async(project_id: str):
             VALIDATION_STATUS[project_id]["message"] = f"Обработка листа: {sheet_schema.name} ({file_schema.name})"
 
             try:
-                df = pd.read_excel(file_path, sheet_name=sheet_schema.name)
+                df = await loop.run_in_executor(None, pd.read_excel, file_path, sheet_schema.name)
                 sheet_total_rows = len(df)
                 if sheet_total_rows == 0:
                     continue
@@ -488,7 +491,7 @@ async def _run_validation_async(project_id: str):
             if not sheet_schema.is_active: continue
 
             try:
-                df_sheet = pd.read_excel(PROJECTS_DIR / project.id / "files" / file_schema.saved_name, sheet_name=sheet_schema.name)
+                df_sheet = await loop.run_in_executor(None, pd.read_excel, PROJECTS_DIR / project.id / "files" / file_schema.saved_name, sheet_schema.name)
                 sheet_total_rows = len(df_sheet)
             except Exception:
                 sheet_total_rows = 0
