@@ -719,30 +719,22 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function startValidationPolling(projectId) {
-        // Останавливаем предыдущий опрос, если он есть
         stopValidationPolling();
-
-        // Устанавливаем интервал для опроса статуса каждые 500 мс
         validationPollingId = setInterval(async () => {
             try {
                 const response = await fetch(`/api/projects/${projectId}/validation-status`);
                 if (!response.ok) {
-                    throw new Error('Не удалось получить статус');
+                    throw new Error(`Failed to get status, server responded with ${response.status}`);
                 }
                 const status = await response.json();
-
-                // Обновляем UI на основе статуса
                 updateValidationUI(status);
 
-                // Если проверка завершена, останавливаем опрос
                 if (!status.is_running) {
                     stopValidationPolling();
-                    // Загружаем и отображаем итоговые результаты
                     loadAndRenderFinalResults(projectId);
                 }
-
             } catch (error) {
-                console.error('Ошибка при получении статуса:', error);
+                console.error('Polling error:', error);
                 stopValidationPolling();
             }
         }, 500);
