@@ -677,26 +677,38 @@ document.addEventListener('DOMContentLoaded', () => {
     async function handleValidate() {
         await handleSaveProject();
         dom.resultsContainer.style.display = 'none';
-        dom.progressContainer.style.display = 'block';
+        dom.progressContainer.style.display = 'block'; // Показываем контейнер прогресса
         state.validationResults = null;
         state.showRequiredErrorsDetails = false;
 
         try {
             const response = await api.validate();
-            if (!response.ok) throw new Error((await response.json()).detail);
+            if (!response.ok) {
+                throw new Error((await response.json()).detail);
+            }
 
-            // Сразу показать начальное состояние прогресса
-            updateValidationUI({
-                is_running: true,
-                message: "Запуск проверки...",
-                percentage: 0,
-                processed_rows: 0,
-                total_rows: 0,
-                current_file: "—",
-                current_sheet: "—",
-                current_field: "—",
-                current_rule: "—"
-            });
+            // Получаем начальный статус из ответа API
+            const validationResponse = await response.json();
+
+            // Обновляем UI с начальным статусом
+            if (validationResponse.initial_status) {
+                updateValidationUI(validationResponse.initial_status);
+            } else {
+                // Если начального статуса нет, используем дефолтный
+                updateValidationUI({
+                    is_running: true,
+                    message: "Запуск проверки...",
+                    percentage: 0,
+                    processed_rows: 0,
+                    total_rows: 0,
+                    current_file: "—",
+                    current_sheet: "—",
+                    current_field: "—",
+                    current_rule: "—"
+                });
+            }
+
+            // Запускаем опрос статуса
             startValidationPolling(projectId);
 
         } catch (error) {
@@ -744,7 +756,18 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function updateValidationUI(status) {
-        if (!status.is_running) return;
+        if (!status || !status.is_running) {
+            // Если статус не пришел или проверка не запущена, показываем ошибку
+            dom.progressContainer.innerHTML = `
+            <div class="error-container" style="text-align: center; padding: 2rem;">
+                <p>❌ Не удалось получить статус проверки.</p>
+                <p>Попробуйте снова или обратитесь к администратору.</p>
+            </div>
+        `;
+            stopValidationPolling(); // Останавливаем опрос, чтобы не засорять логи
+            return;
+        }
+
         const percentage = status.total_rows > 0 ? (status.processed_rows / status.total_rows) * 100 : 0;
         dom.progressContainer.innerHTML = `
             <div style="text-align: center; padding: 2rem;">

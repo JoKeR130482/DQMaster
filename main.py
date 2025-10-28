@@ -546,17 +546,27 @@ async def validate_project_data(project_id: str):
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    # Инициализируем статус проверки
-    VALIDATION_STATUS[project_id] = {
-        "is_running": True, "current_file": "", "current_sheet": "",
-        "current_field": "", "current_rule": "", "processed_rows": 0,
-        "total_rows": 0, "percentage": 0.0, "message": "Запуск проверки..."
+    # Явно инициализируем статус ПЕРЕД запуском фоновой задачи
+    initial_status = {
+        "is_running": True,
+        "current_file": "",
+        "current_sheet": "",
+        "current_field": "",
+        "current_rule": "",
+        "processed_rows": 0,
+        "total_rows": 0,
+        "percentage": 0.0,
+        "message": "Запуск проверки..."
     }
+
+    # Присваиваем статус напрямую, чтобы он был доступен немедленно
+    VALIDATION_STATUS[project_id] = initial_status
 
     # Запускаем проверку в фоновом режиме
     asyncio.create_task(_run_validation_async(project_id))
 
-    return {"status": "started", "project_id": project_id}
+    # Возвращаем начальный статус клиенту
+    return {"status": "started", "project_id": project_id, "initial_status": initial_status}
 
 
 @app.get("/api/projects/{project_id}/validation-status", response_model=ValidationStatus)
