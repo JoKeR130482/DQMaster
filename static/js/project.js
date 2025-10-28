@@ -676,20 +676,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function handleValidate() {
         await handleSaveProject();
-        dom.resultsContainer.style.display = 'none'; // Hide old results
-        dom.progressContainer.style.display = 'block'; // Show progress container
-        dom.progressContainer.innerHTML = `
-            <div style="text-align: center; padding: 2rem;">
-                <div class="loading-spinner" style="margin: 0 auto;"></div>
-                <p><strong>Запуск проверки...</strong></p>
-            </div>`;
+        dom.resultsContainer.style.display = 'none';
+        dom.progressContainer.style.display = 'block';
         state.validationResults = null;
         state.showRequiredErrorsDetails = false;
 
         try {
             const response = await api.validate();
             if (!response.ok) throw new Error((await response.json()).detail);
+
+            // Сразу показать начальное состояние прогресса
+            updateValidationUI({
+                is_running: true,
+                message: "Запуск проверки...",
+                percentage: 0,
+                processed_rows: 0,
+                total_rows: 0,
+                current_file: "",
+                current_sheet: "",
+                current_field: "",
+                current_rule: ""
+            });
             startValidationPolling(projectId);
+
         } catch (error) {
             showError(`Ошибка валидации: ${error.message}`);
             dom.progressContainer.innerHTML = '<div class="error-container">Не удалось запустить проверку.</div>';
@@ -736,6 +745,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function updateValidationUI(status) {
         if (!status.is_running) return;
+        const percentage = status.total_rows > 0 ? (status.processed_rows / status.total_rows) * 100 : 0;
         dom.progressContainer.innerHTML = `
             <div style="text-align: center; padding: 2rem;">
                 <div class="loading-spinner" style="margin: 0 auto;"></div>
@@ -746,10 +756,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 <p>Поле: <strong>${status.current_field || '—'}</strong></p>
                 <p>Правило: <strong>${status.current_rule || '—'}</strong></p>
                 <div style="margin-top: 1rem;">
-                    <progress value="${status.percentage}" max="100" style="width: 100%; height: 10px;"></progress>
+                    <progress value="${percentage}" max="100" style="width: 100%; height: 10px;"></progress>
                     <div style="display: flex; justify-content: space-between; margin-top: 0.25rem;">
                         <span>${Math.round(status.processed_rows)} из ${status.total_rows} строк</span>
-                        <span>${status.percentage.toFixed(1)}%</span>
+                        <span>${percentage.toFixed(1)}%</span>
                     </div>
                 </div>
             </div>
