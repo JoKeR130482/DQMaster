@@ -441,19 +441,25 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="detailed-results-container required-errors-details">
                 <h5>Детализация ошибок в обязательных полях</h5>
                 <table class="results-table detailed-table">
-                    <thead><tr><th>Файл</th><th>Лист</th><th>Поле</th><th>Строка</th><th>Ошибка</th><th>Значение</th></tr></thead>
+                    <thead><tr><th>Файл</th><th>Лист</th><th>Поле</th><th>Строка</th><th>Правило</th><th>Значение</th></tr></thead>
                     <tbody>
                         ${required_field_errors.map(err => {
                             const valueCellContent = (err.details && Array.isArray(err.details))
                                 ? highlightMisspelledWords(escapeHTML(String(err.value ?? '')), err.details)
                                 : escapeHTML(String(err.value ?? ''));
+
+                            // Отображаем имя правила вместо общего типа ошибки
+                            const ruleName = err.rule_id
+                                ? (state.availableRules.find(r => r.id === err.rule_id)?.name || err.error_type)
+                                : err.error_type;
+
                             return `
                                 <tr>
                                     <td>${escapeHTML(err.file_name)}</td>
                                     <td>${escapeHTML(err.sheet_name)}</td>
                                     <td>${escapeHTML(err.field_name)}</td>
                                     <td>${err.row}</td>
-                                    <td>${escapeHTML(err.error_type)}</td>
+                                    <td>${escapeHTML(ruleName)}</td>
                                     <td class="value-cell">${valueCellContent}</td>
                                 </tr>`;
                         }).join('')}
@@ -484,13 +490,15 @@ document.addEventListener('DOMContentLoaded', () => {
                                     <tr class="details-row"><td colspan="3">
                                         <div class="detailed-results-container">
                                             <table class="results-table detailed-table">
-                                                <thead><tr><th>Строка</th><th>Поле</th><th>Значение</th></tr></thead>
+                                                <thead><tr><th>Строка</th><th>Поле</th><th>Правило</th><th>Значение</th></tr></thead>
                                                 <tbody>
                                                 ${summary.detailed_errors.map(err => {
                                                     const valueCellContent = (err.details && Array.isArray(err.details))
                                                         ? highlightMisspelledWords(escapeHTML(String(err.value ?? '')), err.details)
                                                         : escapeHTML(String(err.value ?? ''));
-                                                    return `<tr><td>${err.row}</td><td>${escapeHTML(err.field_name)}</td><td>${valueCellContent}</td></tr>`;
+                                                    // err.error_type теперь содержит имя конкретного правила
+                                                    const ruleName = err.error_type;
+                                                    return `<tr><td>${err.row}</td><td>${escapeHTML(err.field_name)}</td><td>${escapeHTML(ruleName)}</td><td>${valueCellContent}</td></tr>`;
                                                 }).join('')}
                                                 </tbody>
                                             </table>

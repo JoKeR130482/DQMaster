@@ -295,8 +295,13 @@ async def upload_file_to_project(project_id: str, file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail=f"Could not process Excel file: {e}")
 
 def _validate_group(value: Any, group: RuleGroup) -> dict:
-    """Helper to validate a single value against a rule group."""
-    results = []
+    """
+    Helper to validate a single value against a rule group.
+    Returns the group's validity and a list of specific failed rules.
+    """
+    failed_rules = []
+    validation_results = []
+
     for rule_ref in group.rules:
         rule_def = RULE_REGISTRY.get(rule_ref.id)
         if not rule_def:
@@ -304,22 +309,30 @@ def _validate_group(value: Any, group: RuleGroup) -> dict:
 
         validator = rule_def["validator"]
         params = rule_ref.params or {}
-
         result = validator(value, params=params) if 'params' in inspect.signature(validator).parameters else validator(value)
 
         is_valid = result if isinstance(result, bool) else result.get("is_valid", False)
-        results.append(is_valid)
+        validation_results.append(is_valid)
 
+        if not is_valid:
+            details = result.get("errors") if isinstance(result, dict) else None
+            formatter = rule_def.get("formatter")
+            rule_name = formatter(params) if formatter and params else rule_def["name"]
+            failed_rules.append({
+                "rule_id": rule_ref.id,
+                "rule_name": rule_name,
+                "details": details
+            })
+
+    # Determine group validity based on its logic
     if group.logic == "AND":
-        # Error if ALL rules are broken (all are invalid)
-        is_error = all(not r for r in results)
+        is_group_valid = all(validation_results)
     else:  # OR
-        # Error if ANY rule is broken (at least one is invalid)
-        is_error = any(not r for r in results)
+        is_group_valid = any(validation_results)
 
     return {
-        "is_valid": not is_error,
-        "errors": group.name if is_error else None
+        "is_valid": is_group_valid,
+        "errors": failed_rules if not is_group_valid else None
     }
 
 
@@ -331,28 +344,26 @@ async def _run_validation_async(project_id: str):
         VALIDATION_STATUS[project_id]["message"] = "Проект не найден"
         return
 
-    loop = asyncio.get_event_loop()
-
-    # Сначала рассчитаем общее количество проверок для корректного прогресса
+    # Сначала рассчитаем общее количество строк для прогресса
     total_rows = 0
     project_files_dir = PROJECTS_DIR / project.id / "files"
     for file_schema in project.files:
         file_path = project_files_dir / file_schema.saved_name
-        if not file_path.exists(): continue
+        if not file_path.exists():
+            continue
         try:
-            # Выполняем блокирующие операции в отдельном потоке
-            xls = await loop.run_in_executor(None, pd.ExcelFile, file_path)
+            xls = pd.ExcelFile(file_path)
+            # Correctly find the file_schema in the project to access its sheets
             current_file_schema = next((f for f in project.files if f.id == file_schema.id), None)
-            if not current_file_schema: continue
+            if not current_file_schema:
+                continue
             for sheet_schema in current_file_schema.sheets:
-                if not sheet_schema.is_active: continue
-                df = await loop.run_in_executor(None, pd.read_excel, xls, sheet_schema.name)
-                if df.empty: continue
-
-                num_rules_for_sheet = sum(len(field.rules) for field in sheet_schema.fields)
-                total_rows += len(df) * num_rules_for_sheet
+                if not sheet_schema.is_active:
+                    continue
+                df = pd.read_excel(xls, sheet_name=sheet_schema.name)
+                total_rows += len(df)
         except Exception as e:
-            print(f"Error calculating total operations for {file_schema.name}: {e}")
+            print(f"Error calculating total rows for {file_schema.name}: {e}")
 
     # Обновим статус
     VALIDATION_STATUS[project_id]["total_rows"] = total_rows
@@ -360,6 +371,7 @@ async def _run_validation_async(project_id: str):
 
     # Теперь выполняем саму валидацию
     all_errors = []
+    processed_rows = 0
 
     for file_schema in project.files:
         VALIDATION_STATUS[project_id]["current_file"] = file_schema.name
@@ -377,7 +389,7 @@ async def _run_validation_async(project_id: str):
             VALIDATION_STATUS[project_id]["message"] = f"Обработка листа: {sheet_schema.name} ({file_schema.name})"
 
             try:
-                df = await loop.run_in_executor(None, pd.read_excel, file_path, sheet_schema.name)
+                df = pd.read_excel(file_path, sheet_name=sheet_schema.name)
                 sheet_total_rows = len(df)
                 if sheet_total_rows == 0:
                     continue
@@ -407,24 +419,22 @@ async def _run_validation_async(project_id: str):
                         if rule_config.group_id:
                             group = RULE_GROUPS_REGISTRY.get(rule_config.group_id)
                             if not group:
-                                # Если группа не найдена, мы должны инкрементировать счетчик, чтобы не зависнуть
-                                VALIDATION_STATUS[project_id]["processed_rows"] += len(df)
                                 continue
                             for index, value in df[field_schema.name].items():
                                 result = _validate_group(value, group)
-                                if not result["is_valid"]:
-                                    all_errors.append({
-                                        "file_name": file_schema.name, "sheet_name": sheet_schema.name,
-                                        "field_name": field_schema.name, "is_required": field_schema.is_required,
-                                        "row": index + 2, "error_type": result["errors"],
-                                        "value": str(value) if pd.notna(value) else "ПУСТО",
-                                        "details": None
-                                    })
-                                # Обновляем статус после каждой строки
-                                VALIDATION_STATUS[project_id]["processed_rows"] += 1
-                                total = VALIDATION_STATUS[project_id]["total_rows"]
-                                if total > 0:
-                                    VALIDATION_STATUS[project_id]["percentage"] = (VALIDATION_STATUS[project_id]["processed_rows"] / total) * 100
+                                if not result["is_valid"] and result["errors"]:
+                                    for failed_rule in result["errors"]:
+                                        all_errors.append({
+                                            "file_name": file_schema.name,
+                                            "sheet_name": sheet_schema.name,
+                                            "field_name": field_schema.name,
+                                            "is_required": field_schema.is_required,
+                                            "row": index + 2,
+                                            "error_type": failed_rule["rule_name"],
+                                            "value": str(value) if pd.notna(value) else "ПУСТО",
+                                            "details": failed_rule["details"],
+                                            "rule_id": failed_rule["rule_id"]
+                                        })
                             continue
 
                         rule_def = RULE_REGISTRY.get(rule_config.type)
@@ -444,11 +454,6 @@ async def _run_validation_async(project_id: str):
                                         "row": index + 2, "error_type": rule_name,
                                         "value": str(value) if pd.notna(value) else "ПУСТО"
                                     })
-                                # Обновляем статус после каждой строки
-                                VALIDATION_STATUS[project_id]["processed_rows"] += 1
-                                total = VALIDATION_STATUS[project_id]["total_rows"]
-                                if total > 0:
-                                    VALIDATION_STATUS[project_id]["percentage"] = (VALIDATION_STATUS[project_id]["processed_rows"] / total) * 100
                             continue
 
                         for index, value in df[field_schema.name].items():
@@ -466,15 +471,15 @@ async def _run_validation_async(project_id: str):
                                     "field_name": field_schema.name, "is_required": field_schema.is_required,
                                     "row": index + 2, "error_type": rule_name,
                                     "value": str(value) if pd.notna(value) else "ПУСТО",
-                                    "details": details
+                                    "details": details,
+                                    "rule_id": rule_config.type
                                 }
                                 all_errors.append(error_entry)
 
-                            # Обновляем статус после каждой строки
-                            VALIDATION_STATUS[project_id]["processed_rows"] += 1
-                            total = VALIDATION_STATUS[project_id]["total_rows"]
-                            if total > 0:
-                                VALIDATION_STATUS[project_id]["percentage"] = (VALIDATION_STATUS[project_id]["processed_rows"] / total) * 100
+                # Обновляем общее количество обработанных строк
+                processed_rows += sheet_total_rows
+                VALIDATION_STATUS[project_id]["processed_rows"] = processed_rows
+                VALIDATION_STATUS[project_id]["percentage"] = (processed_rows / total_rows * 100) if total_rows > 0 else 0
 
             except Exception as e:
                 print(f"Error processing sheet {sheet_schema.name} in file {file_schema.name}: {e}")
@@ -491,7 +496,7 @@ async def _run_validation_async(project_id: str):
             if not sheet_schema.is_active: continue
 
             try:
-                df_sheet = await loop.run_in_executor(None, pd.read_excel, PROJECTS_DIR / project.id / "files" / file_schema.saved_name, sheet_schema.name)
+                df_sheet = pd.read_excel(PROJECTS_DIR / project.id / "files" / file_schema.saved_name, sheet_name=sheet_schema.name)
                 sheet_total_rows = len(df_sheet)
             except Exception:
                 sheet_total_rows = 0
