@@ -748,37 +748,34 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function updateValidationUI(status) {
-        if (!status || !status.is_running) {
-            // Если статус не пришел или проверка не запущена, показываем ошибку
-            dom.progressContainer.innerHTML = `
-            <div class="error-container" style="text-align: center; padding: 2rem;">
-                <p>❌ Не удалось получить статус проверки.</p>
-                <p>Попробуйте снова или обратитесь к администратору.</p>
-            </div>
-        `;
-            stopValidationPolling(); // Останавливаем опрос, чтобы не засорять логи
-            return;
-        }
+        // This function is now only responsible for rendering the "in-progress" state.
+        // The final state (is_running: false) is handled by the polling function,
+        // which stops the interval and calls loadAndRenderFinalResults.
+        if (!status) return;
 
-        const percentage = status.total_rows > 0 ? (status.processed_rows / status.total_rows) * 100 : 0;
-        dom.progressContainer.innerHTML = `
+        const percentage = status.percentage ?? (status.total_rows > 0 ? (status.processed_rows / status.total_rows) * 100 : 0);
+        const processed = status.processed_rows ?? 0;
+        const total = status.total_rows ?? 0;
+
+        const htmlContent = `
             <div style="text-align: center; padding: 2rem;">
                 <div class="loading-spinner" style="margin: 0 auto;"></div>
                 <p><strong>Выполняется проверка...</strong></p>
-                <p>${status.message}</p>
+                <p>${status.details || status.message || ''}</p>
                 <p>Файл: <strong>${status.current_file || '—'}</strong></p>
                 <p>Лист: <strong>${status.current_sheet || '—'}</strong></p>
                 <p>Поле: <strong>${status.current_field || '—'}</strong></p>
                 <p>Правило: <strong>${status.current_rule || '—'}</strong></p>
                 <div style="margin-top: 1rem;">
-                    <progress value="${percentage}" max="100" style="width: 100%; height: 10px;"></progress>
+                    <progress id="validation-progress-bar" value="${percentage}" max="100" aria-valuenow="${percentage}" style="width: 100%; height: 10px;"></progress>
                     <div style="display: flex; justify-content: space-between; margin-top: 0.25rem;">
-                        <span>${Math.round(status.processed_rows)} из ${status.total_rows} строк</span>
+                        <span>${Math.round(processed)} из ${total} строк</span>
                         <span>${percentage.toFixed(1)}%</span>
                     </div>
                 </div>
             </div>
         `;
+        dom.progressContainer.innerHTML = htmlContent;
     }
 
     async function loadAndRenderFinalResults(projectId) {
