@@ -692,10 +692,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 percentage: 0,
                 processed_rows: 0,
                 total_rows: 0,
-                current_file: "",
-                current_sheet: "",
-                current_field: "",
-                current_rule: ""
+                current_file: "—",
+                current_sheet: "—",
+                current_field: "—",
+                current_rule: "—"
             });
             startValidationPolling(projectId);
 
