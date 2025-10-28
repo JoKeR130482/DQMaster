@@ -63,6 +63,7 @@ class SheetSchema(BaseModel):
     name: str
     is_active: bool = True
     fields: List[FieldSchema] = []
+    row_count: int = 0
 
 class FileSchema(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -284,7 +285,8 @@ async def upload_file_to_project(project_id: str, file: UploadFile = File(...)):
         for sheet_name in xls.sheet_names:
             df = pd.read_excel(xls, sheet_name=sheet_name)
             fields = [FieldSchema(name=col) for col in df.columns]
-            sheets.append(SheetSchema(name=sheet_name, fields=fields))
+            # Сохраняем количество строк при загрузке
+            sheets.append(SheetSchema(name=sheet_name, fields=fields, row_count=len(df)))
         saved_filename = f"{uuid.uuid4()}{Path(file.filename).suffix}"
         new_file = FileSchema(name=file.filename, saved_name=saved_filename, sheets=sheets)
         project.files.append(new_file)
@@ -318,17 +320,21 @@ def _validate_group(value: Any, group: RuleGroup) -> dict:
             details = result.get("errors") if isinstance(result, dict) else None
             formatter = rule_def.get("formatter")
             rule_name = formatter(params) if formatter and params else rule_def["name"]
+            # Создаем уникальный error_type для правила в группе
+            error_type_in_group = f"Группа '{group.name}': {rule_name}"
             failed_rules.append({
                 "rule_id": rule_ref.id,
-                "rule_name": rule_name,
+                "rule_name": error_type_in_group,
                 "details": details
             })
 
-    # Determine group validity based on its logic
+    # Determine group validity based on its logic (condition for ERROR)
     if group.logic == "AND":
-        is_group_valid = all(validation_results)
-    else:  # OR
+        # Error if ALL rules are broken. Group is valid if AT LEAST ONE rule is valid.
         is_group_valid = any(validation_results)
+    else:  # OR
+        # Error if ANY rule is broken. Group is valid if ALL rules are valid.
+        is_group_valid = all(validation_results)
 
     return {
         "is_valid": is_group_valid,
@@ -344,26 +350,13 @@ async def _run_validation_async(project_id: str):
         VALIDATION_STATUS[project_id]["message"] = "Проект не найден"
         return
 
-    # Сначала рассчитаем общее количество строк для прогресса
+    # Используем кешированное количество строк для быстрого расчета
     total_rows = 0
-    project_files_dir = PROJECTS_DIR / project.id / "files"
     for file_schema in project.files:
-        file_path = project_files_dir / file_schema.saved_name
-        if not file_path.exists():
-            continue
-        try:
-            xls = pd.ExcelFile(file_path)
-            # Correctly find the file_schema in the project to access its sheets
-            current_file_schema = next((f for f in project.files if f.id == file_schema.id), None)
-            if not current_file_schema:
-                continue
-            for sheet_schema in current_file_schema.sheets:
-                if not sheet_schema.is_active:
-                    continue
-                df = pd.read_excel(xls, sheet_name=sheet_schema.name)
-                total_rows += len(df)
-        except Exception as e:
-            print(f"Error calculating total rows for {file_schema.name}: {e}")
+        for sheet_schema in file_schema.sheets:
+            if sheet_schema.is_active:
+                num_rules_for_sheet = sum(len(field.rules) for field in sheet_schema.fields)
+                total_rows += sheet_schema.row_count * num_rules_for_sheet
 
     # Обновим статус
     VALIDATION_STATUS[project_id]["total_rows"] = total_rows
