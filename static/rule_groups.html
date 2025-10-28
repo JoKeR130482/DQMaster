@@ -50,5 +50,20 @@
 
     <script src="/static/js/rule_groups.js"></script>
     <script>lucide.createIcons();</script>
+<div id="rule-params-modal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h4 id="rule-params-modal-title">Настроить параметры правила</h4>
+            <button id="close-rule-params-modal-btn" class="btn btn-icon">&times;</button>
+        </div>
+        <form id="rule-params-form">
+            <div class="modal-body"></div>
+            <div class="modal-footer">
+                <button type="button" id="cancel-rule-params-modal-btn" class="btn btn-secondary">Отмена</button>
+                <button type="submit" class="btn">Сохранить параметры</button>
+            </div>
+        </form>
+    </div>
+</div>
 </body>
 </html>
