@@ -529,6 +529,3 @@ body > .main-container > .page-header { padding: 0; box-shadow: none; background
     accent-color: var(--blue-600);
     cursor: pointer;
 }
-#rule-params-modal {
-  z-index: 1060; /* Больше, чем z-index модального окна редактора групп (по умолчанию 1050) */
-}
