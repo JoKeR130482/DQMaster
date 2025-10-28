@@ -331,26 +331,25 @@ async def _run_validation_async(project_id: str):
         VALIDATION_STATUS[project_id]["message"] = "Проект не найден"
         return
 
-    # Сначала рассчитаем общее количество строк для прогресса
+    # Сначала рассчитаем общее количество проверок для корректного прогресса
     total_rows = 0
     project_files_dir = PROJECTS_DIR / project.id / "files"
     for file_schema in project.files:
         file_path = project_files_dir / file_schema.saved_name
-        if not file_path.exists():
-            continue
+        if not file_path.exists(): continue
         try:
             xls = pd.ExcelFile(file_path)
-            # Correctly find the file_schema in the project to access its sheets
             current_file_schema = next((f for f in project.files if f.id == file_schema.id), None)
-            if not current_file_schema:
-                continue
+            if not current_file_schema: continue
             for sheet_schema in current_file_schema.sheets:
-                if not sheet_schema.is_active:
-                    continue
+                if not sheet_schema.is_active: continue
                 df = pd.read_excel(xls, sheet_name=sheet_schema.name)
-                total_rows += len(df)
+                if df.empty: continue
+
+                num_rules_for_sheet = sum(len(field.rules) for field in sheet_schema.fields)
+                total_rows += len(df) * num_rules_for_sheet
         except Exception as e:
-            print(f"Error calculating total rows for {file_schema.name}: {e}")
+            print(f"Error calculating total operations for {file_schema.name}: {e}")
 
     # Обновим статус
     VALIDATION_STATUS[project_id]["total_rows"] = total_rows
@@ -358,7 +357,6 @@ async def _run_validation_async(project_id: str):
 
     # Теперь выполняем саму валидацию
     all_errors = []
-    processed_rows = 0
 
     for file_schema in project.files:
         VALIDATION_STATUS[project_id]["current_file"] = file_schema.name
@@ -406,6 +404,8 @@ async def _run_validation_async(project_id: str):
                         if rule_config.group_id:
                             group = RULE_GROUPS_REGISTRY.get(rule_config.group_id)
                             if not group:
+                                # Если группа не найдена, мы должны инкрементировать счетчик, чтобы не зависнуть
+                                VALIDATION_STATUS[project_id]["processed_rows"] += len(df)
                                 continue
                             for index, value in df[field_schema.name].items():
                                 result = _validate_group(value, group)
@@ -417,6 +417,11 @@ async def _run_validation_async(project_id: str):
                                         "value": str(value) if pd.notna(value) else "ПУСТО",
                                         "details": None
                                     })
+                                # Обновляем статус после каждой строки
+                                VALIDATION_STATUS[project_id]["processed_rows"] += 1
+                                total = VALIDATION_STATUS[project_id]["total_rows"]
+                                if total > 0:
+                                    VALIDATION_STATUS[project_id]["percentage"] = (VALIDATION_STATUS[project_id]["processed_rows"] / total) * 100
                             continue
 
                         rule_def = RULE_REGISTRY.get(rule_config.type)
@@ -436,6 +441,11 @@ async def _run_validation_async(project_id: str):
                                         "row": index + 2, "error_type": rule_name,
                                         "value": str(value) if pd.notna(value) else "ПУСТО"
                                     })
+                                # Обновляем статус после каждой строки
+                                VALIDATION_STATUS[project_id]["processed_rows"] += 1
+                                total = VALIDATION_STATUS[project_id]["total_rows"]
+                                if total > 0:
+                                    VALIDATION_STATUS[project_id]["percentage"] = (VALIDATION_STATUS[project_id]["processed_rows"] / total) * 100
                             continue
 
                         for index, value in df[field_schema.name].items():
@@ -457,10 +467,11 @@ async def _run_validation_async(project_id: str):
                                 }
                                 all_errors.append(error_entry)
 
-                # Обновляем общее количество обработанных строк
-                processed_rows += sheet_total_rows
-                VALIDATION_STATUS[project_id]["processed_rows"] = processed_rows
-                VALIDATION_STATUS[project_id]["percentage"] = (processed_rows / total_rows * 100) if total_rows > 0 else 0
+                            # Обновляем статус после каждой строки
+                            VALIDATION_STATUS[project_id]["processed_rows"] += 1
+                            total = VALIDATION_STATUS[project_id]["total_rows"]
+                            if total > 0:
+                                VALIDATION_STATUS[project_id]["percentage"] = (VALIDATION_STATUS[project_id]["processed_rows"] / total) * 100
 
             except Exception as e:
                 print(f"Error processing sheet {sheet_schema.name} in file {file_schema.name}: {e}")
