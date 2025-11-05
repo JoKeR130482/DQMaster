@@ -11,10 +11,19 @@ import io
 import json
 import asyncio
 
-from fastapi import Depends, FastAPI, File, UploadFile, HTTPException
+from fastapi import Depends, FastAPI, File, UploadFile, HTTPException, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, ValidationError
+from typing import Dict, Any
+
+
+class AppState:
+    def __init__(self):
+        self.validation_status: Dict[str, Dict[str, Any]] = {}
+        self.rule_registry: Dict[str, Any] = {}
+        self.rule_groups_registry: Dict[str, Any] = {}
+
 
 # ==============================================================================
 # 1. Globals & App Initialization
@@ -26,9 +35,6 @@ STATIC_DIR = BASE_DIR / "static"
 RULES_DIR = BASE_DIR / "rules"
 PROJECTS_DIR = BASE_DIR / "projects"
 RULE_GROUPS_PATH = BASE_DIR / "rule_groups.json"
-RULE_REGISTRY = {}
-RULE_GROUPS_REGISTRY = {}
-VALIDATION_STATUS = {}
 
 # ==============================================================================
 # 2. Pydantic Models (New Hierarchical Structure)
@@ -147,8 +153,8 @@ def write_project(project_id: str, project_data: Project):
     project_data.updated_at = datetime.datetime.utcnow().isoformat()
     config_path.write_text(project_data.model_dump_json(indent=2), encoding="utf-8")
 
-def load_rules():
-    RULE_REGISTRY.clear()
+def load_rules(app_state: AppState):
+    app_state.rule_registry.clear()
     if not RULES_DIR.exists(): return
     for filename in os.listdir(RULES_DIR):
         if filename.endswith(".py") and filename != "__init__.py":
@@ -158,7 +164,7 @@ def load_rules():
                     module = importlib.util.module_from_spec(spec)
                     spec.loader.exec_module(module)
                     if hasattr(module, "validate") and hasattr(module, "RULE_NAME"):
-                        RULE_REGISTRY[filename[:-3]] = {
+                        app_state.rule_registry[filename[:-3]] = {
                             "id": filename[:-3],
                             "name": module.RULE_NAME,
                             "description": getattr(module, "RULE_DESC", ""),
@@ -172,25 +178,25 @@ def load_rules():
             except Exception as e:
                 print(f"Error loading rule from {filename}: {e}")
 
-def read_rule_groups():
+def read_rule_groups(app_state: AppState):
     """Loads rule groups from the JSON file into the registry."""
     if not RULE_GROUPS_PATH.exists():
         return
     try:
         groups_data = json.loads(RULE_GROUPS_PATH.read_text(encoding="utf-8"))
-        RULE_GROUPS_REGISTRY.clear()
+        app_state.rule_groups_registry.clear()
         for group_dict in groups_data:
             group = RuleGroup(**group_dict)
-            RULE_GROUPS_REGISTRY[group.id] = group
+            app_state.rule_groups_registry[group.id] = group
     except (json.JSONDecodeError, ValidationError) as e:
         print(f"Error reading or parsing rule_groups.json: {e}")
 
-def write_rule_groups():
+def write_rule_groups(app_state: AppState):
     """Saves the current state of the rule groups registry to the JSON file."""
     try:
         if not RULE_GROUPS_PATH.exists():
             RULE_GROUPS_PATH.touch()
-        groups_list = [group.model_dump() for group in RULE_GROUPS_REGISTRY.values()]
+        groups_list = [group.model_dump() for group in app_state.rule_groups_registry.values()]
         RULE_GROUPS_PATH.write_text(json.dumps(groups_list, indent=2, ensure_ascii=False), encoding="utf-8")
     except IOError as e:
         print(f"Error writing to rule_groups.json: {e}")
@@ -294,11 +300,11 @@ async def upload_file_to_project(project_id: str, file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Could not process Excel file: {e}")
 
-def _validate_group(value: Any, group: RuleGroup) -> dict:
+def _validate_group(value: Any, group: RuleGroup, app_state: AppState) -> dict:
     """Helper to validate a single value against a rule group."""
     results = []
     for rule_ref in group.rules:
-        rule_def = RULE_REGISTRY.get(rule_ref.id)
+        rule_def = app_state.rule_registry.get(rule_ref.id)
         if not rule_def:
             continue
 
@@ -323,12 +329,12 @@ def _validate_group(value: Any, group: RuleGroup) -> dict:
     }
 
 
-async def _run_validation_async(project_id: str):
+async def _run_validation_async(project_id: str, app_state: AppState):
     """Асинхронная функция для выполнения валидации."""
     project = read_project(project_id)
     if not project:
-        VALIDATION_STATUS[project_id]["is_running"] = False
-        VALIDATION_STATUS[project_id]["message"] = "Проект не найден"
+        app_state.validation_status[project_id]["is_running"] = False
+        app_state.validation_status[project_id]["message"] = "Проект не найден"
         return
 
     # Сначала рассчитаем общее количество операций для прогресса
@@ -358,16 +364,16 @@ async def _run_validation_async(project_id: str):
             print(f"Error calculating total rows for {file_schema.name}: {e}")
 
     # Обновим статус
-    VALIDATION_STATUS[project_id]["total_rows"] = total_rows
-    VALIDATION_STATUS[project_id]["message"] = f"Начинаем проверку {len(project.files)} файлов..."
+    app_state.validation_status[project_id]["total_rows"] = total_rows
+    app_state.validation_status[project_id]["message"] = f"Начинаем проверку {len(project.files)} файлов..."
 
     # Теперь выполняем саму валидацию
     all_errors = []
     processed_rows = 0
 
     for file_schema in project.files:
-        VALIDATION_STATUS[project_id]["current_file"] = file_schema.name
-        VALIDATION_STATUS[project_id]["message"] = f"Обработка файла: {file_schema.name}"
+        app_state.validation_status[project_id]["current_file"] = file_schema.name
+        app_state.validation_status[project_id]["message"] = f"Обработка файла: {file_schema.name}"
 
         file_path = project_files_dir / file_schema.saved_name
         if not file_path.exists():
@@ -377,8 +383,8 @@ async def _run_validation_async(project_id: str):
             if not sheet_schema.is_active:
                 continue
 
-            VALIDATION_STATUS[project_id]["current_sheet"] = sheet_schema.name
-            VALIDATION_STATUS[project_id]["message"] = f"Обработка листа: {sheet_schema.name} ({file_schema.name})"
+            app_state.validation_status[project_id]["current_sheet"] = sheet_schema.name
+            app_state.validation_status[project_id]["message"] = f"Обработка листа: {sheet_schema.name} ({file_schema.name})"
 
             try:
                 df = pd.read_excel(file_path, sheet_name=sheet_schema.name)
@@ -394,27 +400,27 @@ async def _run_validation_async(project_id: str):
                         # Обновляем текущее правило
                         rule_name = "Неизвестное правило"
                         if rule_config.group_id:
-                            group = RULE_GROUPS_REGISTRY.get(rule_config.group_id)
+                            group = app_state.rule_groups_registry.get(rule_config.group_id)
                             if group:
                                 rule_name = f"Группа: {group.name}"
                         else:
-                            rule_def = RULE_REGISTRY.get(rule_config.type)
+                            rule_def = app_state.rule_registry.get(rule_config.type)
                             if rule_def:
                                 formatter = rule_def.get("formatter")
                                 rule_name = formatter(rule_config.params) if formatter and rule_config.params else rule_def["name"]
 
-                        VALIDATION_STATUS[project_id]["current_field"] = field_schema.name
-                        VALIDATION_STATUS[project_id]["current_rule"] = rule_name
-                        VALIDATION_STATUS[project_id]["message"] = f"Проверка поля '{field_schema.name}' по правилу '{rule_name}' ({sheet_schema.name})"
+                        app_state.validation_status[project_id]["current_field"] = field_schema.name
+                        app_state.validation_status[project_id]["current_rule"] = rule_name
+                        app_state.validation_status[project_id]["message"] = f"Проверка поля '{field_schema.name}' по правилу '{rule_name}' ({sheet_schema.name})"
 
                         # --- Здесь идет основная логика валидации ---
                         if rule_config.group_id:
-                            group = RULE_GROUPS_REGISTRY.get(rule_config.group_id)
+                            group = app_state.rule_groups_registry.get(rule_config.group_id)
                             if not group:
-                                VALIDATION_STATUS[project_id]["processed_rows"] += len(df)
+                                app_state.validation_status[project_id]["processed_rows"] += len(df)
                                 continue
                             for index, value in df[field_schema.name].items():
-                                result = _validate_group(value, group)
+                                result = _validate_group(value, group, app_state)
                                 if not result["is_valid"]:
                                     all_errors.append({
                                         "file_name": file_schema.name, "sheet_name": sheet_schema.name,
@@ -423,14 +429,14 @@ async def _run_validation_async(project_id: str):
                                         "value": str(value) if pd.notna(value) else "ПУСТО",
                                         "details": None
                                     })
-                                VALIDATION_STATUS[project_id]["processed_rows"] += 1
+                                app_state.validation_status[project_id]["processed_rows"] += 1
                                 if total_rows > 0:
-                                    VALIDATION_STATUS[project_id]["percentage"] = (VALIDATION_STATUS[project_id]["processed_rows"] / total_rows) * 100
+                                    app_state.validation_status[project_id]["percentage"] = (app_state.validation_status[project_id]["processed_rows"] / total_rows) * 100
                             continue
 
-                        rule_def = RULE_REGISTRY.get(rule_config.type)
+                        rule_def = app_state.rule_registry.get(rule_config.type)
                         if not rule_def:
-                            VALIDATION_STATUS[project_id]["processed_rows"] += len(df)
+                            app_state.validation_status[project_id]["processed_rows"] += len(df)
                             continue
                         validator = rule_def["validator"]
                         params = rule_config.params or {}
@@ -446,9 +452,9 @@ async def _run_validation_async(project_id: str):
                                         "row": index + 2, "error_type": rule_name,
                                         "value": str(value) if pd.notna(value) else "ПУСТО"
                                     })
-                            VALIDATION_STATUS[project_id]["processed_rows"] += len(df)
+                            app_state.validation_status[project_id]["processed_rows"] += len(df)
                             if total_rows > 0:
-                                VALIDATION_STATUS[project_id]["percentage"] = (VALIDATION_STATUS[project_id]["processed_rows"] / total_rows) * 100
+                                app_state.validation_status[project_id]["percentage"] = (app_state.validation_status[project_id]["processed_rows"] / total_rows) * 100
                             continue
 
                         for index, value in df[field_schema.name].items():
@@ -469,9 +475,9 @@ async def _run_validation_async(project_id: str):
                                     "details": details
                                 }
                                 all_errors.append(error_entry)
-                            VALIDATION_STATUS[project_id]["processed_rows"] += 1
+                            app_state.validation_status[project_id]["processed_rows"] += 1
                             if total_rows > 0:
-                                VALIDATION_STATUS[project_id]["percentage"] = (VALIDATION_STATUS[project_id]["processed_rows"] / total_rows) * 100
+                                app_state.validation_status[project_id]["percentage"] = (app_state.validation_status[project_id]["processed_rows"] / total_rows) * 100
 
             except Exception as e:
                 print(f"Error processing sheet {sheet_schema.name} in file {file_schema.name}: {e}")
@@ -496,13 +502,13 @@ async def _run_validation_async(project_id: str):
             all_applicable_rule_names = set()
             for f in sheet_schema.fields:
                 for r_conf in f.rules:
-                    if r_conf.type and RULE_REGISTRY.get(r_conf.type):
-                        rule_def = RULE_REGISTRY.get(r_conf.type)
+                    if r_conf.type and app_state.rule_registry.get(r_conf.type):
+                        rule_def = app_state.rule_registry.get(r_conf.type)
                         formatter = rule_def.get("formatter")
                         rule_name = formatter(r_conf.params) if formatter and r_conf.params else rule_def.get("name")
                         if rule_name: all_applicable_rule_names.add(rule_name)
-                    elif r_conf.group_id and RULE_GROUPS_REGISTRY.get(r_conf.group_id):
-                        group = RULE_GROUPS_REGISTRY.get(r_conf.group_id)
+                    elif r_conf.group_id and app_state.rule_groups_registry.get(r_conf.group_id):
+                        group = app_state.rule_groups_registry.get(r_conf.group_id)
                         all_applicable_rule_names.add(group.name)
 
             sheet_errors = [e for e in all_errors if e["file_name"] == file_schema.name and e["sheet_name"] == sheet_schema.name]
@@ -543,13 +549,13 @@ async def _run_validation_async(project_id: str):
     except IOError as e:
         print(f"Failed to save validation results: {e}")
 
-    VALIDATION_STATUS[project_id]["is_running"] = False
-    VALIDATION_STATUS[project_id]["message"] = "Проверка завершена."
-    VALIDATION_STATUS[project_id]["percentage"] = 100.0
+    app_state.validation_status[project_id]["is_running"] = False
+    app_state.validation_status[project_id]["message"] = "Проверка завершена."
+    app_state.validation_status[project_id]["percentage"] = 100.0
 
 
 @app.post("/api/projects/{project_id}/validate")
-async def validate_project_data(project_id: str):
+async def validate_project_data(project_id: str, request: Request):
     """
     Запускает валидацию и сразу возвращает ID задачи или начальное состояние.
     """
@@ -557,8 +563,7 @@ async def validate_project_data(project_id: str):
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    # --- НАЧАЛО ИЗМЕНЕНИЙ ---
-    # Явно инициализируем статус ПЕРЕД запуском фоновой задачи
+    app_state = request.app.state.app_state
     initial_status = {
         "is_running": True,
         "current_file": "",
@@ -571,20 +576,16 @@ async def validate_project_data(project_id: str):
         "message": "Запуск проверки..."
     }
 
-    # Присваиваем статус напрямую, чтобы он был доступен немедленно
-    VALIDATION_STATUS[project_id] = initial_status
-
-    # Запускаем проверку в фоновом режиме
-    asyncio.create_task(_run_validation_async(project_id))
-
-    # Возвращаем начальный статус клиенту
+    app_state.validation_status[project_id] = initial_status
+    asyncio.create_task(_run_validation_async(project_id, app_state))
     return {"status": "started", "project_id": project_id, "initial_status": initial_status}
 
 
 @app.get("/api/projects/{project_id}/validation-status", response_model=ValidationStatus)
-async def get_validation_status(project_id: str):
+async def get_validation_status(project_id: str, request: Request):
     """Возвращает текущее состояние проверки."""
-    status = VALIDATION_STATUS.get(project_id, {
+    app_state = request.app.state.app_state
+    status = app_state.validation_status.get(project_id, {
         "is_running": False, "message": "Проверка не запущена."
     })
     return status
@@ -613,45 +614,42 @@ class AddWordRequest(BaseModel):
     word: str
 
 @app.post("/api/dictionary", status_code=201)
-async def add_word_to_dictionary(request: AddWordRequest, current_words: List[str] = Depends(get_dictionary)):
-    new_word = request.word.strip().lower()
+async def add_word_to_dictionary(req: Request, add_request: AddWordRequest, current_words: List[str] = Depends(get_dictionary)):
+    new_word = add_request.word.strip().lower()
     if not new_word:
         raise HTTPException(status_code=400, detail="Word cannot be empty.")
     if new_word in set(current_words):
         raise HTTPException(status_code=400, detail="Word already exists in the dictionary.")
     with CUSTOM_DICT_PATH.open("a", encoding="utf-8") as f:
         f.write(f"\n{new_word}")
-    if "spell_check" in RULE_REGISTRY:
-        RULE_REGISTRY["spell_check"]["module"].reload_custom_dictionary()
+    app_state = req.app.state.app_state
+    if "spell_check" in app_state.rule_registry:
+        app_state.rule_registry["spell_check"]["module"].reload_custom_dictionary()
     return {"message": "Word added successfully."}
 
 class EditWordRequest(BaseModel):
     new_word: str
 
 @app.put("/api/dictionary/{old_word}", status_code=200)
-async def edit_word_in_dictionary(old_word: str, request: EditWordRequest):
+async def edit_word_in_dictionary(old_word: str, req: Request, edit_request: EditWordRequest):
     old_word_clean = old_word.strip()
-    new_word_clean = request.new_word.strip()
+    new_word_clean = edit_request.new_word.strip()
     if not old_word_clean or not new_word_clean:
         raise HTTPException(status_code=400, detail="Words cannot be empty.")
 
-    # Read the raw lines to preserve comments and original casing
     if not CUSTOM_DICT_PATH.exists():
         raise HTTPException(status_code=404, detail="Dictionary file not found.")
 
     raw_lines = CUSTOM_DICT_PATH.read_text(encoding="utf-8").split("\n")
 
-    # Find the word to edit using case-insensitive comparison
     word_to_edit_found = any(line.strip().lower() == old_word_clean.lower() for line in raw_lines)
     if not word_to_edit_found:
         raise HTTPException(status_code=404, detail="Word to edit not found in the dictionary.")
 
-    # Check for conflicts with the new word (case-insensitive)
     existing_words_lower = {line.strip().lower() for line in raw_lines if line.strip() and not line.strip().startswith('#')}
     if new_word_clean.lower() in existing_words_lower and new_word_clean.lower() != old_word_clean.lower():
         raise HTTPException(status_code=400, detail="New word already exists in the dictionary.")
 
-    # Rebuild the list, replacing the old word with the new one, preserving original case for others
     updated_lines = []
     for line in raw_lines:
         if line.strip().lower() == old_word_clean.lower():
@@ -661,13 +659,14 @@ async def edit_word_in_dictionary(old_word: str, request: EditWordRequest):
 
     CUSTOM_DICT_PATH.write_text("\n".join(updated_lines), encoding="utf-8")
 
-    if "spell_check" in RULE_REGISTRY:
-        RULE_REGISTRY["spell_check"]["module"].reload_custom_dictionary()
+    app_state = req.app.state.app_state
+    if "spell_check" in app_state.rule_registry:
+        app_state.rule_registry["spell_check"]["module"].reload_custom_dictionary()
 
     return {"message": "Word updated successfully."}
 
 @app.delete("/api/dictionary/{word}", status_code=200)
-async def remove_word_from_dictionary(word: str, current_words: List[str] = Depends(get_dictionary)):
+async def remove_word_from_dictionary(word: str, req: Request, current_words: List[str] = Depends(get_dictionary)):
     word_to_delete = word.strip().lower()
     if not word_to_delete:
         raise HTTPException(status_code=400, detail="Word cannot be empty.")
@@ -675,45 +674,51 @@ async def remove_word_from_dictionary(word: str, current_words: List[str] = Depe
         raise HTTPException(status_code=404, detail="Word not found in the dictionary.")
     updated_words = [w for w in current_words if w.lower() != word_to_delete]
     CUSTOM_DICT_PATH.write_text("\n".join(updated_words), encoding="utf-8")
-    if "spell_check" in RULE_REGISTRY:
-        RULE_REGISTRY["spell_check"]["module"].reload_custom_dictionary()
+    app_state = req.app.state.app_state
+    if "spell_check" in app_state.rule_registry:
+        app_state.rule_registry["spell_check"]["module"].reload_custom_dictionary()
     return {"message": "Word removed successfully."}
 
 # --- Rule Groups ---
 @app.get("/api/rule-groups", response_model=List[RuleGroup])
-async def get_rule_groups():
-    return list(RULE_GROUPS_REGISTRY.values())
+async def get_rule_groups(request: Request):
+    app_state = request.app.state.app_state
+    return list(app_state.rule_groups_registry.values())
 
 @app.post("/api/rule-groups", response_model=RuleGroup, status_code=201)
-async def create_rule_group(group: RuleGroup):
-    if group.id in RULE_GROUPS_REGISTRY:
+async def create_rule_group(group: RuleGroup, request: Request):
+    app_state = request.app.state.app_state
+    if group.id in app_state.rule_groups_registry:
         raise HTTPException(status_code=409, detail="Rule group with this ID already exists.")
-    RULE_GROUPS_REGISTRY[group.id] = group
-    write_rule_groups()
+    app_state.rule_groups_registry[group.id] = group
+    write_rule_groups(app_state)
     return group
 
 @app.put("/api/rule-groups/{group_id}", response_model=RuleGroup)
-async def update_rule_group(group_id: str, group_update: RuleGroup):
-    if group_id not in RULE_GROUPS_REGISTRY:
+async def update_rule_group(group_id: str, group_update: RuleGroup, request: Request):
+    app_state = request.app.state.app_state
+    if group_id not in app_state.rule_groups_registry:
         raise HTTPException(status_code=404, detail="Rule group not found.")
     group_update.id = group_id # Ensure ID is not changed
-    RULE_GROUPS_REGISTRY[group_id] = group_update
-    write_rule_groups()
+    app_state.rule_groups_registry[group_id] = group_update
+    write_rule_groups(app_state)
     return group_update
 
 @app.delete("/api/rule-groups/{group_id}", status_code=204)
-async def delete_rule_group(group_id: str):
-    if group_id not in RULE_GROUPS_REGISTRY:
+async def delete_rule_group(group_id: str, request: Request):
+    app_state = request.app.state.app_state
+    if group_id not in app_state.rule_groups_registry:
         raise HTTPException(status_code=404, detail="Rule group not found.")
-    del RULE_GROUPS_REGISTRY[group_id]
-    write_rule_groups()
+    del app_state.rule_groups_registry[group_id]
+    write_rule_groups(app_state)
     return
 
 # --- Rule Library ---
 @app.get("/api/rules")
-async def get_all_rules():
+async def get_all_rules(request: Request):
+    app_state = request.app.state.app_state
     rules_list = []
-    for data in RULE_REGISTRY.values():
+    for data in app_state.rule_registry.values():
         rules_list.append({
             "id": data["id"],
             "name": data["name"],
@@ -755,8 +760,9 @@ async def read_rule_groups_page():
 # ==============================================================================
 @app.on_event("startup")
 async def startup_event():
+    app.state.app_state = AppState()
     STATIC_DIR.mkdir(exist_ok=True)
     RULES_DIR.mkdir(exist_ok=True)
     PROJECTS_DIR.mkdir(exist_ok=True)
-    load_rules()
-    read_rule_groups()
+    load_rules(app.state.app_state)
+    read_rule_groups(app.state.app_state)
