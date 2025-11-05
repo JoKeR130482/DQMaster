@@ -338,7 +338,7 @@ async def _run_validation_async(project_id: str, app_state: AppState):
         return
 
     # Сначала рассчитаем общее количество операций для прогресса
-    total_rows = 0.0001  # Начальное значение, чтобы избежать деления на ноль
+    total_rows = 0  # Считаем общее количество, начинаем с 0
     project_files_dir = PROJECTS_DIR / project.id / "files"
     loop = asyncio.get_running_loop()
 
@@ -364,8 +364,8 @@ async def _run_validation_async(project_id: str, app_state: AppState):
             print(f"Error calculating total rows for {file_schema.name}: {e}")
 
     # Обновим статус
-    if total_rows < 1:  # Если не удалось корректно рассчитать, ставим 1 для отображения
-        total_rows = 1.0
+    if total_rows <= 0:  # Если не удалось корректно рассчитать количество строк
+        total_rows = 1  # Используем целое число как минимальное значение
     app_state.validation_status[project_id]["total_rows"] = total_rows
     app_state.validation_status[project_id]["message"] = f"Начинаем проверку {len(project.files)} файлов..."
 
@@ -432,8 +432,10 @@ async def _run_validation_async(project_id: str, app_state: AppState):
                                         "details": None
                                     })
                                 app_state.validation_status[project_id]["processed_rows"] += 1
-                                if app_state.validation_status[project_id]["processed_rows"] % 500 == 0 and total_rows > 0.0001:
-                                     app_state.validation_status[project_id]["percentage"] = min(99.9, (app_state.validation_status[project_id]["processed_rows"] / total_rows) * 100)
+                                if app_state.validation_status[project_id]["processed_rows"] % 500 == 0:
+                                     # Вычисляем процент как float, но сохраняем целые числа для счетчиков
+                                     percentage_value = min(99.9, (app_state.validation_status[project_id]["processed_rows"] / float(total_rows)) * 100)
+                                     app_state.validation_status[project_id]["percentage"] = percentage_value
                             continue
 
                         rule_def = app_state.rule_registry.get(rule_config.type)
@@ -455,8 +457,9 @@ async def _run_validation_async(project_id: str, app_state: AppState):
                                         "value": str(value) if pd.notna(value) else "ПУСТО"
                                     })
                             app_state.validation_status[project_id]["processed_rows"] += len(df)
-                            if total_rows > 0.0001:
-                                app_state.validation_status[project_id]["percentage"] = (app_state.validation_status[project_id]["processed_rows"] / total_rows) * 100
+                            # Вычисляем процент как float, но сохраняем целые числа для счетчиков
+                            percentage_value = min(99.9, (app_state.validation_status[project_id]["processed_rows"] / float(total_rows)) * 100)
+                            app_state.validation_status[project_id]["percentage"] = percentage_value
                             continue
 
                         for index, value in df[field_schema.name].items():
@@ -478,8 +481,10 @@ async def _run_validation_async(project_id: str, app_state: AppState):
                                 }
                                 all_errors.append(error_entry)
                             app_state.validation_status[project_id]["processed_rows"] += 1
-                            if app_state.validation_status[project_id]["processed_rows"] % 500 == 0 and total_rows > 0.0001:
-                                 app_state.validation_status[project_id]["percentage"] = min(99.9, (app_state.validation_status[project_id]["processed_rows"] / total_rows) * 100)
+                            if app_state.validation_status[project_id]["processed_rows"] % 500 == 0:
+                                 # Вычисляем процент как float, но сохраняем целые числа для счетчиков
+                                 percentage_value = min(99.9, (app_state.validation_status[project_id]["processed_rows"] / float(total_rows)) * 100)
+                                 app_state.validation_status[project_id]["percentage"] = percentage_value
 
             except Exception as e:
                 print(f"Error processing sheet {sheet_schema.name} in file {file_schema.name}: {e}")
@@ -552,9 +557,12 @@ async def _run_validation_async(project_id: str, app_state: AppState):
         print(f"Failed to save validation results: {e}")
 
     # Финальное обновление статуса
-    final_total = app_state.validation_status[project_id].get("total_rows", 1)
-    if final_total < 1: final_total = 1
+    # Гарантируем целочисленные значения для счетчиков
+    final_total = int(app_state.validation_status[project_id].get("total_rows", 1))
+    if final_total <= 0:
+        final_total = 1
     app_state.validation_status[project_id]["processed_rows"] = final_total
+    app_state.validation_status[project_id]["total_rows"] = final_total
     app_state.validation_status[project_id]["is_running"] = False
     app_state.validation_status[project_id]["message"] = "Проверка завершена."
     app_state.validation_status[project_id]["percentage"] = 100.0
