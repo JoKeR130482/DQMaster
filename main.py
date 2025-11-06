@@ -810,7 +810,7 @@ async def _run_validation_async(project_id: str):
         with database.get_project_db_connection(project_id) as conn:
             cursor = conn.cursor()
             for file_schema in project.files:
-                for sheet_schema in sheet_schema.sheets:
+                for sheet_schema in file_schema.sheets:
                     if not sheet_schema.is_active: continue
                     cursor.execute("SELECT row_count FROM sheets WHERE id = ?", (sheet_schema.id,))
                     row_count_res = cursor.fetchone()
@@ -842,104 +842,128 @@ async def _run_validation_async(project_id: str):
             for file_schema in project.files:
                 VALIDATION_STATUS[project_id]["current_file"] = file_schema.name
                 for sheet_schema in file_schema.sheets:
-                    if not sheet_schema.is_active: continue
-                    VALIDATION_STATUS[project_id]["current_sheet"] = sheet_schema.name
+                    if not sheet_schema.is_active:
+                        logger.debug(f"[{project_id}] Лист '{sheet_schema.name}' неактивен, пропуск.")
+                        continue
 
-                    cursor.execute("SELECT data_table_name FROM sheets WHERE id = ?", (sheet_schema.id,))
-                    table_name = cursor.fetchone()["data_table_name"]
+                    try:
+                        VALIDATION_STATUS[project_id]["current_sheet"] = sheet_schema.name
+                        logger.debug(f"[{project_id}] Начало обработки листа: '{file_schema.name}' -> '{sheet_schema.name}'.")
 
-                    for field_schema in sheet_schema.fields:
-                        normalized_col_name = database.normalize_name_for_sqlite(field_schema.name)
-                        VALIDATION_STATUS[project_id]["current_field"] = field_schema.name
+                        cursor.execute("SELECT data_table_name FROM sheets WHERE id = ?", (sheet_schema.id,))
+                        sheet_info = cursor.fetchone()
+                        if not sheet_info or not sheet_info["data_table_name"]:
+                            logger.warning(f"[{project_id}] Не найдена таблица данных для листа '{sheet_schema.name}' (ID: {sheet_schema.id}). Пропуск.")
+                            continue
+                        table_name = sheet_info["data_table_name"]
 
-                        cursor.execute(f"PRAGMA table_info('{table_name}')")
-                        if normalized_col_name not in [col['name'] for col in cursor.fetchall()]:
-                             logger.warning(f"[{project_id}] Колонка '{normalized_col_name}' не найдена в таблице '{table_name}'. Пропуск.")
-                             continue
+                        for field_schema in sheet_schema.fields:
+                            normalized_col_name = database.normalize_name_for_sqlite(field_schema.name)
+                            VALIDATION_STATUS[project_id]["current_field"] = field_schema.name
 
-                        # Разделяем правила на построчные и постолбцовые
-                        column_rules, row_rules = [], []
-                        for rc in sorted(field_schema.rules, key=lambda r: r.order):
-                            if rc.type and RULE_REGISTRY.get(rc.type, {}).get('needs_column_access'):
-                                column_rules.append((rc, RULE_REGISTRY[rc.type]))
-                            else:
-                                row_rules.append(rc)
+                            cursor.execute(f"PRAGMA table_info('{table_name}')")
+                            if normalized_col_name not in [col['name'] for col in cursor.fetchall()]:
+                                logger.warning(f"[{project_id}] Колонка '{normalized_col_name}' (оригинал: '{field_schema.name}') не найдена в таблице '{table_name}'. Пропуск поля.")
+                                continue
 
-                        # --- 2.1 Обработка правил, требующих доступ к столбцу ---
-                        if column_rules:
-                            logger.debug(f"[{project_id}] Загрузка столбца '{field_schema.name}' для спец. правил.")
-                            query = f'SELECT _row_id, "{normalized_col_name}" FROM "{table_name}" ORDER BY _row_id'
-                            df = pd.read_sql_query(query, conn, index_col='_row_id')
-                            column_series = df[normalized_col_name]
+                            # Разделяем правила на построчные и постолбцовые
+                            column_rules, row_rules = [], []
+                            for rc in sorted(field_schema.rules, key=lambda r: r.order):
+                                if rc.type and RULE_REGISTRY.get(rc.type, {}).get('needs_column_access'):
+                                    column_rules.append((rc, RULE_REGISTRY[rc.type]))
+                                else:
+                                    row_rules.append(rc)
 
-                            for rule_config, rule_def in column_rules:
-                                rule_name = rule_def['name']
-                                VALIDATION_STATUS[project_id]['current_rule'] = rule_name
-                                try:
-                                    res = rule_def["validator"](column_series, params=rule_config.params or {})
-                                    is_valid_mask, errors_series = res["is_valid"], res.get("errors")
-                                    invalid_rows = column_series[~is_valid_mask]
-                                    for row_id, value in invalid_rows.items():
-                                        all_errors.append({
-                                            "file_name": file_schema.name, "sheet_name": sheet_schema.name,
-                                            "field_name": field_schema.name, "is_required": field_schema.is_required,
-                                            "row": row_id, "error_type": rule_name,
-                                            "value": str(value) if pd.notna(value) else "ПУСТО",
-                                            "details": errors_series.loc[row_id] if errors_series is not None else None
-                                        })
-                                except Exception as e:
-                                    logger.error(f"[{project_id}] Ошибка в правиле '{rule_name}' для столбца '{field_schema.name}': {e}", exc_info=True)
+                            # --- 2.1 Обработка правил, требующих доступ к столбцу ---
+                            if column_rules:
+                                logger.debug(f"[{project_id}] Загрузка столбца '{field_schema.name}' для спец. правил.")
+                                query = f'SELECT _row_id, "{normalized_col_name}" FROM "{table_name}" ORDER BY _row_id'
+                                df = pd.read_sql_query(query, conn, index_col='_row_id')
+                                column_series = df[normalized_col_name]
 
-                                processed_ops_count += len(column_series)
-                                VALIDATION_STATUS[project_id].update({
-                                    "processed_rows": processed_ops_count,
-                                    "percentage": (processed_ops_count / total_operations) * 100 if total_operations > 0 else 0
-                                })
-
-                        # --- 2.2 Обработка обычных (построчных) правил ---
-                        if row_rules:
-                            query = f'SELECT _row_id, "{normalized_col_name}" FROM "{table_name}" ORDER BY _row_id'
-                            data_cursor = conn.cursor()
-                            data_cursor.execute(query)
-
-                            while chunk := data_cursor.fetchmany(1000):
-                                for row_id, value in chunk:
-                                    for rule_config in row_rules:
-                                        rule_name = "Неизвестное правило"
-                                        is_valid, details = True, None
-
-                                        if rule_config.group_id:
-                                            group = RULE_GROUPS_REGISTRY.get(rule_config.group_id)
-                                            if group:
-                                                rule_name = f"Группа: {group.name}"
-                                                result = _validate_group(value, group)
-                                                if not result["is_valid"]:
-                                                    is_valid = False
-                                                    details = result["errors"] # Здесь details - это просто имя группы
-                                        else:
-                                            rule_def = RULE_REGISTRY.get(rule_config.type)
-                                            if rule_def:
-                                                formatter = rule_def.get("formatter")
-                                                rule_name = formatter(rule_config.params) if formatter and rule_config.params else rule_def["name"]
-                                                res = rule_def["validator"](value, params=rule_config.params or {})
-                                                is_valid = res if isinstance(res, bool) else res.get("is_valid", False)
-                                                details = None if isinstance(res, bool) else res.get("errors")
-
-                                        if not is_valid:
+                                for rule_config, rule_def in column_rules:
+                                    rule_name = rule_def['name']
+                                    VALIDATION_STATUS[project_id]['current_rule'] = rule_name
+                                    try:
+                                        res = rule_def["validator"](column_series, params=rule_config.params or {})
+                                        is_valid_mask, errors_series = res["is_valid"], res.get("errors")
+                                        invalid_rows = column_series[~is_valid_mask]
+                                        for row_id, value in invalid_rows.items():
                                             all_errors.append({
                                                 "file_name": file_schema.name, "sheet_name": sheet_schema.name,
                                                 "field_name": field_schema.name, "is_required": field_schema.is_required,
                                                 "row": row_id, "error_type": rule_name,
-                                                "value": str(value) if pd.notna(value) else "ПУСТО", "details": details
+                                                "value": str(value) if pd.notna(value) else "ПУСТО",
+                                                "details": errors_series.loc[row_id] if errors_series is not None else None
                                             })
+                                    except Exception as e:
+                                        logger.error(f"[{project_id}] Ошибка в правиле '{rule_name}' для столбца '{field_schema.name}': {e}", exc_info=True)
 
-                                        processed_ops_count += 1
-
+                                    processed_ops_count += len(column_series)
                                     VALIDATION_STATUS[project_id].update({
                                         "processed_rows": processed_ops_count,
-                                        "current_rule": rule_name,
                                         "percentage": (processed_ops_count / total_operations) * 100 if total_operations > 0 else 0
                                     })
+
+                            # --- 2.2 Обработка обычных (построчных) правил ---
+                            if row_rules:
+                                query = f'SELECT _row_id, "{normalized_col_name}" FROM "{table_name}" ORDER BY _row_id'
+                                data_cursor = conn.cursor()
+                                data_cursor.execute(query)
+
+                                while chunk := data_cursor.fetchmany(1000):
+                                    for row_id, value in chunk:
+                                        for rule_config in row_rules:
+                                            rule_name = "Неизвестное правило"
+                                            is_valid, details = True, None
+
+                                            try: # Обертываем логику одного правила в try-except
+                                                if rule_config.group_id:
+                                                    group = RULE_GROUPS_REGISTRY.get(rule_config.group_id)
+                                                    if group:
+                                                        rule_name = f"Группа: {group.name}"
+                                                        result = _validate_group(value, group)
+                                                        if not result["is_valid"]:
+                                                            is_valid = False
+                                                            details = result["errors"]
+                                                elif rule_config.type:
+                                                    rule_def = RULE_REGISTRY.get(rule_config.type)
+                                                    if rule_def:
+                                                        formatter = rule_def.get("formatter")
+                                                        rule_name = formatter(rule_config.params) if formatter and rule_config.params else rule_def["name"]
+                                                        res = rule_def["validator"](value, params=rule_config.params or {})
+                                                        is_valid = res if isinstance(res, bool) else res.get("is_valid", False)
+                                                        details = None if isinstance(res, bool) else res.get("errors")
+                                                else:
+                                                    logger.warning(f"[{project_id}] Пропущено некорректное правило: {rule_config.id} (нет type и group_id)")
+                                                    continue # Пропускаем это правило
+
+                                                if not is_valid:
+                                                    all_errors.append({
+                                                        "file_name": file_schema.name, "sheet_name": sheet_schema.name,
+                                                        "field_name": field_schema.name, "is_required": field_schema.is_required,
+                                                        "row": row_id, "error_type": rule_name,
+                                                        "value": str(value) if pd.notna(value) else "ПУСТО", "details": details
+                                                    })
+
+                                            except Exception as e:
+                                                logger.error(f"[{project_id}] Ошибка при выполнении правила '{rule_name}' (ID: {rule_config.id}) для поля '{field_schema.name}' в строке {row_id}. Значение: '{str(value)[:50]}...'. Ошибка: {e}", exc_info=True)
+                                                # Не прерываем валидацию, просто логируем ошибку для конкретного правила
+
+                                            processed_ops_count += 1
+
+                                        VALIDATION_STATUS[project_id].update({
+                                            "processed_rows": processed_ops_count,
+                                            "current_rule": rule_name,
+                                            "percentage": (processed_ops_count / total_operations) * 100 if total_operations > 0 else 0
+                                        })
+
+                        logger.debug(f"[{project_id}] Завершение обработки листа: '{sheet_schema.name}'.")
+
+                    except Exception as e:
+                        logger.error(f"[{project_id}] Не удалось обработать лист '{sheet_schema.name}' из-за ошибки: {e}", exc_info=True)
+                        # Продолжаем со следующим листом, чтобы не прерывать всю валидацию
+                        continue
 
             # --- 3. Сохранение результатов в БД ---
             if all_errors:

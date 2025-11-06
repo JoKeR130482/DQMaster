@@ -115,7 +115,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (!state.project) return;
 
-        dom.autoRevalidateToggle.checked = state.project.auto_revalidate ?? true;
+        dom.autoRevalidateToggle.checked = state.project.auto_revalidate !== false;
 
         dom.projectNameHeader.innerHTML = `
             <div>
@@ -873,7 +873,7 @@ document.addEventListener('DOMContentLoaded', () => {
             state.project = await projectRes.json();
 
             // Устанавливаем состояние чекбокса "Авто-перепроверка" сразу после загрузки
-            dom.autoRevalidateToggle.checked = state.project.auto_revalidate ?? true;
+            dom.autoRevalidateToggle.checked = state.project.auto_revalidate !== false;
             console.debug(`[PROJECT_ID: ${projectId}] Загружено состояние авто-перепроверки: ${state.project.auto_revalidate}`);
 
             state.availableRules = await rulesRes.json();
@@ -943,10 +943,32 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    dom.autoRevalidateToggle.addEventListener('change', (e) => {
-        if (!state.project) return;
-        state.project.auto_revalidate = e.target.checked;
-        handleSaveProject(); // Сохраняем изменение настройки
+    dom.autoRevalidateToggle.addEventListener('change', async (e) => {
+        if (!state.project) {
+            console.warn("[AUTO_REVALIDATE] Попытка изменить настройку до загрузки проекта.");
+            return;
+        }
+        const newValue = e.target.checked;
+        const oldValue = state.project.auto_revalidate;
+        console.debug(`[AUTO_REVALIDATE] Пользователь изменил значение с ${oldValue} на ${newValue}.`);
+
+        // 1. Оптимистично обновляем состояние в UI
+        state.project.auto_revalidate = newValue;
+
+        // 2. Сохраняем всё состояние проекта, так как нет выделенного эндпоинта
+        try {
+            await handleSaveProject();
+            // handleSaveProject уже показывает уведомление об успехе
+            console.log(`[AUTO_REVALIDATE] Настройка успешно сохранена через полное обновление проекта.`);
+        } catch (error) {
+            // handleSaveProject уже показывает уведомление об ошибке
+            console.error(`[AUTO_REVALIDATE] Ошибка сохранения настройки через полное обновление проекта:`, error);
+
+            // 3. В случае ошибки, откатываем изменение в UI
+            console.warn(`[AUTO_REVALIDATE] Откат изменения в UI из-за ошибки сохранения.`);
+            state.project.auto_revalidate = oldValue;
+            dom.autoRevalidateToggle.checked = oldValue;
+        }
     });
 
     // Modal listeners
