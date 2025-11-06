@@ -45,30 +45,45 @@ def get_project_db_connection(project_id: str):
         return None
 
 def setup_main_database():
-    """Создает и инициализирует основную базу данных, если она не существует."""
-    if MAIN_DB_PATH.exists():
-        logger.info("Основная база данных уже существует.")
-        return
+    """
+    Создает основную БД, если ее нет, и выполняет миграцию схемы,
+    добавляя недостающие столбцы.
+    """
+    is_new_db = not MAIN_DB_PATH.exists()
 
-    logger.info("Создание основной базы данных 'main.db'...")
     try:
         with get_main_db_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS projects (
-                    id TEXT PRIMARY KEY,
-                    name TEXT NOT NULL,
-                    description TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    db_path TEXT NOT NULL,
-                    size_kb REAL DEFAULT 0
-                );
-            """)
+
+            if is_new_db:
+                logger.info("Создание основной базы данных 'main.db'...")
+                cursor.execute("""
+                    CREATE TABLE projects (
+                        id TEXT PRIMARY KEY,
+                        name TEXT NOT NULL,
+                        description TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        db_path TEXT NOT NULL,
+                        size_kb REAL DEFAULT 0,
+                        auto_revalidate BOOLEAN DEFAULT 0 NOT NULL
+                    );
+                """)
+                logger.info("Таблица 'projects' успешно создана в 'main.db'.")
+            else:
+                logger.info("Основная база данных уже существует. Проверка схемы...")
+                # --- Миграция: Добавляем столбец auto_revalidate, если его нет ---
+                cursor.execute("PRAGMA table_info(projects)")
+                columns = [column['name'] for column in cursor.fetchall()]
+                if 'auto_revalidate' not in columns:
+                    logger.info("Миграция: Добавление столбца 'auto_revalidate' в таблицу 'projects'.")
+                    # Добавляем столбец с NOT NULL и DEFAULT 0, чтобы избежать проблем с существующими записями
+                    cursor.execute("ALTER TABLE projects ADD COLUMN auto_revalidate BOOLEAN DEFAULT 0 NOT NULL;")
+                    logger.info("Столбец 'auto_revalidate' успешно добавлен.")
+
             conn.commit()
-            logger.info("Таблица 'projects' успешно создана в 'main.db'.")
     except sqlite3.Error as e:
-        logger.error(f"Не удалось создать основную базу данных: {e}")
+        logger.error(f"Ошибка при настройке или миграции основной базы данных: {e}", exc_info=True)
 
 
 def create_project_db(project_id: str):
