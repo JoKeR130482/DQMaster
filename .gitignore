@@ -8,6 +8,13 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Database files
+*.db
+*.db-journal*
+
+# Verification and test files
+*.xlsx
+
 # C extensions
 *.so
 

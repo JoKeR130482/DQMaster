@@ -51,6 +51,13 @@
                     <label for="file-input" class="file-label">Выберите .xlsx или .xls файл</label>
                     <button id="cancel-upload-btn" class="btn btn-secondary">Отмена</button>
                 </div>
+                <!-- Новый контейнер для прогресса импорта -->
+                <div id="import-progress-container" class="import-progress-container" style="display: none;">
+                    <div class="progress-bar-container">
+                        <div class="progress-bar"></div>
+                    </div>
+                    <span id="import-progress-text">Идет импорт файла...</span>
+                </div>
                 <div id="files-list-container" class="files-list-container">
                     <!-- File cards will be injected here -->
                 </div>

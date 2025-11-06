@@ -28,6 +28,7 @@ document.addEventListener('DOMContentLoaded', () => {
         uploadFormContainer: document.getElementById('upload-form-container'),
         fileInput: document.getElementById('file-input'),
         cancelUploadBtn: document.getElementById('cancel-upload-btn'),
+        importProgressContainer: document.getElementById('import-progress-container'),
         filesListContainer: document.getElementById('files-list-container'),
         progressContainer: document.getElementById('validation-progress-container'),
         resultsContainer: document.getElementById('validation-results-container'),
@@ -130,10 +131,14 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderFiles() {
         dom.filesListContainer.innerHTML = '';
         if (!state.project.files) return;
+
         state.project.files.forEach(file => {
             const fileCard = document.createElement('div');
             fileCard.className = 'file-card';
             fileCard.dataset.fileId = file.id;
+
+            const totalFields = file.sheets.reduce((acc, sheet) => acc + sheet.fields.length, 0);
+
             fileCard.innerHTML = `
                 <div class="file-header">
                     <div class="file-name-wrapper">
@@ -141,9 +146,25 @@ document.addEventListener('DOMContentLoaded', () => {
                         <div class="entity-id">ID: ${file.id}</div>
                     </div>
                     <div class="file-actions">
-                    <button class="btn btn-icon danger remove-file-btn" title="Удалить файл"><i data-lucide="trash-2"></i></button>
+                        <button class="btn btn-secondary reimport-file-btn" title="Переимпортировать данные из исходного файла" style="display:none;">
+                            <i data-lucide="refresh-cw"></i>
+                        </button>
+                        <button class="btn btn-icon danger remove-file-btn" title="Удалить файл">
+                            <i data-lucide="trash-2"></i>
+                        </button>
                     </div>
                 </div>
+
+                <div class="import-metadata">
+                    <h5>Метаданные импорта</h5>
+                    <div class="metadata-grid">
+                        <div class="metadata-item"><strong>Исходное имя:</strong> <span>${file.name}</span></div>
+                        <div class="metadata-item"><strong>Сохраненное имя:</strong> <span>${file.saved_name}</span></div>
+                        <div class="metadata-item"><strong>Кол-во листов:</strong> <span>${file.sheets.length}</span></div>
+                        <div class="metadata-item"><strong>Кол-во полей:</strong> <span>${totalFields}</span></div>
+                    </div>
+                </div>
+
                 <div class="sheets-list"></div>
             `;
             const sheetsList = fileCard.querySelector('.sheets-list');
@@ -797,19 +818,40 @@ document.addEventListener('DOMContentLoaded', () => {
     async function handleFileUpload(event) {
         const file = event.target.files[0];
         if (!file) return;
+
         const formData = new FormData();
         formData.append('file', file);
-        dom.loading.style.display = 'block';
+
+        // --- UI Changes for Import ---
+        state.showUploadForm = false;
+        dom.uploadFormContainer.style.display = 'none'; // Hide immediately
+        dom.importProgressContainer.classList.add('indeterminate');
+        dom.importProgressContainer.style.display = 'flex';
+
         try {
             const response = await api.uploadFile(formData);
-            if (!response.ok) throw new Error((await response.json()).detail);
-            state.project = await response.json();
-            state.showUploadForm = false;
-            render();
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.detail || 'Неизвестная ошибка сервера');
+            }
+
+            // API теперь возвращает только схему файла, а не весь проект
+            const newFileSchema = await response.json();
+
+            // Добавляем новый файл в состояние проекта
+            state.project.files.push(newFileSchema);
+
+            showNotification(`Файл "${file.name}" успешно импортирован.`, 'success');
+            render(); // Перерисовываем весь проект с новым файлом
+
         } catch(error) {
-            showError(`Ошибка загрузки файла: ${error.message}`);
+            showError(`Ошибка импорта файла: ${error.message}`);
+            showNotification(`Ошибка импорта файла: ${error.message}`, 'error');
         } finally {
-            dom.loading.style.display = 'none';
+            // --- Reset UI ---
+            dom.importProgressContainer.style.display = 'none';
+            dom.importProgressContainer.classList.remove('indeterminate');
+            dom.fileInput.value = ''; // Сбрасываем input, чтобы можно было загрузить тот же файл снова
         }
     }
 
