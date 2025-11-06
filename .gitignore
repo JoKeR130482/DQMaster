@@ -159,7 +159,21 @@ Thumbs.db
 # =================================================================
 # Project-specific ignores
 # =================================================================
+
+# Application logs
+logs/
+*.log
+uvicorn.log
+
+# Archived original files
+**/archive/
+
+# Migration markers
+*.migrated
+
+# Ignore all project data directories
+/projects/
+
 /uploads/
 /jules-scratch/
 templates.json
-server.log
