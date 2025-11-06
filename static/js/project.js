@@ -115,7 +115,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (!state.project) return;
 
-        dom.autoRevalidateToggle.checked = state.project.auto_revalidate !== false;
+        dom.autoRevalidateToggle.checked = (state.project.auto_revalidate === true);
+        console.debug(`[PROJECT_ID: ${projectId}] Загружено состояние авто-перепроверки: ${state.project.auto_revalidate}`);
+
 
         dom.projectNameHeader.innerHTML = `
             <div>
@@ -873,7 +875,7 @@ document.addEventListener('DOMContentLoaded', () => {
             state.project = await projectRes.json();
 
             // Устанавливаем состояние чекбокса "Авто-перепроверка" сразу после загрузки
-            dom.autoRevalidateToggle.checked = state.project.auto_revalidate !== false;
+            dom.autoRevalidateToggle.checked = (state.project.auto_revalidate === true);
             console.debug(`[PROJECT_ID: ${projectId}] Загружено состояние авто-перепроверки: ${state.project.auto_revalidate}`);
 
             state.availableRules = await rulesRes.json();
@@ -943,31 +945,35 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    dom.autoRevalidateToggle.addEventListener('change', async (e) => {
-        if (!state.project) {
-            console.warn("[AUTO_REVALIDATE] Попытка изменить настройку до загрузки проекта.");
-            return;
-        }
-        const newValue = e.target.checked;
+    dom.autoRevalidateToggle.addEventListener('change', async () => {
         const oldValue = state.project.auto_revalidate;
-        console.debug(`[AUTO_REVALIDATE] Пользователь изменил значение с ${oldValue} на ${newValue}.`);
+        const newValue = dom.autoRevalidateToggle.checked;
+        console.debug(`[PROJECT_ID: ${projectId}] Пользователь изменил состояние авто-перепроверки с ${oldValue} на ${newValue}`);
 
-        // 1. Оптимистично обновляем состояние в UI
+        // Сохраняем новое состояние
         state.project.auto_revalidate = newValue;
 
-        // 2. Сохраняем всё состояние проекта, так как нет выделенного эндпоинта
         try {
-            await handleSaveProject();
-            // handleSaveProject уже показывает уведомление об успехе
-            console.log(`[AUTO_REVALIDATE] Настройка успешно сохранена через полное обновление проекта.`);
-        } catch (error) {
-            // handleSaveProject уже показывает уведомление об ошибке
-            console.error(`[AUTO_REVALIDATE] Ошибка сохранения настройки через полное обновление проекта:`, error);
+            // Отправляем обновление на сервер
+            const response = await fetch(`/api/projects/${projectId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(state.project)
+            });
 
-            // 3. В случае ошибки, откатываем изменение в UI
-            console.warn(`[AUTO_REVALIDATE] Откат изменения в UI из-за ошибки сохранения.`);
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.detail || 'Не удалось сохранить состояние авто-перепроверки');
+            }
+
+            console.info(`[PROJECT_ID: ${projectId}] Состояние авто-перепроверки успешно сохранено: ${newValue}`);
+            showNotification("Настройки проекта сохранены!", 'success');
+        } catch (error) {
+            console.error(`[PROJECT_ID: ${projectId}] Ошибка при сохранении состояния авто-перепроверки: ${error.message}`);
+            // Откатываем изменение в UI
             state.project.auto_revalidate = oldValue;
             dom.autoRevalidateToggle.checked = oldValue;
+            showError(`Ошибка сохранения: ${error.message}`);
         }
     });
 

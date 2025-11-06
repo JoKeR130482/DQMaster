@@ -143,7 +143,7 @@ class Project(BaseModel):
     created_at: str
     updated_at: str
     files: List[FileSchema] = []
-    auto_revalidate: bool = True
+    auto_revalidate: bool = False
 
 # --- API Request/Response Models ---
 
@@ -153,6 +153,7 @@ class ProjectInfo(BaseModel):
     description: Optional[str] = ""
     updated_at: str
     size_kb: float
+    auto_revalidate: bool
 
 class ProjectCreateRequest(BaseModel):
     name: str
@@ -277,7 +278,7 @@ async def get_projects():
     try:
         with database.get_main_db_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT id, name, description, updated_at FROM projects ORDER BY updated_at DESC")
+            cursor.execute("SELECT id, name, description, updated_at, auto_revalidate FROM projects ORDER BY updated_at DESC")
             rows = cursor.fetchall()
             for row in rows:
                 project_dir = PROJECTS_DIR / row["id"]
@@ -290,7 +291,8 @@ async def get_projects():
                     name=row["name"],
                     description=row["description"],
                     updated_at=row["updated_at"].isoformat(),
-                    size_kb=round(total_size / 1024, 2)
+                    size_kb=round(total_size / 1024, 2),
+                    auto_revalidate=bool(row["auto_revalidate"])
                 ))
         logger.debug(f"Найдено {len(projects)} проектов.")
         return projects
@@ -315,12 +317,13 @@ async def create_project(project_data: ProjectCreateRequest):
     try:
         with database.get_main_db_connection() as conn:
             cursor = conn.cursor()
+            # Устанавливаем auto_revalidate в False по умолчанию
             cursor.execute(
                 """
-                INSERT INTO projects (id, name, description, created_at, updated_at, db_path)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO projects (id, name, description, created_at, updated_at, db_path, auto_revalidate)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
-                (project_id, project_data.name, project_data.description, now, now, str(db_path))
+                (project_id, project_data.name, project_data.description, now, now, str(db_path), False)
             )
             conn.commit()
             logger.info(f"[PROJECT_ID: {project_id}] Проект успешно зарегистрирован в main.db.")
@@ -336,7 +339,8 @@ async def create_project(project_data: ProjectCreateRequest):
         name=project_data.name,
         description=project_data.description,
         updated_at=now.isoformat(),
-        size_kb=0.0
+        size_kb=0.0,
+        auto_revalidate=False
     )
 
 def _build_project_model_from_db(project_id: str) -> Optional[Project]:
@@ -372,9 +376,13 @@ def _build_project_model_from_db(project_id: str) -> Optional[Project]:
             if not files_rows:
                  # Если файлов нет, возвращаем проект с пустым списком файлов
                  return Project(
-                    id=project_info["id"], name=project_info["name"], description=project_info["description"],
-                    created_at=project_info["created_at"].isoformat(), updated_at=project_info["updated_at"].isoformat(),
-                    files=[]
+                    id=project_info["id"],
+                    name=project_info["name"],
+                    description=project_info["description"],
+                    created_at=project_info["created_at"].isoformat(),
+                    updated_at=project_info["updated_at"].isoformat(),
+                    files=[],
+                    auto_revalidate=bool(project_info["auto_revalidate"])
                 )
 
             for file_row in files_rows:
@@ -419,7 +427,8 @@ def _build_project_model_from_db(project_id: str) -> Optional[Project]:
             description=project_info["description"],
             created_at=project_info["created_at"].isoformat(),
             updated_at=project_info["updated_at"].isoformat(),
-            files=project_files
+            files=project_files,
+            auto_revalidate=bool(project_info["auto_revalidate"])
         )
         logger.debug(f"[PROJECT_ID: {project_id}] Модель проекта успешно собрана.")
         return project_model
@@ -451,8 +460,8 @@ def _update_project_in_db(project_id: str, project_update: FullProjectUpdateRequ
         with database.get_main_db_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "UPDATE projects SET name = ?, description = ?, updated_at = ? WHERE id = ?",
-                (project_update.name, project_update.description, now, project_id)
+                "UPDATE projects SET name = ?, description = ?, auto_revalidate = ?, updated_at = ? WHERE id = ?",
+                (project_update.name, project_update.description, project_update.auto_revalidate, now, project_id)
             )
             conn.commit()
             if cursor.rowcount == 0:
