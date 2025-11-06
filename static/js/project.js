@@ -249,7 +249,42 @@ document.addEventListener('DOMContentLoaded', () => {
         const ruleDef = state.availableRules.find(r => r.id === rule.type);
         if (!ruleDef) return rule.type;
 
-        // Specific formatter for substring_check
+        // --- Улучшенная логика форматирования ---
+        // Проверяем, есть ли у правила специальный форматер (как у is_email)
+        // Это более гибкий подход, чем хардкодинг для каждого правила.
+        // `formatter` - это ключ, который мы ожидаем от API /api/rules, если у правила есть спец. форматирование
+        // На данный момент бэкенд не отправляет этот ключ, но мы заложим основу.
+        // Пока что, для решения текущей задачи, мы можем положиться на наличие `params`
+        // и типа правила.
+
+        // Специальное форматирование для is_email
+        if (rule.type === 'is_email' && rule.params) {
+            const { allow_empty = false, domain_whitelist = "" } = rule.params;
+            const details = [];
+
+            if (allow_empty) {
+                details.push("пустые разрешены");
+            }
+
+            if (domain_whitelist) {
+                const whitelist = domain_whitelist.split(',').map(d => d.trim()).filter(Boolean);
+                if (whitelist.length > 0) {
+                    let display_domains = whitelist.slice(0, 2).join(', ');
+                    if (whitelist.length > 2) {
+                        display_domains += "...";
+                    }
+                    details.push(`домены: ${display_domains}`);
+                }
+            }
+
+            if (details.length === 0) {
+                return ruleDef.name; // Возвращаем имя по умолчанию, если нет настроек
+            }
+
+            return `${ruleDef.name} (${details.join('; ')})`;
+        }
+
+        // Оставляем старую логику для substring_check для обратной совместимости
         if (rule.type === 'substring_check' && rule.params) {
             const { value, mode = 'contains', case_sensitive = false } = rule.params;
             if (!value) return ruleDef.name;
@@ -258,13 +293,11 @@ document.addEventListener('DOMContentLoaded', () => {
             return `Подстрока '${value}' (${mode_text}${case_text})`;
         }
 
-        // Generic fallback for other rules that might have been configured
+        // Общий случай для других правил с параметрами
         if (rule.params && rule.params.value) {
              return `${ruleDef.name}: ${rule.params.value}`;
         }
-
-        // Backward compatibility for old format
-        if (rule.value) {
+        if (rule.value) { // Старый формат
             return `${ruleDef.name}: ${rule.value}`;
         }
 
@@ -872,7 +905,19 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!rulesRes.ok) throw new Error('Failed to load rules');
             if (!groupsRes.ok) throw new Error('Failed to load rule groups');
 
-            state.project = await projectRes.json();
+            // --- DEBUG START ---
+            // Сначала получаем ответ как текст, чтобы проверить его содержимое
+            const projectText = await projectRes.text();
+            console.log("Ответ от /api/projects/{id}:", projectText);
+            try {
+                // Пытаемся распарсить текст как JSON
+                state.project = JSON.parse(projectText);
+            } catch (jsonError) {
+                console.error("Ошибка парсинга JSON:", jsonError);
+                // Прокидываем ошибку дальше, чтобы ее обработал внешний catch
+                throw new Error(`Не удалось разобрать JSON. Причина: ${jsonError.message}`);
+            }
+            // --- DEBUG END ---
 
             // Устанавливаем состояние чекбокса "Авто-перепроверка" сразу после загрузки
             dom.autoRevalidateToggle.checked = (state.project.auto_revalidate === true);
