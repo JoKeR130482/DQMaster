@@ -441,7 +441,7 @@ async def get_project_details(project_id: str):
     return project
 
 def _update_project_in_db(project_id: str, project_update: FullProjectUpdateRequest) -> Project:
-    """Синхронная функция для атомарного обновления всей структуры проекта в БД."""
+    """Синхронная функция для атомарного обновления всей структуры проекта в БД с использованием UPSERT."""
     logger.info(f"[PROJECT_ID: {project_id}] Начало полного обновления проекта в БД.")
     start_time = time.time()
 
@@ -458,58 +458,77 @@ def _update_project_in_db(project_id: str, project_update: FullProjectUpdateRequ
             if cursor.rowcount == 0:
                  raise HTTPException(status_code=404, detail="Проект не найден в основной БД.")
     except sqlite3.Error as e:
-        logger.error(f"[PROJECT_ID: {project_id}] Ошибка при обновлении метаданных в main.db: {e}")
+        logger.error(f"[{project_id}] Ошибка при обновлении метаданных в main.db: {e}")
         raise HTTPException(status_code=500, detail="Ошибка БД при обновлении проекта.")
 
-    # 2. Атомарно обновляем всю структуру в БД проекта
+    # 2. Атомарно обновляем (UPSERT) всю структуру в БД проекта
+    conn = None # Объявляем conn здесь для доступа в блоке except
     try:
-        with database.get_project_db_connection(project_id) as conn:
-            cursor = conn.cursor()
-            cursor.execute("BEGIN;")
-            logger.debug(f"[PROJECT_ID: {project_id}] Транзакция для обновления структуры проекта начата.")
+        conn = database.get_project_db_connection(project_id)
+        cursor = conn.cursor()
+        cursor.execute("BEGIN;")
+        logger.debug(f"[{project_id}] Транзакция для обновления структуры проекта начата.")
 
-            # Собираем ID всех файлов, которые есть в запросе на обновление
-            file_ids_in_update = [file.id for file in project_update.files]
-
-            # Очищаем все, что связано с этими файлами: листы, поля, правила.
-            # Благодаря ON DELETE CASCADE, удаление листов повлечет удаление полей и правил.
-            cursor.execute(f"DELETE FROM sheets WHERE file_id IN ({','.join('?' for _ in file_ids_in_update)})", file_ids_in_update)
-            logger.debug(f"[PROJECT_ID: {project_id}] Старые листы, поля и правила для {len(file_ids_in_update)} файлов удалены.")
-
-            # Проходим по новой структуре и вставляем данные
-            for file_schema in project_update.files:
-                for sheet_schema in file_schema.sheets:
+        # Проходим по новой структуре и обновляем/вставляем данные
+        for file_schema in project_update.files:
+            for sheet_schema in file_schema.sheets:
+                logger.debug(f"[{project_id}] Обработка листа: {sheet_schema.name} (ID: {sheet_schema.id})")
+                cursor.execute(
+                    """
+                    INSERT INTO sheets (id, file_id, name, is_active) VALUES (?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                        file_id = excluded.file_id,
+                        name = excluded.name,
+                        is_active = excluded.is_active
+                    """,
+                    (sheet_schema.id, file_schema.id, sheet_schema.name, sheet_schema.is_active)
+                )
+                for field_schema in sheet_schema.fields:
+                    logger.debug(f"[{project_id}] Обработка поля: {field_schema.name} (ID: {field_schema.id}) для листа {sheet_schema.id}")
                     cursor.execute(
-                        "INSERT INTO sheets (id, file_id, name, is_active) VALUES (?, ?, ?, ?)",
-                        (sheet_schema.id, file_schema.id, sheet_schema.name, sheet_schema.is_active)
+                        """
+                        INSERT INTO fields (id, sheet_id, name, is_required) VALUES (?, ?, ?, ?)
+                        ON CONFLICT(id) DO UPDATE SET
+                            sheet_id = excluded.sheet_id,
+                            name = excluded.name,
+                            is_required = excluded.is_required
+                        """,
+                        (field_schema.id, sheet_schema.id, field_schema.name, field_schema.is_required)
                     )
-                    for field_schema in sheet_schema.fields:
+                    for rule in field_schema.rules:
+                        logger.debug(f"[{project_id}] Обработка правила (ID: {rule.id}) для поля {field_schema.id}")
                         cursor.execute(
-                            "INSERT INTO fields (id, sheet_id, name, is_required) VALUES (?, ?, ?, ?)",
-                            (field_schema.id, sheet_schema.id, field_schema.name, field_schema.is_required)
-                        )
-                        for rule in field_schema.rules:
-                            cursor.execute(
-                                """INSERT INTO rules (id, field_id, rule_type, group_id, params, order_num)
-                                   VALUES (?, ?, ?, ?, ?, ?)""",
-                                (
-                                    rule.id, field_schema.id, rule.type, rule.group_id,
-                                    json.dumps(rule.params, ensure_ascii=False) if rule.params else None,
-                                    rule.order
-                                )
+                            """
+                            INSERT INTO rules (id, field_id, rule_type, group_id, params, order_num)
+                            VALUES (?, ?, ?, ?, ?, ?)
+                            ON CONFLICT(id) DO UPDATE SET
+                                field_id = excluded.field_id,
+                                rule_type = excluded.rule_type,
+                                group_id = excluded.group_id,
+                                params = excluded.params,
+                                order_num = excluded.order_num
+                            """,
+                            (
+                                rule.id, field_schema.id, rule.type, rule.group_id,
+                                json.dumps(rule.params, ensure_ascii=False) if rule.params else None,
+                                rule.order
                             )
+                        )
 
-            conn.commit()
-            logger.info(f"[PROJECT_ID: {project_id}] Транзакция для обновления структуры проекта успешно завершена.")
+        conn.commit()
+        logger.info(f"[{project_id}] Транзакция для обновления структуры проекта успешно завершена.")
 
     except sqlite3.Error as e:
-        logger.error(f"[PROJECT_ID: {project_id}] Ошибка БД при обновлении структуры проекта: {e}", exc_info=True)
-        if 'conn' in locals() and conn:
+        logger.error(f"[{project_id}] Ошибка БД при обновлении структуры проекта: {e}", exc_info=True)
+        if conn:
             conn.rollback()
-        raise HTTPException(status_code=500, detail="Ошибка при сохранении структуры проекта.")
+        raise HTTPException(status_code=500, detail=f"Ошибка при сохранении структуры проекта: {str(e)}")
+    finally:
+        if conn:
+            conn.close()
 
-    duration = time.time() - start_time
-    logger.info(f"[PROJECT_ID: {project_id}] Полное обновление проекта завершено за {duration:.2f} сек.")
+    duration = (time.time() - start_time) * 1000
+    logger.info(f"[PROJECT_ID: {project_id}] Полное обновление проекта завершено за {duration:.2f} мс.")
 
     project_update.updated_at = now.isoformat()
     return project_update
