@@ -10,16 +10,71 @@ import pandas as pd
 import io
 import json
 import asyncio
+import logging
+import logging.handlers
+import time
+import database
 
-from fastapi import Depends, FastAPI, File, UploadFile, HTTPException
+from fastapi import Depends, FastAPI, File, UploadFile, HTTPException, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, ValidationError
 
 # ==============================================================================
+# 0. Logging Configuration
+# ==============================================================================
+LOG_DIR = Path(__file__).resolve().parent / "logs"
+LOG_DIR.mkdir(exist_ok=True)
+
+# Форматтер для логов
+log_formatter = logging.Formatter(
+    "[%(asctime)s] [%(levelname)s] [%(module)s:%(funcName)s:%(lineno)d] - %(message)s"
+)
+
+# --- Логгер для приложения (уровень INFO) ---
+app_handler = logging.handlers.RotatingFileHandler(
+    LOG_DIR / "app.log", maxBytes=5*1024*1024, backupCount=3, encoding="utf-8"
+)
+app_handler.setLevel(logging.INFO)
+app_handler.setFormatter(log_formatter)
+
+# --- Логгер для отладки (уровень DEBUG) ---
+debug_handler = logging.handlers.RotatingFileHandler(
+    LOG_DIR / "debug.log", maxBytes=10*1024*1024, backupCount=3, encoding="utf-8"
+)
+debug_handler.setLevel(logging.DEBUG)
+debug_handler.setFormatter(log_formatter)
+
+# --- Консольный логгер ---
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+console_handler.setFormatter(log_formatter)
+
+# --- Настройка корневого логгера ---
+root_logger = logging.getLogger()
+root_logger.setLevel(logging.DEBUG)  # Устанавливаем самый низкий уровень для корневого логгера
+root_logger.addHandler(app_handler)
+root_logger.addHandler(debug_handler)
+root_logger.addHandler(console_handler)
+
+logger = logging.getLogger(__name__)
+
+# ==============================================================================
 # 1. Globals & App Initialization
 # ==============================================================================
 app = FastAPI()
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    start_time = time.time()
+    response = await call_next(request)
+    duration = (time.time() - start_time) * 1000
+    logger.info(
+        f"'{request.method} {request.url.path}' {response.status_code} "
+        f"processed in {duration:.2f} ms"
+    )
+    return response
+
 
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
@@ -120,6 +175,18 @@ class ValidationStatus(BaseModel):
     percentage: float = 0.0
     message: str = ""
 
+class SheetStatus(BaseModel):
+    sheet_name: str
+    expected_rows: int
+    actual_rows: int
+    is_consistent: bool
+
+class DataStatus(BaseModel):
+    project_id: str
+    overall_status: str # "CONSISTENT", "INCONSISTENT", "NO_DATA"
+    checked_at: str
+    details: List[SheetStatus]
+
 # ==============================================================================
 # 3. Helper Functions
 # ==============================================================================
@@ -203,51 +270,258 @@ def write_rule_groups():
 # --- Project Management ---
 @app.get("/api/projects", response_model=List[ProjectInfo])
 async def get_projects():
+    """Возвращает список всех проектов из основной базы данных."""
+    logger.debug("Запрос на получение списка всех проектов.")
     projects = []
-    if not PROJECTS_DIR.exists():
-        return projects
-    for project_dir in PROJECTS_DIR.iterdir():
-        if project_dir.is_dir():
-            project = read_project(project_dir.name)
-            if project:
-                total_size = sum(f.stat().st_size for f in project_dir.glob('**/*') if f.is_file())
-                project_info = ProjectInfo(
-                    id=project.id,
-                    name=project.name,
-                    description=project.description,
-                    updated_at=project.updated_at,
-                    size_kb=round(total_size / 1024, 2)
-                )
-                projects.append(project_info)
-    projects.sort(key=lambda p: p.updated_at, reverse=True)
-    return projects
+    try:
+        with database.get_main_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id, name, description, updated_at FROM projects ORDER BY updated_at DESC")
+            rows = cursor.fetchall()
+            for row in rows:
+                project_dir = PROJECTS_DIR / row["id"]
+                total_size = 0
+                if project_dir.is_dir():
+                    total_size = sum(f.stat().st_size for f in project_dir.glob('**/*') if f.is_file())
 
-@app.post("/api/projects", status_code=201, response_model=Project)
+                projects.append(ProjectInfo(
+                    id=row["id"],
+                    name=row["name"],
+                    description=row["description"],
+                    updated_at=row["updated_at"].isoformat(),
+                    size_kb=round(total_size / 1024, 2)
+                ))
+        logger.debug(f"Найдено {len(projects)} проектов.")
+        return projects
+    except sqlite3.Error as e:
+        logger.error(f"Не удалось получить список проектов из main.db: {e}")
+        raise HTTPException(status_code=500, detail="Не удалось получить список проектов.")
+
+@app.post("/api/projects", status_code=201, response_model=ProjectInfo)
 async def create_project(project_data: ProjectCreateRequest):
+    """Создает новый проект, инициализирует его БД и регистрирует в основной БД."""
     project_id = str(uuid.uuid4())
-    project_dir = PROJECTS_DIR / project_id
-    project_dir.mkdir(parents=True, exist_ok=True)
-    (project_dir / "files").mkdir(exist_ok=True)
-    now = datetime.datetime.utcnow().isoformat()
-    project = Project(id=project_id, name=project_data.name, description=project_data.description, created_at=now, updated_at=now)
-    write_project(project_id, project)
-    return project
+    logger.info(f"Запрос на создание нового проекта '{project_data.name}' с ID: {project_id}")
+
+    # 1. Создание БД проекта
+    if not database.create_project_db(project_id):
+        logger.error(f"[PROJECT_ID: {project_id}] Не удалось создать базу данных проекта.")
+        raise HTTPException(status_code=500, detail="Не удалось создать базу данных проекта.")
+
+    # 2. Регистрация проекта в основной БД
+    db_path = PROJECTS_DIR / project_id / f"project_{project_id}.db"
+    now = datetime.datetime.utcnow()
+    try:
+        with database.get_main_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO projects (id, name, description, created_at, updated_at, db_path)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (project_id, project_data.name, project_data.description, now, now, str(db_path))
+            )
+            conn.commit()
+            logger.info(f"[PROJECT_ID: {project_id}] Проект успешно зарегистрирован в main.db.")
+    except sqlite3.Error as e:
+        logger.error(f"[PROJECT_ID: {project_id}] Ошибка при регистрации проекта в main.db: {e}")
+        # Попытка очистки - удаляем созданную директорию проекта
+        shutil.rmtree(PROJECTS_DIR / project_id, ignore_errors=True)
+        raise HTTPException(status_code=500, detail="Ошибка при регистрации проекта.")
+
+    # 3. Возвращаем информацию о созданном проекте
+    return ProjectInfo(
+        id=project_id,
+        name=project_data.name,
+        description=project_data.description,
+        updated_at=now.isoformat(),
+        size_kb=0.0
+    )
+
+def _build_project_model_from_db(project_id: str) -> Optional[Project]:
+    """
+    Собирает полную Pydantic модель проекта из его базы данных.
+    Это сложная операция, включающая множество SQL-запросов.
+    """
+    logger.debug(f"[PROJECT_ID: {project_id}] Сборка модели проекта из БД.")
+    project_info = None
+
+    # 1. Получаем базовую информацию о проекте из main.db
+    try:
+        with database.get_main_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM projects WHERE id = ?", (project_id,))
+            project_info = cursor.fetchone()
+    except sqlite3.Error as e:
+        logger.error(f"[PROJECT_ID: {project_id}] Не удалось получить метаданные проекта из main.db: {e}")
+        return None
+
+    if not project_info:
+        return None
+
+    project_files = []
+    # 2. Получаем структуру (файлы, листы, поля, правила) из БД проекта
+    try:
+        with database.get_project_db_connection(project_id) as conn:
+            cursor = conn.cursor()
+
+            # Получаем все файлы
+            cursor.execute("SELECT * FROM files ORDER BY upload_time")
+            files_rows = cursor.fetchall()
+            if not files_rows:
+                 # Если файлов нет, возвращаем проект с пустым списком файлов
+                 return Project(
+                    id=project_info["id"], name=project_info["name"], description=project_info["description"],
+                    created_at=project_info["created_at"].isoformat(), updated_at=project_info["updated_at"].isoformat(),
+                    files=[]
+                )
+
+            for file_row in files_rows:
+                # Получаем листы для каждого файла
+                cursor.execute("SELECT * FROM sheets WHERE file_id = ? ORDER BY name", (file_row["id"],))
+                sheets_rows = cursor.fetchall()
+                file_sheets = []
+
+                for sheet_row in sheets_rows:
+                    # Получаем поля для каждого листа
+                    cursor.execute("SELECT * FROM fields WHERE sheet_id = ? ORDER BY name", (sheet_row["id"],))
+                    fields_rows = cursor.fetchall()
+                    sheet_fields = []
+
+                    for field_row in fields_rows:
+                        # Получаем правила для каждого поля
+                        cursor.execute("SELECT * FROM rules WHERE field_id = ? ORDER BY order_num", (field_row["id"],))
+                        rules_rows = cursor.fetchall()
+                        field_rules = [
+                            Rule(
+                                id=r["id"],
+                                type=r["rule_type"],
+                                group_id=r["group_id"],
+                                params=json.loads(r["params"]) if r["params"] else None,
+                                order=r["order_num"]
+                            ) for r in rules_rows
+                        ]
+                        sheet_fields.append(
+                            FieldSchema(id=field_row["id"], name=field_row["name"], is_required=bool(field_row["is_required"]), rules=field_rules)
+                        )
+                    file_sheets.append(
+                        SheetSchema(id=sheet_row["id"], name=sheet_row["name"], is_active=bool(sheet_row["is_active"]), fields=sheet_fields)
+                    )
+                project_files.append(
+                    FileSchema(id=file_row["id"], name=file_row["original_name"], saved_name=file_row["saved_name"], sheets=file_sheets)
+                )
+
+        # 3. Собираем итоговую модель
+        project_model = Project(
+            id=project_info["id"],
+            name=project_info["name"],
+            description=project_info["description"],
+            created_at=project_info["created_at"].isoformat(),
+            updated_at=project_info["updated_at"].isoformat(),
+            files=project_files
+        )
+        logger.debug(f"[PROJECT_ID: {project_id}] Модель проекта успешно собрана.")
+        return project_model
+
+    except sqlite3.Error as e:
+        logger.error(f"[PROJECT_ID: {project_id}] Ошибка при чтении структуры проекта из его БД: {e}", exc_info=True)
+        return None
+    except (ValidationError, json.JSONDecodeError) as e:
+        logger.error(f"[PROJECT_ID: {project_id}] Ошибка валидации Pydantic или парсинга JSON при сборке модели: {e}", exc_info=True)
+        return None
+
 
 @app.get("/api/projects/{project_id}", response_model=Project)
 async def get_project_details(project_id: str):
-    project = read_project(project_id)
+    """Собирает и возвращает полную структуру проекта из его базы данных."""
+    project = await asyncio.to_thread(_build_project_model_from_db, project_id)
     if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+        raise HTTPException(status_code=404, detail="Проект не найден или поврежден.")
     return project
+
+def _update_project_in_db(project_id: str, project_update: FullProjectUpdateRequest) -> Project:
+    """Синхронная функция для атомарного обновления всей структуры проекта в БД."""
+    logger.info(f"[PROJECT_ID: {project_id}] Начало полного обновления проекта в БД.")
+    start_time = time.time()
+
+    # 1. Обновляем метаданные в main.db
+    now = datetime.datetime.utcnow()
+    try:
+        with database.get_main_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE projects SET name = ?, description = ?, updated_at = ? WHERE id = ?",
+                (project_update.name, project_update.description, now, project_id)
+            )
+            conn.commit()
+            if cursor.rowcount == 0:
+                 raise HTTPException(status_code=404, detail="Проект не найден в основной БД.")
+    except sqlite3.Error as e:
+        logger.error(f"[PROJECT_ID: {project_id}] Ошибка при обновлении метаданных в main.db: {e}")
+        raise HTTPException(status_code=500, detail="Ошибка БД при обновлении проекта.")
+
+    # 2. Атомарно обновляем всю структуру в БД проекта
+    try:
+        with database.get_project_db_connection(project_id) as conn:
+            cursor = conn.cursor()
+            cursor.execute("BEGIN;")
+            logger.debug(f"[PROJECT_ID: {project_id}] Транзакция для обновления структуры проекта начата.")
+
+            # Собираем ID всех файлов, которые есть в запросе на обновление
+            file_ids_in_update = [file.id for file in project_update.files]
+
+            # Очищаем все, что связано с этими файлами: листы, поля, правила.
+            # Благодаря ON DELETE CASCADE, удаление листов повлечет удаление полей и правил.
+            cursor.execute(f"DELETE FROM sheets WHERE file_id IN ({','.join('?' for _ in file_ids_in_update)})", file_ids_in_update)
+            logger.debug(f"[PROJECT_ID: {project_id}] Старые листы, поля и правила для {len(file_ids_in_update)} файлов удалены.")
+
+            # Проходим по новой структуре и вставляем данные
+            for file_schema in project_update.files:
+                for sheet_schema in file_schema.sheets:
+                    cursor.execute(
+                        "INSERT INTO sheets (id, file_id, name, is_active) VALUES (?, ?, ?, ?)",
+                        (sheet_schema.id, file_schema.id, sheet_schema.name, sheet_schema.is_active)
+                    )
+                    for field_schema in sheet_schema.fields:
+                        cursor.execute(
+                            "INSERT INTO fields (id, sheet_id, name, is_required) VALUES (?, ?, ?, ?)",
+                            (field_schema.id, sheet_schema.id, field_schema.name, field_schema.is_required)
+                        )
+                        for rule in field_schema.rules:
+                            cursor.execute(
+                                """INSERT INTO rules (id, field_id, rule_type, group_id, params, order_num)
+                                   VALUES (?, ?, ?, ?, ?, ?)""",
+                                (
+                                    rule.id, field_schema.id, rule.type, rule.group_id,
+                                    json.dumps(rule.params, ensure_ascii=False) if rule.params else None,
+                                    rule.order
+                                )
+                            )
+
+            conn.commit()
+            logger.info(f"[PROJECT_ID: {project_id}] Транзакция для обновления структуры проекта успешно завершена.")
+
+    except sqlite3.Error as e:
+        logger.error(f"[PROJECT_ID: {project_id}] Ошибка БД при обновлении структуры проекта: {e}", exc_info=True)
+        if 'conn' in locals() and conn:
+            conn.rollback()
+        raise HTTPException(status_code=500, detail="Ошибка при сохранении структуры проекта.")
+
+    duration = time.time() - start_time
+    logger.info(f"[PROJECT_ID: {project_id}] Полное обновление проекта завершено за {duration:.2f} сек.")
+
+    project_update.updated_at = now.isoformat()
+    return project_update
 
 @app.put("/api/projects/{project_id}", response_model=Project)
 async def update_full_project(project_id: str, project_update: FullProjectUpdateRequest):
-    project_dir = PROJECTS_DIR / project_id
-    if not project_dir.is_dir():
-        raise HTTPException(status_code=404, detail="Project not found")
-    project_update.id = project_id
-    write_project(project_id, project_update)
-    return project_update
+    """Атомарно обновляет всю структуру проекта (листы, поля, правила) в базе данных."""
+    # Убеждаемся, что ID в пути и в теле запроса совпадают
+    if project_id != project_update.id:
+        raise HTTPException(status_code=400, detail="ID проекта в URL и теле запроса не совпадают.")
+
+    updated_project = await asyncio.to_thread(_update_project_in_db, project_id, project_update)
+    return updated_project
 
 @app.patch("/api/projects/{project_id}", response_model=Project)
 async def partial_update_project(project_id: str, project_update: ProjectPartialUpdateRequest):
@@ -263,36 +537,210 @@ async def partial_update_project(project_id: str, project_update: ProjectPartial
 
 @app.delete("/api/projects/{project_id}", status_code=204)
 async def delete_project(project_id: str):
+    """Удаляет проект: его директорию и запись в основной БД."""
+    logger.info(f"[PROJECT_ID: {project_id}] Запрос на удаление проекта.")
     project_dir = PROJECTS_DIR / project_id
-    if not project_dir.is_dir(): raise HTTPException(status_code=404, detail="Project not found")
-    shutil.rmtree(project_dir)
+
+    # 1. Удаляем запись из main.db
+    try:
+        with database.get_main_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM projects WHERE id = ?", (project_id,))
+            conn.commit()
+            if cursor.rowcount == 0:
+                logger.warning(f"[PROJECT_ID: {project_id}] Проект не найден в main.db, но папка может существовать.")
+                # Не бросаем ошибку, чтобы можно было почистить "осиротевшие" папки
+            else:
+                logger.info(f"[PROJECT_ID: {project_id}] Запись о проекте успешно удалена из main.db.")
+    except sqlite3.Error as e:
+        logger.error(f"[PROJECT_ID: {project_id}] Ошибка при удалении проекта из main.db: {e}")
+        raise HTTPException(status_code=500, detail="Ошибка базы данных при удалении проекта.")
+
+    # 2. Удаляем директорию проекта
+    if project_dir.is_dir():
+        try:
+            shutil.rmtree(project_dir)
+            logger.info(f"[PROJECT_ID: {project_id}] Директория проекта успешно удалена.")
+        except OSError as e:
+            logger.error(f"[PROJECT_ID: {project_id}] Не удалось удалить директорию проекта: {e}")
+            # Возвращаем ошибку, так как проект частично удален, что является проблемой
+            raise HTTPException(status_code=500, detail="Не удалось удалить файлы проекта.")
+    else:
+        logger.warning(f"[PROJECT_ID: {project_id}] Директория проекта не найдена.")
+
+    return
 
 # --- Project File & Validation Operations ---
-@app.post("/api/projects/{project_id}/upload", response_model=Project)
-async def upload_file_to_project(project_id: str, file: UploadFile = File(...)):
-    project = read_project(project_id)
-    if not project: raise HTTPException(status_code=404, detail="Project not found")
-    if not file.filename or not (file.filename.endswith('.xlsx') or file.filename.endswith('.xls')):
-        raise HTTPException(status_code=400, detail="Invalid file type")
 
-    project_files_dir = PROJECTS_DIR / project_id / "files"
-    project_files_dir.mkdir(exist_ok=True)
-    contents = await file.read()
+def _import_excel_to_db(project_id: str, file_id: str, original_filename: str, saved_filename: str, contents: bytes):
+    """
+    Синхронная функция для выполнения тяжелой работы по импорту Excel в БД.
+    Запускается в отдельном потоке через asyncio.to_thread.
+    """
+    project_dir = PROJECTS_DIR / project_id
+    logger.info(f"[PROJECT_ID: {project_id}] Начало импорта файла '{original_filename}'.")
+    start_time = time.time()
+
     try:
         xls = pd.ExcelFile(io.BytesIO(contents))
-        sheets = []
-        for sheet_name in xls.sheet_names:
-            df = pd.read_excel(xls, sheet_name=sheet_name)
-            fields = [FieldSchema(name=col) for col in df.columns]
-            sheets.append(SheetSchema(name=sheet_name, fields=fields))
-        saved_filename = f"{uuid.uuid4()}{Path(file.filename).suffix}"
-        new_file = FileSchema(name=file.filename, saved_name=saved_filename, sheets=sheets)
-        project.files.append(new_file)
-        write_project(project_id, project)
-        (project_files_dir / saved_filename).write_bytes(contents)
-        return project
+        sheet_schemas = []
+        field_schemas = {} # {sheet_id: [FieldSchema, ...]}
+
+        with database.get_project_db_connection(project_id) as conn:
+            cursor = conn.cursor()
+            # Начинаем транзакцию
+            cursor.execute("BEGIN;")
+            logger.debug(f"[PROJECT_ID: {project_id}] Транзакция для импорта начата.")
+
+            # 1. Записываем метаданные файла
+            cursor.execute(
+                "INSERT INTO files (id, original_name, saved_name, upload_time) VALUES (?, ?, ?, ?)",
+                (file_id, original_filename, saved_filename, datetime.datetime.utcnow())
+            )
+
+            for sheet_name in xls.sheet_names:
+                sheet_id = str(uuid.uuid4())
+                logger.debug(f"[PROJECT_ID: {project_id}] Обработка листа: '{sheet_name}' (ID: {sheet_id})")
+
+                # 2. Записываем метаданные листа
+                cursor.execute(
+                    "INSERT INTO sheets (id, file_id, name, is_active) VALUES (?, ?, ?, ?)",
+                    (sheet_id, file_id, sheet_name, True)
+                )
+                sheet_schemas.append(SheetSchema(id=sheet_id, name=sheet_name, is_active=True, fields=[]))
+                field_schemas[sheet_id] = []
+
+                # 3. Читаем данные листа и создаем таблицу для них
+                df = pd.read_excel(xls, sheet_name=sheet_name)
+                # Приводим все типы колонок к строке, чтобы избежать проблем с типами данных в SQLite
+                for col in df.columns:
+                    df[col] = df[col].astype(str)
+
+                table_name = f"data_sheet_{database.normalize_name_for_sqlite(sheet_name)}_{sheet_id[:8]}"
+
+                # Обновляем запись листа, добавляя имя таблицы с данными и количество строк
+                cursor.execute(
+                    "UPDATE sheets SET data_table_name = ?, row_count = ? WHERE id = ?",
+                    (table_name, len(df), sheet_id)
+                )
+
+                normalized_columns = {col: database.normalize_name_for_sqlite(col) for col in df.columns}
+                df.rename(columns=normalized_columns, inplace=True)
+
+                # Создаем CREATE TABLE statement
+                cols_with_types = ", ".join(f'"{col_name}" TEXT' for col_name in df.columns)
+                create_table_sql = f'CREATE TABLE "{table_name}" (_row_id INTEGER PRIMARY KEY AUTOINCREMENT, {cols_with_types});'
+                logger.debug(f"[PROJECT_ID: {project_id}] SQL для создания таблицы данных: {create_table_sql}")
+                cursor.execute(create_table_sql)
+
+                # 4. Записываем метаданные полей (колонок)
+                for original_col_name in normalized_columns.keys():
+                    field_id = str(uuid.uuid4())
+                    cursor.execute(
+                        "INSERT INTO fields (id, sheet_id, name, is_required) VALUES (?, ?, ?, ?)",
+                        (field_id, sheet_id, original_col_name, False)
+                    )
+                    field_schemas[sheet_id].append(FieldSchema(id=field_id, name=original_col_name, is_required=False, rules=[]))
+
+
+                # 5. Вставляем данные в новую таблицу (batch insert)
+                if not df.empty:
+                    logger.debug(f"[PROJECT_ID: {project_id}] Вставка {len(df)} строк в таблицу '{table_name}'.")
+                    df.to_sql(name=table_name, con=conn, if_exists='append', index=False)
+                else:
+                    logger.warning(f"[PROJECT_ID: {project_id}] Лист '{sheet_name}' пуст, данные не импортированы.")
+
+                # Обновляем структуру Pydantic моделей
+                sheet_to_update = next(s for s in sheet_schemas if s.id == sheet_id)
+                sheet_to_update.fields = field_schemas[sheet_id]
+
+
+            # Завершаем транзакцию
+            conn.commit()
+            logger.info(f"[PROJECT_ID: {project_id}] Транзакция для импорта успешно завершена.")
+
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Could not process Excel file: {e}")
+        logger.error(f"[PROJECT_ID: {project_id}] КРИТИЧЕСКАЯ ОШИБКА во время импорта Excel: {e}", exc_info=True)
+        # Откатываем транзакцию в случае ошибки
+        if 'conn' in locals() and conn:
+            conn.rollback()
+            logger.warning(f"[PROJECT_ID: {project_id}] Транзакция отменена из-за ошибки.")
+        raise  # Передаем исключение дальше, чтобы API вернул ошибку 500
+
+    finally:
+        duration = time.time() - start_time
+        logger.info(f"[PROJECT_ID: {project_id}] Импорт файла '{original_filename}' завершен за {duration:.2f} сек.")
+
+    # Создаем итоговую Pydantic модель файла
+    final_file_schema = FileSchema(
+        id=file_id,
+        name=original_filename,
+        saved_name=saved_filename,
+        sheets=sheet_schemas
+    )
+    return final_file_schema
+
+
+@app.post("/api/projects/{project_id}/upload", response_model=FileSchema)
+async def upload_file_to_project(project_id: str, file: UploadFile = File(...)):
+    """
+    Загружает файл Excel, сохраняет его в архив, импортирует данные в БД проекта
+    и возвращает структуру нового файла.
+    """
+    # Проверка существования проекта
+    project_dir = PROJECTS_DIR / project_id
+    if not project_dir.is_dir():
+        raise HTTPException(status_code=404, detail="Проект не найден.")
+
+    if not file.filename or not (file.filename.endswith('.xlsx') or file.filename.endswith('.xls')):
+        raise HTTPException(status_code=400, detail="Неверный тип файла. Требуется .xlsx или .xls.")
+
+    logger.info(f"[PROJECT_ID: {project_id}] Получен запрос на загрузку файла: {file.filename}")
+
+    contents = await file.read()
+    file_id = str(uuid.uuid4())
+    saved_filename = f"{file_id}{Path(file.filename).suffix}"
+
+    # 1. Сохраняем исходный файл в архив
+    archive_dir = project_dir / "archive"
+    archive_dir.mkdir(exist_ok=True)
+    archive_path = archive_dir / saved_filename
+    try:
+        with open(archive_path, "wb") as f:
+            f.write(contents)
+        logger.debug(f"[PROJECT_ID: {project_id}] Файл сохранен в архив: {archive_path}")
+    except IOError as e:
+        logger.error(f"[PROJECT_ID: {project_id}] Не удалось сохранить файл в архив: {e}")
+        raise HTTPException(status_code=500, detail="Не удалось сохранить файл на сервере.")
+
+    # 2. Запускаем импорт в БД в отдельном потоке, чтобы не блокировать event loop
+    try:
+        file_schema = await asyncio.to_thread(
+            _import_excel_to_db,
+            project_id,
+            file_id,
+            file.filename,
+            saved_filename,
+            contents
+        )
+    except Exception as e:
+        # Если в _import_excel_to_db произошла ошибка, она будет здесь перехвачена
+        raise HTTPException(status_code=500, detail=f"Ошибка при импорте данных из Excel: {e}")
+
+    # 3. Обновляем `updated_at` в основной БД
+    try:
+        with database.get_main_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE projects SET updated_at = ? WHERE id = ?",
+                (datetime.datetime.utcnow(), project_id)
+            )
+            conn.commit()
+    except sqlite3.Error as e:
+        logger.warning(f"[PROJECT_ID: {project_id}] Не удалось обновить 'updated_at' для проекта: {e}")
+        # Это не критичная ошибка, поэтому просто логируем ее
+
+    return file_schema
 
 def _validate_group(value: Any, group: RuleGroup) -> dict:
     """Helper to validate a single value against a rule group."""
@@ -324,160 +772,229 @@ def _validate_group(value: Any, group: RuleGroup) -> dict:
 
 
 async def _run_validation_async(project_id: str):
-    """Асинхронная функция для выполнения валидации."""
-    project = read_project(project_id)
+    """
+    Асинхронная функция для выполнения валидации, читающая данные ИСКЛЮЧИТЕЛЬНО из БД.
+    """
+    logger.info(f"[PROJECT_ID: {project_id}] Запуск процесса валидации.")
+
+    project = await asyncio.to_thread(_build_project_model_from_db, project_id)
     if not project:
-        VALIDATION_STATUS[project_id]["is_running"] = False
-        VALIDATION_STATUS[project_id]["message"] = "Проект не найден"
+        logger.error(f"[PROJECT_ID: {project_id}] Валидация прервана: не удалось собрать модель проекта.")
+        VALIDATION_STATUS[project_id].update({"is_running": False, "message": "Ошибка: проект не найден."})
         return
 
-    # Сначала рассчитаем общее количество операций для прогресса
-    total_rows = 0
-    project_files_dir = PROJECTS_DIR / project.id / "files"
-    loop = asyncio.get_running_loop()
+    # --- 1. Расчет общего количества операций для прогресс-бара ---
+    total_rows_to_process = 0
+    try:
+        with database.get_project_db_connection(project_id) as conn:
+            cursor = conn.cursor()
+            for file_schema in project.files:
+                for sheet_schema in file_schema.sheets:
+                    if not sheet_schema.is_active: continue
 
-    for file_schema in project.files:
-        file_path = project_files_dir / file_schema.saved_name
-        if not file_path.exists():
-            continue
-        try:
-            xls_content = await loop.run_in_executor(None, file_path.read_bytes)
-            xls = pd.ExcelFile(io.BytesIO(xls_content))
+                    cursor.execute("SELECT data_table_name FROM sheets WHERE id = ?", (sheet_schema.id,))
+                    table_name_row = cursor.fetchone()
+                    if not table_name_row or not table_name_row["data_table_name"]: continue
 
-            current_file_schema = next((f for f in project.files if f.id == file_schema.id), None)
-            if not current_file_schema:
-                continue
+                    table_name = table_name_row["data_table_name"]
+                    cursor.execute(f'SELECT COUNT(*) FROM "{table_name}"')
+                    row_count = cursor.fetchone()[0]
 
-            for sheet_schema in current_file_schema.sheets:
-                if not sheet_schema.is_active:
-                    continue
-                df = await loop.run_in_executor(None, pd.read_excel, xls, sheet_schema.name)
-                num_rules_for_sheet = sum(len(field.rules) for field in sheet_schema.fields)
-                total_rows += len(df) * num_rules_for_sheet
-        except Exception as e:
-            print(f"Error calculating total rows for {file_schema.name}: {e}")
+                    num_rules = sum(len(field.rules) for field in sheet_schema.fields)
+                    total_rows_to_process += row_count * num_rules
+    except sqlite3.Error as e:
+        logger.error(f"[PROJECT_ID: {project_id}] Ошибка при расчете общего числа строк: {e}", exc_info=True)
+        VALIDATION_STATUS[project_id].update({"is_running": False, "message": "Ошибка: не удалось рассчитать объем работы."})
+        return
 
-    # Обновим статус
-    VALIDATION_STATUS[project_id]["total_rows"] = total_rows
-    VALIDATION_STATUS[project_id]["message"] = f"Начинаем проверку {len(project.files)} файлов..."
+    VALIDATION_STATUS[project_id].update({
+        "total_rows": total_rows_to_process,
+        "message": f"Начинаем проверку {len(project.files)} файлов..."
+    })
 
-    # Теперь выполняем саму валидацию
+    # --- 2. Выполнение валидации ---
     all_errors = []
-    processed_rows = 0
+    processed_rows_count = 0
 
-    for file_schema in project.files:
-        VALIDATION_STATUS[project_id]["current_file"] = file_schema.name
-        VALIDATION_STATUS[project_id]["message"] = f"Обработка файла: {file_schema.name}"
+    try:
+        with database.get_project_db_connection(project_id) as conn:
+            cursor = conn.cursor()
 
-        file_path = project_files_dir / file_schema.saved_name
-        if not file_path.exists():
-            continue
+            # Вставляем запись о новом результате валидации и получаем ее ID
+            cursor.execute("INSERT INTO validation_results DEFAULT VALUES;")
+            result_id = cursor.lastrowid
+            conn.commit()
 
-        for sheet_schema in file_schema.sheets:
-            if not sheet_schema.is_active:
-                continue
+            for file_schema in project.files:
+                VALIDATION_STATUS[project_id]["current_file"] = file_schema.name
+                for sheet_schema in file_schema.sheets:
+                    if not sheet_schema.is_active: continue
+                    VALIDATION_STATUS[project_id]["current_sheet"] = sheet_schema.name
 
-            VALIDATION_STATUS[project_id]["current_sheet"] = sheet_schema.name
-            VALIDATION_STATUS[project_id]["message"] = f"Обработка листа: {sheet_schema.name} ({file_schema.name})"
+                    cursor.execute("SELECT data_table_name FROM sheets WHERE id = ?", (sheet_schema.id,))
+                    table_name = cursor.fetchone()["data_table_name"]
 
-            try:
-                df = pd.read_excel(file_path, sheet_name=sheet_schema.name)
-                sheet_total_rows = len(df)
-                if sheet_total_rows == 0:
-                    continue
-
-                for field_schema in sheet_schema.fields:
-                    if field_schema.name not in df.columns:
-                        continue
-
-                    for rule_config in sorted(field_schema.rules, key=lambda r: r.order):
-                        # Обновляем текущее правило
-                        rule_name = "Неизвестное правило"
-                        if rule_config.group_id:
-                            group = RULE_GROUPS_REGISTRY.get(rule_config.group_id)
-                            if group:
-                                rule_name = f"Группа: {group.name}"
-                        else:
-                            rule_def = RULE_REGISTRY.get(rule_config.type)
-                            if rule_def:
-                                formatter = rule_def.get("formatter")
-                                rule_name = formatter(rule_config.params) if formatter and rule_config.params else rule_def["name"]
-
+                    for field_schema in sheet_schema.fields:
+                        normalized_col_name = database.normalize_name_for_sqlite(field_schema.name)
                         VALIDATION_STATUS[project_id]["current_field"] = field_schema.name
-                        VALIDATION_STATUS[project_id]["current_rule"] = rule_name
-                        VALIDATION_STATUS[project_id]["message"] = f"Проверка поля '{field_schema.name}' по правилу '{rule_name}' ({sheet_schema.name})"
 
-                        # --- Здесь идет основная логика валидации ---
-                        if rule_config.group_id:
-                            group = RULE_GROUPS_REGISTRY.get(rule_config.group_id)
-                            if not group:
-                                VALIDATION_STATUS[project_id]["processed_rows"] += len(df)
-                                continue
-                            for index, value in df[field_schema.name].items():
-                                result = _validate_group(value, group)
-                                if not result["is_valid"]:
-                                    all_errors.append({
-                                        "file_name": file_schema.name, "sheet_name": sheet_schema.name,
-                                        "field_name": field_schema.name, "is_required": field_schema.is_required,
-                                        "row": index + 2, "error_type": result["errors"],
-                                        "value": str(value) if pd.notna(value) else "ПУСТО",
-                                        "details": None
-                                    })
-                                VALIDATION_STATUS[project_id]["processed_rows"] += 1
-                                if total_rows > 0:
-                                    VALIDATION_STATUS[project_id]["percentage"] = (VALIDATION_STATUS[project_id]["processed_rows"] / total_rows) * 100
-                            continue
+                        # Проверяем, существует ли колонка в таблице
+                        cursor.execute(f"PRAGMA table_info('{table_name}')")
+                        columns_info = cursor.fetchall()
+                        column_names = [col['name'] for col in columns_info]
+                        if normalized_col_name not in column_names:
+                             logger.warning(f"[PROJECT_ID: {project_id}] Колонка '{normalized_col_name}' не найдена в таблице '{table_name}'. Пропуск.")
+                             continue
 
-                        rule_def = RULE_REGISTRY.get(rule_config.type)
-                        if not rule_def:
-                            VALIDATION_STATUS[project_id]["processed_rows"] += len(df)
-                            continue
-                        validator = rule_def["validator"]
-                        params = rule_config.params or {}
+                        for rule_config in sorted(field_schema.rules, key=lambda r: r.order):
+                            # ... (логика обновления статуса для UI)
 
-                        if rule_def.get("needs_column_access"):
-                            validity_series = validator(df[field_schema.name])
-                            for index, is_valid in validity_series.items():
-                                if not is_valid:
-                                    value = df.loc[index, field_schema.name]
-                                    all_errors.append({
-                                        "file_name": file_schema.name, "sheet_name": sheet_schema.name,
-                                        "field_name": field_schema.name, "is_required": field_schema.is_required,
-                                        "row": index + 2, "error_type": rule_name,
-                                        "value": str(value) if pd.notna(value) else "ПУСТО"
-                                    })
-                            VALIDATION_STATUS[project_id]["processed_rows"] += len(df)
-                            if total_rows > 0:
-                                VALIDATION_STATUS[project_id]["percentage"] = (VALIDATION_STATUS[project_id]["processed_rows"] / total_rows) * 100
-                            continue
+                            # Получаем данные из БД порциями для экономии памяти
+                            query = f'SELECT _row_id, "{normalized_col_name}" FROM "{table_name}"'
+                            data_cursor = conn.cursor()
+                            data_cursor.execute(query)
 
-                        for index, value in df[field_schema.name].items():
-                            result = validator(value, params=params) if 'params' in inspect.signature(validator).parameters else validator(value)
-                            is_valid = False
-                            details = None
-                            if isinstance(result, bool):
-                                is_valid = result
-                            elif isinstance(result, dict):
-                                is_valid = result.get("is_valid", False)
-                                details = result.get("errors")
-                            if not is_valid:
-                                error_entry = {
-                                    "file_name": file_schema.name, "sheet_name": sheet_schema.name,
-                                    "field_name": field_schema.name, "is_required": field_schema.is_required,
-                                    "row": index + 2, "error_type": rule_name,
-                                    "value": str(value) if pd.notna(value) else "ПУСТО",
-                                    "details": details
-                                }
-                                all_errors.append(error_entry)
-                            VALIDATION_STATUS[project_id]["processed_rows"] += 1
-                            if total_rows > 0:
-                                VALIDATION_STATUS[project_id]["percentage"] = (VALIDATION_STATUS[project_id]["processed_rows"] / total_rows) * 100
+                            while chunk := data_cursor.fetchmany(1000):
+                                for row_id, value in chunk:
+                                    rule_name = "Неизвестное правило"
 
-            except Exception as e:
-                print(f"Error processing sheet {sheet_schema.name} in file {file_schema.name}: {e}")
-                continue
+                                    # --- Групповые правила ---
+                                    if rule_config.group_id:
+                                        group = RULE_GROUPS_REGISTRY.get(rule_config.group_id)
+                                        if group:
+                                            rule_name = f"Группа: {group.name}"
+                                            result = _validate_group(value, group)
+                                            if not result["is_valid"]:
+                                                all_errors.append({
+                                                    "file_name": file_schema.name, "sheet_name": sheet_schema.name,
+                                                    "field_name": field_schema.name, "is_required": field_schema.is_required,
+                                                    "row": row_id, "error_type": result["errors"],
+                                                    "value": str(value) if pd.notna(value) else "ПУСТО", "details": None
+                                                })
+                                    # --- Одиночные правила ---
+                                    else:
+                                        rule_def = RULE_REGISTRY.get(rule_config.type)
+                                        if rule_def:
+                                            formatter = rule_def.get("formatter")
+                                            rule_name = formatter(rule_config.params) if formatter and rule_config.params else rule_def["name"]
+                                            validator = rule_def["validator"]
+                                            params = rule_config.params or {}
 
-    # После завершения всех проверок, формируем итоговый отчет
+                                            res = validator(value, params=params) if 'params' in inspect.signature(validator).parameters else validator(value)
+                                            is_valid = res if isinstance(res, bool) else res.get("is_valid", False)
+                                            details = None if isinstance(res, bool) else res.get("errors")
+
+                                            if not is_valid:
+                                                all_errors.append({
+                                                    "file_name": file_schema.name, "sheet_name": sheet_schema.name,
+                                                    "field_name": field_schema.name, "is_required": field_schema.is_required,
+                                                    "row": row_id, "error_type": rule_name,
+                                                    "value": str(value) if pd.notna(value) else "ПУСТО", "details": details
+                                                })
+
+                                    processed_rows_count += 1
+
+                                VALIDATION_STATUS[project_id].update({
+                                    "processed_rows": processed_rows_count,
+                                    "current_rule": rule_name,
+                                    "percentage": (processed_rows_count / total_rows_to_process) * 100 if total_rows_to_process > 0 else 0
+                                })
+
+            # --- 3. Сохранение результатов в БД ---
+            if all_errors:
+                error_tuples = [
+                    (
+                        result_id, e["file_name"], e["sheet_name"], e["field_name"], e["row"],
+                        e["error_type"], e["value"], json.dumps(e["details"], ensure_ascii=False) if e["details"] else None, e["is_required"]
+                    ) for e in all_errors
+                ]
+                cursor.executemany(
+                    """
+                    INSERT INTO validation_errors (result_id, file_name, sheet_name, field_name, row_number, error_type, value, details, is_required)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, error_tuples
+                )
+
+            required_field_errors = [e for e in all_errors if e["is_required"]]
+            unique_error_row_keys = {f"{e['file_name']}-{e['sheet_name']}-{e['row']}" for e in required_field_errors}
+            error_rows_count = len(unique_error_row_keys)
+
+            cursor.execute(
+                "UPDATE validation_results SET total_rows = ?, error_rows = ? WHERE id = ?",
+                (processed_rows_count, error_rows_count, result_id)
+            )
+            conn.commit()
+            logger.info(f"[PROJECT_ID: {project_id}] Результаты валидации (ID: {result_id}) сохранены в БД. Найдено ошибок: {len(all_errors)}.")
+
+    except Exception as e:
+        logger.error(f"[PROJECT_ID: {project_id}] Критическая ошибка во время выполнения валидации: {e}", exc_info=True)
+        VALIDATION_STATUS[project_id].update({"is_running": False, "message": "Критическая ошибка во время проверки."})
+        return
+
+    VALIDATION_STATUS[project_id].update({"is_running": False, "message": "Проверка завершена.", "percentage": 100.0})
+    logger.info(f"[PROJECT_ID: {project_id}] Валидация успешно завершена.")
+
+
+@app.post("/api/projects/{project_id}/validate")
+async def validate_project_data(project_id: str):
+    """Запускает валидацию данных проекта из его БД."""
+    project_dir = PROJECTS_DIR / project_id
+    if not project_dir.is_dir():
+        raise HTTPException(status_code=404, detail="Проект не найден.")
+
+    initial_status = {
+        "is_running": True, "current_file": "", "current_sheet": "",
+        "current_field": "", "current_rule": "", "processed_rows": 0,
+        "total_rows": 0, "percentage": 0.0, "message": "Запуск проверки..."
+    }
+    VALIDATION_STATUS[project_id] = initial_status
+    asyncio.create_task(_run_validation_async(project_id))
+    return {"status": "started", "project_id": project_id, "initial_status": initial_status}
+
+
+@app.get("/api/projects/{project_id}/validation-status", response_model=ValidationStatus)
+async def get_validation_status(project_id: str):
+    """Возвращает текущее состояние проверки."""
+    return VALIDATION_STATUS.get(project_id, {"is_running": False, "message": "Проверка не запущена."})
+
+
+@app.get("/api/projects/{project_id}/results")
+async def get_validation_results(project_id: str):
+    """
+    Возвращает последний результат валидации из БД, форматируя его
+    в JSON-структуру, совместимую с фронтендом.
+    """
+    logger.debug(f"[PROJECT_ID: {project_id}] Запрос на получение последнего результата валидации.")
+    try:
+        with database.get_project_db_connection(project_id) as conn:
+            cursor = conn.cursor()
+
+            # Находим ID последнего результата
+            cursor.execute("SELECT id, validated_at, total_rows, error_rows FROM validation_results ORDER BY validated_at DESC LIMIT 1")
+            last_result = cursor.fetchone()
+            if not last_result:
+                raise HTTPException(status_code=404, detail="Результаты валидации для этого проекта не найдены.")
+
+            result_id = last_result["id"]
+
+            # Получаем все ошибки для этого результата
+            cursor.execute("SELECT * FROM validation_errors WHERE result_id = ?", (result_id,))
+            errors_rows = cursor.fetchall()
+
+            all_errors = [dict(row) for row in errors_rows]
+            for e in all_errors: # Десериализуем JSON
+                if e.get('details'): e['details'] = json.loads(e['details'])
+                e['row'] = e.pop('row_number') # Переименовываем для совместимости
+
+    except sqlite3.Error as e:
+        logger.error(f"[PROJECT_ID: {project_id}] Ошибка БД при получении результатов валидации: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Ошибка БД при получении результатов.")
+
+    # --- Собираем JSON-ответ, аналогичный старому формату ---
+    project = await asyncio.to_thread(_build_project_model_from_db, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Не удалось загрузить структуру проекта для построения отчета.")
+
     required_field_errors = [e for e in all_errors if e["is_required"]]
     unique_error_row_keys = {f"{e['file_name']}-{e['sheet_name']}-{e['row']}" for e in required_field_errors}
 
@@ -487,36 +1004,38 @@ async def _run_validation_async(project_id: str):
         for sheet_schema in file_schema.sheets:
             if not sheet_schema.is_active: continue
 
-            try:
-                df_sheet = pd.read_excel(PROJECTS_DIR / project.id / "files" / file_schema.saved_name, sheet_name=sheet_schema.name)
-                sheet_total_rows = len(df_sheet)
-            except Exception:
-                sheet_total_rows = 0
+            with database.get_project_db_connection(project_id) as conn:
+                 cursor = conn.cursor()
+                 cursor.execute("SELECT data_table_name, row_count FROM sheets WHERE id=?", (sheet_schema.id,))
+                 sheet_info = cursor.fetchone()
+                 table_name = sheet_info['data_table_name'] if sheet_info else None
+                 sheet_total_rows = sheet_info['row_count'] if sheet_info else 0
 
+
+            sheet_errors = [e for e in all_errors if e["file_name"] == file_schema.name and e["sheet_name"] == sheet_schema.name]
+
+            # Собираем все уникальные имена правил для этого листа
             all_applicable_rule_names = set()
             for f in sheet_schema.fields:
                 for r_conf in f.rules:
-                    if r_conf.type and RULE_REGISTRY.get(r_conf.type):
-                        rule_def = RULE_REGISTRY.get(r_conf.type)
+                    if r_conf.type and r_conf.type in RULE_REGISTRY:
+                        rule_def = RULE_REGISTRY[r_conf.type]
                         formatter = rule_def.get("formatter")
-                        rule_name = formatter(r_conf.params) if formatter and r_conf.params else rule_def.get("name")
-                        if rule_name: all_applicable_rule_names.add(rule_name)
-                    elif r_conf.group_id and RULE_GROUPS_REGISTRY.get(r_conf.group_id):
-                        group = RULE_GROUPS_REGISTRY.get(r_conf.group_id)
-                        all_applicable_rule_names.add(group.name)
+                        rule_name = formatter(r_conf.params) if formatter and r_conf.params else rule_def.get("name", "Unnamed Rule")
+                        all_applicable_rule_names.add(rule_name)
+                    elif r_conf.group_id and r_conf.group_id in RULE_GROUPS_REGISTRY:
+                        group = RULE_GROUPS_REGISTRY[r_conf.group_id]
+                        all_applicable_rule_names.add(f"Группа: {group.name}")
 
-            sheet_errors = [e for e in all_errors if e["file_name"] == file_schema.name and e["sheet_name"] == sheet_schema.name]
             summary_list = []
-
             for rule_name in sorted(list(all_applicable_rule_names)):
-                rule_errors = [e for e in sheet_errors if e["error_type"] == rule_name]
-                error_count = len(rule_errors)
-                summary_list.append({
-                    "rule_name": rule_name, "error_count": error_count,
-                    "error_percentage": round((error_count / sheet_total_rows) * 100, 2) if sheet_total_rows > 0 else 0,
-                    "detailed_errors": rule_errors
-                })
-            summary_list.sort(key=lambda x: x['error_count'], reverse=True)
+                 rule_errors = [e for e in sheet_errors if e["error_type"] == rule_name]
+                 error_count = len(rule_errors)
+                 summary_list.append({
+                     "rule_name": rule_name, "error_count": error_count,
+                     "error_percentage": round((error_count / sheet_total_rows) * 100, 2) if sheet_total_rows > 0 else 0,
+                     "detailed_errors": rule_errors
+                 })
 
             sheet_error_row_keys = {e['row'] for e in sheet_errors}
             sheet_summaries.append({
@@ -530,74 +1049,74 @@ async def _run_validation_async(project_id: str):
             file_results.append({"file_name": file_schema.name, "sheets": sheet_summaries})
 
     response_data = {
-        "total_processed_rows": total_rows,
+        "total_processed_rows": last_result["total_rows"],
         "required_field_error_rows_count": len(unique_error_row_keys),
         "required_field_errors": required_field_errors,
         "file_results": file_results,
-        "validated_at": datetime.datetime.utcnow().isoformat()
+        "validated_at": last_result["validated_at"].isoformat()
     }
+    return response_data
 
-    results_path = PROJECTS_DIR / project_id / "validation_result.json"
+
+@app.get("/api/projects/{project_id}/data-status", response_model=DataStatus)
+async def get_data_consistency_status(project_id: str):
+    """
+    Проверяет целостность данных: сравнивает ожидаемое и фактическое количество строк.
+    """
+    logger.debug(f"[PROJECT_ID: {project_id}] Запрос на проверку целостности данных.")
+    sheet_statuses = []
+    is_overall_consistent = True
+
     try:
-        results_path.write_text(json.dumps(response_data, indent=2, ensure_ascii=False), encoding="utf-8")
-    except IOError as e:
-        print(f"Failed to save validation results: {e}")
+        with database.get_project_db_connection(project_id) as conn:
+            cursor = conn.cursor()
+            # Получаем все листы с их ожидаемым количеством строк и именами таблиц
+            cursor.execute("SELECT name, row_count, data_table_name FROM sheets WHERE is_active = 1")
+            sheets_to_check = cursor.fetchall()
 
-    VALIDATION_STATUS[project_id]["is_running"] = False
-    VALIDATION_STATUS[project_id]["message"] = "Проверка завершена."
-    VALIDATION_STATUS[project_id]["percentage"] = 100.0
+            if not sheets_to_check:
+                return DataStatus(
+                    project_id=project_id,
+                    overall_status="NO_DATA",
+                    checked_at=datetime.datetime.utcnow().isoformat(),
+                    details=[]
+                )
 
+            for sheet in sheets_to_check:
+                expected = sheet["row_count"]
+                actual = 0
+                is_consistent = False
 
-@app.post("/api/projects/{project_id}/validate")
-async def validate_project_data(project_id: str):
-    """
-    Запускает валидацию и сразу возвращает ID задачи или начальное состояние.
-    """
-    project = read_project(project_id)
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+                if sheet["data_table_name"]:
+                    try:
+                        # Считаем фактическое количество строк в таблице данных
+                        cursor.execute(f'SELECT COUNT(*) FROM "{sheet["data_table_name"]}"')
+                        actual = cursor.fetchone()[0]
+                        is_consistent = (expected == actual)
+                    except sqlite3.OperationalError:
+                        # Таблица не найдена, что является несоответствием
+                        is_consistent = False
 
-    # --- НАЧАЛО ИЗМЕНЕНИЙ ---
-    # Явно инициализируем статус ПЕРЕД запуском фоновой задачи
-    initial_status = {
-        "is_running": True,
-        "current_file": "",
-        "current_sheet": "",
-        "current_field": "",
-        "current_rule": "",
-        "processed_rows": 0,
-        "total_rows": 0,
-        "percentage": 0.0,
-        "message": "Запуск проверки..."
-    }
+                if not is_consistent:
+                    is_overall_consistent = False
 
-    # Присваиваем статус напрямую, чтобы он был доступен немедленно
-    VALIDATION_STATUS[project_id] = initial_status
+                sheet_statuses.append(SheetStatus(
+                    sheet_name=sheet["name"],
+                    expected_rows=expected,
+                    actual_rows=actual,
+                    is_consistent=is_consistent
+                ))
 
-    # Запускаем проверку в фоновом режиме
-    asyncio.create_task(_run_validation_async(project_id))
+    except sqlite3.Error as e:
+        logger.error(f"[PROJECT_ID: {project_id}] Ошибка БД при проверке целостности данных: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Ошибка БД при проверке данных.")
 
-    # Возвращаем начальный статус клиенту
-    return {"status": "started", "project_id": project_id, "initial_status": initial_status}
-
-
-@app.get("/api/projects/{project_id}/validation-status", response_model=ValidationStatus)
-async def get_validation_status(project_id: str):
-    """Возвращает текущее состояние проверки."""
-    status = VALIDATION_STATUS.get(project_id, {
-        "is_running": False, "message": "Проверка не запущена."
-    })
-    return status
-
-@app.get("/api/projects/{project_id}/results")
-async def get_validation_results(project_id: str):
-    project_dir = PROJECTS_DIR / project_id
-    if not project_dir.is_dir():
-        raise HTTPException(status_code=404, detail="Project not found")
-    results_path = project_dir / "validation_result.json"
-    if not results_path.exists():
-        raise HTTPException(status_code=404, detail="No validation results found for this project.")
-    return FileResponse(results_path)
+    return DataStatus(
+        project_id=project_id,
+        overall_status="CONSISTENT" if is_overall_consistent else "INCONSISTENT",
+        checked_at=datetime.datetime.utcnow().isoformat(),
+        details=sheet_statuses
+    )
 
 # --- Dictionary Management ---
 CUSTOM_DICT_PATH = Path(__file__).resolve().parent / "custom_dictionary.txt"
@@ -755,8 +1274,14 @@ async def read_rule_groups_page():
 # ==============================================================================
 @app.on_event("startup")
 async def startup_event():
+    logger.info("Приложение запускается...")
     STATIC_DIR.mkdir(exist_ok=True)
     RULES_DIR.mkdir(exist_ok=True)
     PROJECTS_DIR.mkdir(exist_ok=True)
+
+    # Инициализация основной базы данных
+    database.setup_main_database()
+
     load_rules()
     read_rule_groups()
+    logger.info("Приложение успешно запущено.")
