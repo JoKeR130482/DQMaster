@@ -871,6 +871,11 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!groupsRes.ok) throw new Error('Failed to load rule groups');
 
             state.project = await projectRes.json();
+
+            // Устанавливаем состояние чекбокса "Авто-перепроверка" сразу после загрузки
+            dom.autoRevalidateToggle.checked = state.project.auto_revalidate ?? true;
+            console.debug(`[PROJECT_ID: ${projectId}] Загружено состояние авто-перепроверки: ${state.project.auto_revalidate}`);
+
             state.availableRules = await rulesRes.json();
             state.availableGroups = await groupsRes.json();
 
