@@ -13,6 +13,7 @@ import asyncio
 import logging
 import logging.handlers
 import time
+import sqlite3
 import database
 
 from fastapi import Depends, FastAPI, File, UploadFile, HTTPException, Request
