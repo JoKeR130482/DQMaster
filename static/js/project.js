@@ -100,6 +100,22 @@ document.addEventListener('DOMContentLoaded', () => {
         );
     }
 
+    /**
+     * Безопасно получает вложенное свойство объекта
+     * @param {Object} obj - Исходный объект
+     * @param {string} path - Путь к свойству (через точку)
+     * @param {*} defaultValue - Значение по умолчанию
+     * @returns {*} Значение свойства или defaultValue
+     */
+    function safeGet(obj, path, defaultValue = null) {
+        return path.split('.').reduce((acc, part) => {
+            if (acc && typeof acc === 'object' && part in acc) {
+                return acc[part];
+            }
+            return defaultValue;
+        }, obj);
+    }
+
 
     // --- 5. RENDER FUNCTIONS ---
     function render() {
@@ -139,7 +155,8 @@ document.addEventListener('DOMContentLoaded', () => {
             fileCard.className = 'file-card';
             fileCard.dataset.fileId = file.id;
 
-            const totalFields = file.sheets.reduce((acc, sheet) => acc + sheet.fields.length, 0);
+            const sheets = safeGet(file, 'sheets', []);
+            const totalFields = sheets.reduce((acc, sheet) => acc + safeGet(sheet, 'fields', []).length, 0);
 
             fileCard.innerHTML = `
                 <div class="file-header">
@@ -176,6 +193,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function renderSheet(fileId, sheet) {
+        if (!sheet) {
+            console.error(`[PROJECT_ID: ${state.project.id}] Попытка отрисовать несуществующий лист`);
+            return document.createElement('div');
+        }
         const sheetItem = document.createElement('div');
         sheetItem.className = 'sheet-item';
         sheetItem.dataset.sheetId = sheet.id;
@@ -948,6 +969,16 @@ function updateValidationUI(status) {
 
             // API теперь возвращает только схему файла, а не весь проект
             const newFileSchema = await response.json();
+
+            // Валидация структуры полученных данных
+            if (!newFileSchema) {
+                throw new Error("Сервер вернул пустой ответ");
+            }
+            if (!newFileSchema.sheets) {
+                console.warn(`[PROJECT_ID: ${state.project.id}] Файл "${file.name}" не содержит информации о листах`, newFileSchema);
+                newFileSchema.sheets = []; // Инициализируем пустым массивом
+            }
+
 
             // Добавляем новый файл в состояние проекта
             state.project.files.push(newFileSchema);
