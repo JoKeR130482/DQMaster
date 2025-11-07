@@ -774,27 +774,68 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function startValidationPolling(projectId) {
-        stopValidationPolling();
-        validationPollingId = setInterval(async () => {
-            try {
-                const response = await fetch(`/api/projects/${projectId}/validation-status`);
-                if (!response.ok) {
-                    throw new Error(`Failed to get status, server responded with ${response.status}`);
-                }
-                const status = await response.json();
-                updateValidationUI(status);
+function startValidationPolling(projectId) {
+    stopValidationPolling();
 
-                if (!status.is_running) {
-                    stopValidationPolling();
-                    loadAndRenderFinalResults(projectId);
+    // Начальное обновление UI
+    updateValidationUI({
+        is_running: true,
+        percentage: 0.0,
+        processed_rows: 0,
+        total_rows: 100,
+        message: "Инициализация проверки...",
+        current_file: "—",
+        current_sheet: "—",
+        current_field: "—",
+        current_rule: "—"
+    });
+
+    validationPollingId = setInterval(async () => {
+        try {
+            const response = await fetch(`/api/projects/${projectId}/validation-status`);
+
+            if (!response.ok) {
+                if (response.status === 404) {
+                    console.warn(`[PROJECT_ID: ${projectId}] Статус валидации не найден`);
+                    return;
                 }
-            } catch (error) {
-                console.error('Polling error:', error);
-                stopValidationPolling();
+                throw new Error(`Ошибка сервера: ${response.status}`);
             }
-        }, 500);
-    }
+
+            const status = await response.json();
+            console.debug(`[PROJECT_ID: ${projectId}] Получен статус валидации:`, status);
+
+            // Принудительная валидация данных статуса
+            const safeStatus = {
+                is_running: status.is_running ?? true,
+                percentage: Math.min(99.9, Math.max(0, status.percentage ?? 0.0)),
+                processed_rows: Math.max(0, status.processed_rows ?? 0),
+                total_rows: Math.max(1, status.total_rows ?? 100),
+                message: status.message || "Выполняется проверка...",
+                current_file: status.current_file || "—",
+                current_sheet: status.current_sheet || "—",
+                current_field: status.current_field || "—",
+                current_rule: status.current_rule || "—"
+            };
+
+            updateValidationUI(safeStatus);
+
+            // Логика завершения
+            if (!safeStatus.is_running) {
+                console.info(`[PROJECT_ID: ${projectId}] Валидация завершена`);
+                stopValidationPolling();
+                // Небольшая задержка перед загрузкой результатов
+                setTimeout(() => {
+                    loadAndRenderFinalResults(projectId);
+                }, 500);
+            }
+        } catch (error) {
+            console.error(`[PROJECT_ID: ${projectId}] Ошибка при опросе статуса: ${error.message}`, error);
+            // Продолжаем опрос при ошибках
+        }
+    }, 300); // Увеличиваем частоту опроса
+}
+
 
     function stopValidationPolling() {
         if (validationPollingId) {
@@ -803,36 +844,71 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function updateValidationUI(status) {
-        // This function is now only responsible for rendering the "in-progress" state.
-        // The final state (is_running: false) is handled by the polling function,
-        // which stops the interval and calls loadAndRenderFinalResults.
-        if (!status) return;
+function updateValidationUI(status) {
+    if (!dom.progressContainer || !status) return;
 
-        const percentage = status.percentage ?? (status.total_rows > 0 ? (status.processed_rows / status.total_rows) * 100 : 0);
-        const processed = status.processed_rows ?? 0;
-        const total = status.total_rows ?? 0;
+    // Обеспечиваем минимальный прогресс для отображения
+    const percentage = Math.max(0.1, status.percentage);
+    const processed = Math.max(0, status.processed_rows);
+    const total = Math.max(1, status.total_rows);
 
-        const htmlContent = `
-            <div style="text-align: center; padding: 2rem;">
-                <div class="loading-spinner" style="margin: 0 auto;"></div>
-                <p><strong>Выполняется проверка...</strong></p>
-                <p>${status.details || status.message || ''}</p>
-                <p>Файл: <strong>${status.current_file || '—'}</strong></p>
-                <p>Лист: <strong>${status.current_sheet || '—'}</strong></p>
-                <p>Поле: <strong>${status.current_field || '—'}</strong></p>
-                <p>Правило: <strong>${status.current_rule || '—'}</strong></p>
-                <div style="margin-top: 1rem;">
-                    <progress id="validation-progress-bar" value="${percentage}" max="100" aria-valuenow="${percentage}" style="width: 100%; height: 10px;"></progress>
-                    <div style="display: flex; justify-content: space-between; margin-top: 0.25rem;">
-                        <span>${Math.round(processed)} из ${total} строк</span>
-                        <span>${percentage.toFixed(1)}%</span>
-                    </div>
+    // Убедимся, что контейнер видим
+    dom.progressContainer.style.display = 'block';
+
+    // Создаем или получаем существующие элементы
+    let progressBar = dom.progressContainer.querySelector('.progress-bar');
+    if (!progressBar) {
+        dom.progressContainer.innerHTML = `
+            <div class="progress-wrapper">
+                <div class="progress-bar-container">
+                    <div class="progress-bar"></div>
                 </div>
+                <span class="progress-percentage">0.0%</span>
+            </div>
+            <div class="validation-details">
+                <p><strong>Статус:</strong> <span class="validation-message"></span></p>
+                <div class="details-grid">
+                    <span><strong>Файл:</strong> <span class="current-file">—</span></span>
+                    <span><strong>Лист:</strong> <span class="current-sheet">—</span></span>
+                    <span><strong>Поле:</strong> <span class="current-field">—</span></span>
+                    <span><strong>Правило:</strong> <span class="current-rule">—</span></span>
+                </div>
+                <p class="rows-counter">0 из 0 операций</p>
             </div>
         `;
-        dom.progressContainer.innerHTML = htmlContent;
+        progressBar = dom.progressContainer.querySelector('.progress-bar');
     }
+
+    // Обновляем прогресс-бар
+    if (progressBar) {
+        progressBar.style.width = `${percentage}%`;
+    }
+
+    // Обновляем текстовые элементы
+    const textElements = {
+        '.progress-percentage': `${percentage.toFixed(1)}%`,
+        '.current-file': status.current_file || '—',
+        '.current-sheet': status.current_sheet || '—',
+        '.current-field': status.current_field || '—',
+        '.current-rule': status.current_rule || '—',
+        '.rows-counter': `${processed} из ${total} операций`,
+        '.validation-message': status.message || 'Выполняется проверка...'
+    };
+
+    Object.entries(textElements).forEach(([selector, text]) => {
+        const element = dom.progressContainer.querySelector(selector);
+        if (element) element.textContent = text;
+    });
+
+    // Анимация для имитации процесса
+    if (status.is_running && percentage < 100) {
+        dom.progressContainer.classList.add('in-progress');
+        dom.progressContainer.classList.remove('completed');
+    } else {
+        dom.progressContainer.classList.remove('in-progress');
+        dom.progressContainer.classList.add('completed');
+    }
+}
 
     async function loadAndRenderFinalResults(projectId) {
         dom.progressContainer.style.display = 'none'; // Hide progress

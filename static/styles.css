@@ -598,3 +598,85 @@ body > .main-container > .page-header { padding: 0; box-shadow: none; background
     accent-color: var(--blue-600);
     cursor: pointer;
 }
+
+/* --- 10. Validation Progress Bar --- */
+#validation-progress-container {
+    background-color: var(--slate-50);
+    border: 1px solid var(--slate-200);
+    border-radius: var(--radius-xl);
+    padding: 1.5rem 2rem;
+    transition: all 0.3s ease;
+}
+
+#validation-progress-container.in-progress {
+    box-shadow: 0 0 15px 0 rgb(199 210 254 / 50%); /* a subtle glow */
+    border-color: var(--blue-200);
+}
+
+.progress-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+}
+
+.progress-bar-container {
+    flex-grow: 1;
+    height: 16px;
+    background-color: var(--slate-200);
+    border-radius: 999px;
+    overflow: hidden;
+}
+
+.progress-bar {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(to right, var(--blue-500), var(--blue-600));
+    border-radius: 999px;
+    transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);
+}
+
+.progress-percentage {
+    font-size: 1.125rem;
+    font-weight: 600;
+    font-feature-settings: 'tnum'; /* tabular-nums */
+    color: var(--slate-800);
+    flex-shrink: 0;
+}
+
+.validation-details {
+    margin-top: 1rem;
+}
+.validation-details p {
+    font-size: 0.875rem;
+    color: var(--slate-600);
+    margin-bottom: 0.25rem;
+}
+.validation-details strong {
+    font-weight: 500;
+    color: var(--slate-800);
+}
+
+.details-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.5rem 1.5rem;
+    margin-top: 0.75rem;
+    padding: 1rem;
+    background-color: var(--white);
+    border: 1px solid var(--slate-200);
+    border-radius: var(--radius-lg);
+}
+
+.details-grid span {
+    font-size: 0.875rem;
+    color: var(--slate-600);
+}
+
+.rows-counter {
+    margin-top: 1rem;
+    font-style: italic;
+    font-size: 0.8rem;
+    color: var(--slate-500);
+}
