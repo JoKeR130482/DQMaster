@@ -1,78 +1,48 @@
 """
-Проверяет, является ли значение действительным адресом электронной почты.
-Правило является настраиваемым.
+Правило для проверки корректности формата email-адреса.
 """
 import re
-from typing import Dict, Any, List, Optional
+import pandas as pd
+import logging
 
-# Описание параметров для UI
-PARAMS_SCHEMA = [
-    {
-        "name": "allow_empty",
-        "type": "bool",
-        "default": False,
-        "label": "Разрешить пустые значения"
-    },
-    {
-        "name": "domain_whitelist",
-        "type": "string",
-        "default": "",
-        "label": "Белый список доменов (через запятую)"
-    }
-]
+logger = logging.getLogger("dqmaster")
 
-# Флаг, указывающий, что правило можно настраивать
-IS_CONFIGURABLE = True
+# --- Описание правила ---
+RULE_NAME = "Проверка Email"
+RULE_DESC = "Проверяет, что значение является корректным email-адресом."
+IS_CONFIGURABLE = False
 
-# Регулярное выражение для базовой проверки формата email
-EMAIL_REGEX = re.compile(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$")
+# Улучшенное регулярное выражение, соответствующее большинству современных стандартов
+EMAIL_REGEX = re.compile(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$')
 
-def validate(value: Any, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def format_name(params: dict = None) -> str:
     """
-    Выполняет валидацию.
+    Форматирует имя правила с учетом параметров.
     """
-    params = params or {}
-    allow_empty = params.get("allow_empty", False)
-    domain_whitelist_str = params.get("domain_whitelist", "")
+    return RULE_NAME
 
-    if value is None or (isinstance(value, str) and not value.strip()):
-        return {"is_valid": allow_empty, "error": None if allow_empty else "Пустое значение недопустимо"}
-
-    if not isinstance(value, str):
-        return {"is_valid": False, "error": "Значение не является строкой"}
-
-    if not EMAIL_REGEX.match(value):
-        return {"is_valid": False, "error": "Неверный формат email"}
-
-    if domain_whitelist_str:
-        domain = value.split('@')[1]
-        whitelist = [d.strip().lower() for d in domain_whitelist_str.split(',') if d.strip()]
-        if domain.lower() not in whitelist:
-            return {"is_valid": False, "error": f"Домен '{domain}' отсутствует в белом списке"}
-
-    return {"is_valid": True, "error": None}
-
-def format_name(params: Optional[Dict[str, Any]] = None) -> str:
+def validate(value, params: dict = None, project_id: str = None) -> dict:
     """
-    Форматирует имя правила для отображения в UI на основе его параметров.
+    Проверяет формат email-адреса.
+
+    Args:
+        value: Проверяемое значение.
+        params (dict, optional): Параметры правила (не используются).
+        project_id (str, optional): ID проекта для логирования.
+
+    Returns:
+        dict: Словарь с результатом валидации.
+              {"is_valid": bool, "errors": str|None}
     """
-    params = params or {}
-    allow_empty = params.get("allow_empty", False)
-    domain_whitelist_str = params.get("domain_whitelist", "")
+    if pd.isna(value) or str(value).strip() == '':
+        return {"is_valid": True, "errors": None}
 
-    details = []
-    if allow_empty:
-        details.append("пустые разрешены")
+    s_value = str(value).strip()
 
-    if domain_whitelist_str:
-        # Показываем только первые несколько доменов, если список длинный
-        whitelist = [d.strip() for d in domain_whitelist_str.split(',')]
-        display_domains = ", ".join(whitelist[:2])
-        if len(whitelist) > 2:
-            display_domains += "..."
-        details.append(f"домены: {display_domains}")
+    if not EMAIL_REGEX.match(s_value):
+        error = "Некорректный формат email-адреса"
+        # logger.debug(f"[{project_id}] {RULE_NAME}: Значение '{s_value}' не прошло проверку REGEX.")
+        return {"is_valid": False, "errors": error}
 
-    if not details:
-        return "Проверка email (стандартная)"
-
-    return f"Проверка email ({'; '.join(details)})"
+    # logger.debug(f"[{project_id}] {RULE_NAME}: Значение '{s_value}' является корректным email.")
+    return {"is_valid": True, "errors": None}

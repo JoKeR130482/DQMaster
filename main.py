@@ -315,7 +315,7 @@ async def upload_file_to_project(project_id: str, file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Could not process Excel file: {e}")
 
-def _validate_group(value: Any, group: RuleGroup) -> dict:
+def _validate_group(value: Any, group: RuleGroup, project_id: Optional[str] = None) -> dict:
     """Helper to validate a single value against a rule group."""
     results = []
     for rule_ref in group.rules:
@@ -325,9 +325,16 @@ def _validate_group(value: Any, group: RuleGroup) -> dict:
 
         validator = rule_def["validator"]
         params = rule_ref.params or {}
+        sig = inspect.signature(validator)
 
-        result = validator(value, params=params) if 'params' in inspect.signature(validator).parameters else validator(value)
+        # Определяем, какие аргументы передавать
+        call_params = {"value": value}
+        if 'params' in sig.parameters:
+            call_params['params'] = params
+        if 'project_id' in sig.parameters:
+            call_params['project_id'] = project_id
 
+        result = validator(**call_params)
         is_valid = result if isinstance(result, bool) else result.get("is_valid", False)
         results.append(is_valid)
 
@@ -458,22 +465,39 @@ async def _run_validation_async(project_id: str):
                                 processed_ops_count += len(df)
                                 continue
 
-                            validation_result = validator_func(column_data, params=params)
+                            # Проверяем, принимает ли функция project_id
+                            sig = inspect.signature(validator_func)
+                            if 'project_id' in sig.parameters:
+                                validation_result = validator_func(column_data, params=params, project_id=project_id)
+                            else:
+                                validation_result = validator_func(column_data, params=params)
 
-                            # Обработка результатов
-                            is_valid_list = validation_result.get("is_valid", [True] * len(column_data))
-                            errors_list = validation_result.get("errors", [None] * len(column_data))
+                            # Обработка результатов - unique_value возвращает список словарей
+                            if isinstance(validation_result, list):
+                                for i, res in enumerate(validation_result):
+                                    if not res.get("is_valid", True):
+                                        value = column_data.iloc[i]
+                                        all_errors.append({
+                                            "file_name": file_schema.name, "sheet_name": sheet_schema.name,
+                                            "field_name": field_schema.name, "is_required": field_schema.is_required,
+                                            "row": i + 2, "error_type": rule_name,
+                                            "value": str(value) if pd.notna(value) else "ПУСТО",
+                                            "details": res.get("errors")
+                                        })
+                            else: # Обработка словаря со списками, как у spell_check
+                                is_valid_list = validation_result.get("is_valid", [True] * len(column_data))
+                                errors_list = validation_result.get("errors", [None] * len(column_data))
 
-                            for i, (is_valid, error_details) in enumerate(zip(is_valid_list, errors_list)):
-                                if not is_valid:
-                                    value = column_data.iloc[i]
-                                    all_errors.append({
-                                        "file_name": file_schema.name, "sheet_name": sheet_schema.name,
-                                        "field_name": field_schema.name, "is_required": field_schema.is_required,
-                                        "row": i + 2, "error_type": rule_name,
-                                        "value": str(value) if pd.notna(value) else "ПУСТО",
-                                        "details": error_details
-                                    })
+                                for i, (is_valid, error_details) in enumerate(zip(is_valid_list, errors_list)):
+                                    if not is_valid:
+                                        value = column_data.iloc[i]
+                                        all_errors.append({
+                                            "file_name": file_schema.name, "sheet_name": sheet_schema.name,
+                                            "field_name": field_schema.name, "is_required": field_schema.is_required,
+                                            "row": i + 2, "error_type": rule_name,
+                                            "value": str(value) if pd.notna(value) else "ПУСТО",
+                                            "details": error_details
+                                        })
                             processed_ops_count += len(df)
 
                         elif rule_config.group_id:
@@ -482,7 +506,7 @@ async def _run_validation_async(project_id: str):
                                 processed_ops_count += len(df)
                                 continue
                             for index, value in df[field_schema.name].items():
-                                result = _validate_group(value, group)
+                                result = _validate_group(value, group, project_id=project_id)
                                 if not result["is_valid"]:
                                      all_errors.append({
                                         "file_name": file_schema.name, "sheet_name": sheet_schema.name,
@@ -494,8 +518,17 @@ async def _run_validation_async(project_id: str):
                                 processed_ops_count += 1
                         elif rule_def:
                             validator = rule_def["validator"]
+                            sig = inspect.signature(validator)
                             for index, value in df[field_schema.name].items():
-                                result = validator(value, params=params) if 'params' in inspect.signature(validator).parameters else validator(value)
+
+                                # Определяем, какие аргументы передавать
+                                call_params = {"value": value}
+                                if 'params' in sig.parameters:
+                                    call_params['params'] = params
+                                if 'project_id' in sig.parameters:
+                                    call_params['project_id'] = project_id
+
+                                result = validator(**call_params)
                                 is_valid = result if isinstance(result, bool) else result.get("is_valid", False)
                                 if not is_valid:
                                     details = result.get("errors") if isinstance(result, dict) else None
