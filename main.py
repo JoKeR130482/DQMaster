@@ -14,11 +14,25 @@ import asyncio
 from fastapi import Depends, FastAPI, File, UploadFile, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+import logging
 from pydantic import BaseModel, Field, ValidationError
 
 # ==============================================================================
 # 1. Globals & App Initialization
 # ==============================================================================
+
+# Настройка логирования
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="[%(asctime)s] [%(levelname)s] [%(module)s:%(funcName)s:%(lineno)d] %(message)s",
+    handlers=[
+        logging.FileHandler("app.log", encoding='utf-8'),
+        logging.FileHandler("debug.log", level=logging.DEBUG, encoding='utf-8'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
+
 app = FastAPI()
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -131,7 +145,7 @@ def read_project(project_id: str) -> Optional[Project]:
     try:
         return Project(**json.loads(config_path.read_text(encoding="utf-8")))
     except (ValidationError, json.JSONDecodeError) as e:
-        print(f"WARNING: Corrupted project file for '{project_id}'. Creating a stub. Reason: {e}")
+        logger.warning(f"Corrupted project file for '{project_id}'. Creating a stub. Reason: {e}")
         now = datetime.datetime.utcnow().isoformat()
         return Project(
             id=project_id,
@@ -170,7 +184,7 @@ def load_rules():
                             "module": module
                         }
             except Exception as e:
-                print(f"Error loading rule from {filename}: {e}")
+                logger.error(f"Error loading rule from {filename}: {e}", exc_info=True)
 
 def read_rule_groups():
     """Loads rule groups from the JSON file into the registry."""
@@ -183,7 +197,7 @@ def read_rule_groups():
             group = RuleGroup(**group_dict)
             RULE_GROUPS_REGISTRY[group.id] = group
     except (json.JSONDecodeError, ValidationError) as e:
-        print(f"Error reading or parsing rule_groups.json: {e}")
+        logger.error(f"Error reading or parsing rule_groups.json: {e}", exc_info=True)
 
 def write_rule_groups():
     """Saves the current state of the rule groups registry to the JSON file."""
@@ -193,7 +207,7 @@ def write_rule_groups():
         groups_list = [group.model_dump() for group in RULE_GROUPS_REGISTRY.values()]
         RULE_GROUPS_PATH.write_text(json.dumps(groups_list, indent=2, ensure_ascii=False), encoding="utf-8")
     except IOError as e:
-        print(f"Error writing to rule_groups.json: {e}")
+        logger.error(f"Error writing to rule_groups.json: {e}", exc_info=True)
 
 
 # ==============================================================================
@@ -360,14 +374,14 @@ async def _calculate_total_operations(project_id: str, project: Project) -> int:
                     rule_count = sum(len(field.rules) for field in sheet_schema.fields)
                     total_ops += row_count * rule_count
                 except Exception as e:
-                    # logger.warning(f"[{project_id}] Could not calculate ops for sheet {sheet_schema.name}: {e}")
+                    logger.warning(f"[{project_id}] Could not calculate ops for sheet {sheet_schema.name}: {e}")
                     continue
     except Exception as e:
-        # logger.error(f"[{project_id}] Ошибка при расчете общего числа операций: {e}", exc_info=True)
+        logger.error(f"[{project_id}] Ошибка при расчете общего числа операций: {e}", exc_info=True)
         return 100 # Возвращаем значение по умолчанию при серьезной ошибке
 
     if total_ops <= 0:
-        # logger.warning(f"[{project_id}] Общее количество операций равно 0. Установлено в 100 для отображения прогресса.")
+        logger.warning(f"[{project_id}] Общее количество операций равно 0. Установлено в 100 для отображения прогресса.")
         return 100
 
     return total_ops
