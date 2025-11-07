@@ -10,6 +10,7 @@ import pandas as pd
 import io
 import json
 import asyncio
+from functools import partial
 
 from fastapi import Depends, FastAPI, File, UploadFile, HTTPException
 from fastapi.responses import FileResponse
@@ -22,16 +23,22 @@ from pydantic import BaseModel, Field, ValidationError
 # ==============================================================================
 
 # Настройка логирования
-logging.basicConfig(
-    level=logging.DEBUG,
-    format="[%(asctime)s] [%(levelname)s] [%(module)s:%(funcName)s:%(lineno)d] %(message)s",
-    handlers=[
-        logging.FileHandler("app.log", encoding='utf-8'),
-        logging.FileHandler("debug.log", level=logging.DEBUG, encoding='utf-8'),
-        logging.StreamHandler()
-    ]
-)
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("dqmaster")
+logger.setLevel(logging.DEBUG)
+
+# Обработчик для основного лога
+app_handler = logging.FileHandler("app.log", encoding='utf-8')
+app_handler.setLevel(logging.INFO)
+app_handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s'))
+
+# Обработчик для дебаг-лога
+debug_handler = logging.FileHandler("debug.log", encoding='utf-8')
+debug_handler.setLevel(logging.DEBUG)
+debug_handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] [%(module)s:%(funcName)s:%(lineno)d] %(message)s'))
+
+logger.addHandler(app_handler)
+logger.addHandler(debug_handler)
+logger.info("Логирование успешно инициализировано")
 
 app = FastAPI()
 
@@ -369,7 +376,8 @@ async def _calculate_total_operations(project_id: str, project: Project) -> int:
                 if not sheet_schema.is_active:
                     continue
                 try:
-                    df = await loop.run_in_executor(None, pd.read_excel, xls, sheet_schema.name)
+                    read_func = partial(pd.read_excel, xls, sheet_name=sheet_schema.name)
+                    df = await loop.run_in_executor(None, read_func)
                     row_count = len(df)
                     rule_count = sum(len(field.rules) for field in sheet_schema.fields)
                     total_ops += row_count * rule_count
@@ -420,7 +428,8 @@ async def _run_validation_async(project_id: str):
 
             VALIDATION_STATUS[project_id]["current_sheet"] = sheet_schema.name
             try:
-                df = await loop.run_in_executor(None, pd.read_excel, file_path, sheet_name=sheet_schema.name)
+                read_func = partial(pd.read_excel, file_path, sheet_name=sheet_schema.name)
+                df = await loop.run_in_executor(None, read_func)
                 if df.empty: continue
 
                 for field_schema in sheet_schema.fields:
@@ -435,7 +444,39 @@ async def _run_validation_async(project_id: str):
                         })
 
                         # --- Реальная логика валидации ---
-                        if rule_config.group_id:
+                        rule_def = RULE_REGISTRY.get(rule_config.type)
+                        params = rule_config.params or {}
+
+                        if rule_def and rule_def.get("needs_column_access"):
+                            logger.debug(f"[{project_id}] Запуск валидации для всего столбца: {field_schema.name} правило '{rule_name}'")
+                            column_data = df[field_schema.name]
+
+                            # Убедимся, что у модуля есть функция validate_column
+                            validator_func = getattr(rule_def["module"], "validate_column", None)
+                            if not validator_func:
+                                logger.warning(f"[{project_id}] Правило '{rule_name}' требует доступ к столбцу, но функция validate_column не найдена.")
+                                processed_ops_count += len(df)
+                                continue
+
+                            validation_result = validator_func(column_data, params=params)
+
+                            # Обработка результатов
+                            is_valid_list = validation_result.get("is_valid", [True] * len(column_data))
+                            errors_list = validation_result.get("errors", [None] * len(column_data))
+
+                            for i, (is_valid, error_details) in enumerate(zip(is_valid_list, errors_list)):
+                                if not is_valid:
+                                    value = column_data.iloc[i]
+                                    all_errors.append({
+                                        "file_name": file_schema.name, "sheet_name": sheet_schema.name,
+                                        "field_name": field_schema.name, "is_required": field_schema.is_required,
+                                        "row": i + 2, "error_type": rule_name,
+                                        "value": str(value) if pd.notna(value) else "ПУСТО",
+                                        "details": error_details
+                                    })
+                            processed_ops_count += len(df)
+
+                        elif rule_config.group_id:
                             group = RULE_GROUPS_REGISTRY.get(rule_config.group_id)
                             if not group:
                                 processed_ops_count += len(df)
@@ -451,13 +492,8 @@ async def _run_validation_async(project_id: str):
                                         "details": None
                                     })
                                 processed_ops_count += 1
-                        else:
-                            rule_def = RULE_REGISTRY.get(rule_config.type)
-                            if not rule_def:
-                                processed_ops_count += len(df)
-                                continue
+                        elif rule_def:
                             validator = rule_def["validator"]
-                            params = rule_config.params or {}
                             for index, value in df[field_schema.name].items():
                                 result = validator(value, params=params) if 'params' in inspect.signature(validator).parameters else validator(value)
                                 is_valid = result if isinstance(result, bool) else result.get("is_valid", False)
@@ -471,6 +507,8 @@ async def _run_validation_async(project_id: str):
                                         "details": details
                                     })
                                 processed_ops_count += 1
+                        else: # rule_def is None
+                            processed_ops_count += len(df)
 
                         # --- Периодическое обновление статуса ---
                         if processed_ops_count % 100 == 0:
@@ -482,6 +520,7 @@ async def _run_validation_async(project_id: str):
                             await asyncio.sleep(0.001)
 
             except Exception as e:
+                logger.error(f"[{project_id}] Критическая ошибка при обработке листа {sheet_schema.name}: {e}", exc_info=True)
                 continue
 
     # --- Сохранение результатов (ПОЛНАЯ ЛОГИКА) ---
@@ -531,7 +570,7 @@ async def _run_validation_async(project_id: str):
     try:
         results_path.write_text(json.dumps(response_data, indent=2, ensure_ascii=False), encoding="utf-8")
     except IOError as e:
-        pass # logger.error(...)
+        logger.error(f"[{project_id}] Не удалось сохранить файл результатов: {e}", exc_info=True)
 
     VALIDATION_STATUS[project_id].update({
         "is_running": False, "percentage": 100.0,
