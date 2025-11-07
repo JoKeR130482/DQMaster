@@ -1,22 +1,55 @@
+"""
+Правило для проверки, что значение начинается с заглавной буквы или цифры.
+"""
 import re
+import pandas as pd
+import logging
 
-RULE_NAME = "Не начинается с заглавной"
-RULE_DESC = "Ошибка, если значение является строкой и не начинается с заглавной буквы."
+logger = logging.getLogger("dqmaster")
 
-def validate(value):
+# --- Описание правила ---
+RULE_NAME = "Начинается с заглавной"
+RULE_DESC = "Проверяет, что значение начинается с заглавной буквы или цифры, игнорируя пробелы и знаки препинания в начале."
+IS_CONFIGURABLE = False
+
+def format_name(params: dict = None) -> str:
     """
-    Checks if a value is a string that does NOT start with a capital letter.
-    Non-string values are ignored (not considered invalid).
-    An empty string is considered an error.
+    Форматирует имя правила с учетом параметров.
     """
-    # This rule only applies to strings.
-    if not isinstance(value, str):
-        return True # Not an error for this rule if the cell is empty, a number, etc.
+    return RULE_NAME
 
-    # If it's an empty string, it's an error.
-    if not value:
-        return False
+def validate(value, params: dict = None, project_id: str = None) -> dict:
+    """
+    Проверяет, что значение начинается с заглавной буквы или цифры.
 
-    # Regex for Cyrillic or Latin capital letter at the beginning of the string
-    pattern = r'^[A-ZА-Я]'
-    return re.match(pattern, value) is not None
+    Args:
+        value: Проверяемое значение.
+        params (dict, optional): Параметры правила (не используются).
+        project_id (str, optional): ID проекта для логирования.
+
+    Returns:
+        dict: Словарь с результатом валидации.
+              {"is_valid": bool, "errors": str|None}
+    """
+    if pd.isna(value) or str(value).strip() == '':
+        return {"is_valid": True, "errors": None}
+
+    s_value = str(value)
+
+    # Ищем первый буквенно-цифровой символ
+    match = re.search(r'\\w', s_value)
+
+    if not match:
+        # Строка состоит только из пробелов или знаков препинания
+        # logger.debug(f"[{project_id}] {RULE_NAME}: В '{s_value}' не найдено буквенно-цифровых символов.")
+        return {"is_valid": True, "errors": None}
+
+    first_char = match.group(0)
+
+    if not (first_char.isupper() or first_char.isdigit()):
+        error = "Значение должно начинаться с заглавной буквы или цифры"
+        # logger.debug(f"[{project_id}] {RULE_NAME}: Первый символ '{first_char}' в '{s_value}' не является заглавной буквой или цифрой.")
+        return {"is_valid": False, "errors": error}
+
+    # logger.debug(f"[{project_id}] {RULE_NAME}: Значение '{s_value}' прошло проверку.")
+    return {"is_valid": True, "errors": None}

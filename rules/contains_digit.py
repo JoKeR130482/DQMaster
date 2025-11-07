@@ -1,10 +1,61 @@
+"""
+Правило для проверки наличия хотя бы одной цифры в значении.
+"""
 import pandas as pd
+import logging
 
-RULE_NAME = "Содержит хотя бы одну цифру"
-RULE_DESC = "Проверяет, что в значении есть хотя бы одна цифра."
+logger = logging.getLogger("dqmaster")
 
-def validate(value):
-    if pd.isna(value):
-        return False
+# --- Описание правила ---
+RULE_NAME = "Содержит цифру"
+RULE_DESC = "Проверяет, что значение содержит хотя бы одну цифру."
+IS_CONFIGURABLE = True
+PARAMS_SCHEMA = [
+    {
+        "name": "allow_empty",
+        "type": "checkbox",
+        "label": "Разрешить пустые значения",
+        "default": True
+    }
+]
+
+def format_name(params: dict = None) -> str:
+    """
+    Форматирует имя правила с учетом параметров.
+    """
+    if params and not params.get("allow_empty", True):
+        return f"{RULE_NAME} (обязательное)"
+    return RULE_NAME
+
+def validate(value, params: dict = None, project_id: str = None) -> dict:
+    """
+    Проверяет наличие цифры в значении.
+
+    Args:
+        value: Проверяемое значение.
+        params (dict, optional): Параметры правила.
+                                 'allow_empty' (bool): Разрешить ли пустые значения.
+        project_id (str, optional): ID проекта для логирования.
+
+    Returns:
+        dict: Словарь с результатом валидации.
+              {"is_valid": bool, "errors": str|None}
+    """
+    allow_empty = params.get("allow_empty", True) if params else True
+
+    if pd.isna(value) or str(value).strip() == '':
+        is_valid = allow_empty
+        error = None if is_valid else "Значение не должно быть пустым"
+        # logger.debug(f"[{project_id}] {RULE_NAME}: Пустое значение, allow_empty={allow_empty}, результат: {is_valid}")
+        return {"is_valid": is_valid, "errors": error}
+
     s_value = str(value)
-    return any(char.isdigit() for char in s_value)
+    has_digit = any(char.isdigit() for char in s_value)
+
+    if not has_digit:
+        error = "Значение должно содержать хотя бы одну цифру"
+        # logger.debug(f"[{project_id}] {RULE_NAME}: В значении '{s_value}' не найдено цифр.")
+        return {"is_valid": False, "errors": error}
+
+    # logger.debug(f"[{project_id}] {RULE_NAME}: В значении '{s_value}' найдена цифра.")
+    return {"is_valid": True, "errors": None}
